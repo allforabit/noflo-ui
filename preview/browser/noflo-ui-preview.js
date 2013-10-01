@@ -2878,6 +2878,12 @@ Graph = (function(_super) {
 
   Graph.prototype.addEdge = function(outNode, outPort, inNode, inPort, metadata) {
     var edge;
+    if (!this.getNode(outNode)) {
+      return;
+    }
+    if (!this.getNode(inNode)) {
+      return;
+    }
     if (!metadata) {
       metadata = {};
     }
@@ -2932,6 +2938,9 @@ Graph = (function(_super) {
 
   Graph.prototype.addInitial = function(data, node, port, metadata) {
     var initializer;
+    if (!this.getNode(node)) {
+      return;
+    }
     initializer = {
       from: {
         data: data
@@ -6001,7 +6010,7 @@ require.register("noflo-noflo-css/index.js", function(exports, require, module){
 
 });
 require.register("noflo-noflo-css/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-css","description":"Cascading Style Sheets components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-css","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/MoveElement.coffee","components/RotateElement.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"MoveElement":"components/MoveElement.coffee","RotateElement":"components/RotateElement.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-css","description":"Cascading Style Sheets components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-css","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/MoveElement.coffee","components/RotateElement.coffee","components/SetElementTop.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"MoveElement":"components/MoveElement.coffee","RotateElement":"components/RotateElement.coffee","SetElementTop":"components/SetElementTop.coffee"}}}');
 });
 require.register("noflo-noflo-css/components/MoveElement.js", function(exports, require, module){
 var MoveElement, noflo,
@@ -6069,21 +6078,29 @@ RotateElement = (function(_super) {
     this.element = null;
     this.inPorts = {
       element: new noflo.Port('object'),
-      percent: new noflo.Port('number')
+      percent: new noflo.Port('number'),
+      degrees: new noflo.Port('number')
     };
     this.inPorts.element.on('data', function(element) {
       return _this.element = element;
     });
     this.inPorts.percent.on('data', function(percent) {
-      if (_this.element) {
-        return _this.setRotation(_this.element, percent);
+      var degrees;
+      if (!_this.element) {
+        return;
       }
+      degrees = 360 * percent % 360;
+      return _this.setRotation(_this.element, degrees);
+    });
+    this.inPorts.degrees.on('data', function(degrees) {
+      if (!_this.element) {
+        return;
+      }
+      return _this.setRotation(_this.element, degrees);
     });
   }
 
-  RotateElement.prototype.setRotation = function(element, percent) {
-    var degrees;
-    degrees = 360 * percent % 360;
+  RotateElement.prototype.setRotation = function(element, degrees) {
     return this.setVendor(element, "transform", "rotate(" + degrees + "deg)");
   };
 
@@ -6103,6 +6120,46 @@ RotateElement = (function(_super) {
 
 exports.getComponent = function() {
   return new RotateElement;
+};
+
+});
+require.register("noflo-noflo-css/components/SetElementTop.js", function(exports, require, module){
+var SetElementTop, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+SetElementTop = (function(_super) {
+  __extends(SetElementTop, _super);
+
+  SetElementTop.prototype.description = 'Set element\'s CSS top';
+
+  function SetElementTop() {
+    var _this = this;
+    this.element = null;
+    this.inPorts = {
+      element: new noflo.Port('object'),
+      top: new noflo.Port('number')
+    };
+    this.inPorts.element.on('data', function(element) {
+      return _this.element = element;
+    });
+    this.inPorts.top.on('data', function(top) {
+      if (!_this.element) {
+        return;
+      }
+      _this.element.style.position = 'absolute';
+      return _this.element.style.top = "" + top + "px";
+    });
+  }
+
+  return SetElementTop;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new SetElementTop;
 };
 
 });
@@ -10140,7 +10197,7 @@ ParseJson = (function(_super) {
     this.outPorts = {
       out: new noflo.Port()
     };
-    this.inPorts["in"].on("data", function(data) {
+    this.inPorts["try"].on("data", function(data) {
       if (data === "true") {
         return _this["try"] = true;
       }
@@ -10174,6 +10231,219 @@ ParseJson = (function(_super) {
 
 exports.getComponent = function() {
   return new ParseJson;
+};
+
+});
+require.register("noflo-noflo-websocket/index.js", function(exports, require, module){
+/*
+ * This file can be used for general library features of noflo-websocket.
+ *
+ * The library features can be made available as CommonJS modules that the
+ * components in this project utilize.
+ */
+
+});
+require.register("noflo-noflo-websocket/component.json", function(exports, require, module){
+module.exports = JSON.parse('{"name":"noflo-websocket","description":"WebSocket components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-websocket","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/Connect.coffee","components/SendMessage.coffee","components/ListenMessages.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"Connect":"components/Connect.coffee","SendMessage":"components/SendMessage.coffee","ListenMessages":"components/ListenMessages.coffee"}}}');
+});
+require.register("noflo-noflo-websocket/components/Connect.js", function(exports, require, module){
+var Connect, WsClient, noflo,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+if (noflo.isBrowser()) {
+  WsClient = WebSocket;
+} else {
+  WsClient = require('websocket').client;
+}
+
+Connect = (function(_super) {
+  __extends(Connect, _super);
+
+  function Connect() {
+    this.handleError = __bind(this.handleError, this);
+    var _this = this;
+    this.protocol = 'noflo';
+    this.inPorts = {
+      url: new noflo.Port('string'),
+      protocol: new noflo.Port('string')
+    };
+    this.outPorts = {
+      connection: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.url.on('data', function(data) {
+      return _this.connect(data);
+    });
+    this.inPorts.protocol.on('data', function(protocol) {
+      _this.protocol = protocol;
+    });
+  }
+
+  Connect.prototype.connect = function(url) {
+    var client,
+      _this = this;
+    if (noflo.isBrowser()) {
+      client = new WsClient(url, this.protocol);
+      client.onerror = this.handleError;
+      client.onopen = function() {
+        return _this.outPorts.connection.send(client);
+      };
+      return;
+    }
+    client = new WsClient;
+    client.on('connect', function(connection) {
+      _this.outPorts.connection.send(connection);
+      return connection.on('error', _this.handleError);
+    });
+    client.on('connectFailed', this.handleError);
+    return client.connect(url, this.protocol);
+  };
+
+  Connect.prototype.handleError = function(err) {
+    if (this.outPorts.error.isAttached()) {
+      this.outPorts.error.send(err);
+      this.outPorts.error.disconnect();
+      return;
+    }
+    throw err;
+  };
+
+  return Connect;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Connect;
+};
+
+});
+require.register("noflo-noflo-websocket/components/SendMessage.js", function(exports, require, module){
+var SendMessage, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+SendMessage = (function(_super) {
+  __extends(SendMessage, _super);
+
+  function SendMessage() {
+    var _this = this;
+    this.connection = null;
+    this.buffer = [];
+    this.inPorts = {
+      connection: new noflo.Port('object'),
+      string: new noflo.Port('string')
+    };
+    this.outPorts = {};
+    this.inPorts.connection.on('data', function(connection) {
+      _this.connection = connection;
+      if (_this.buffer.length) {
+        return _this.clearBuffer();
+      }
+    });
+    this.inPorts.string.on('data', function(data) {
+      if (_this.connection) {
+        return _this.send(data);
+      }
+      return _this.buffer.push(data);
+    });
+  }
+
+  SendMessage.prototype.send = function(message) {
+    if (noflo.isBrowser()) {
+      this.connection.send(message);
+      return;
+    }
+    return this.connection.sendUTF(message);
+  };
+
+  SendMessage.prototype.clearBuffer = function() {
+    var message, _i, _len, _ref;
+    _ref = this.buffer;
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      message = _ref[_i];
+      this.send(message);
+    }
+    return this.buffer = [];
+  };
+
+  return SendMessage;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new SendMessage;
+};
+
+});
+require.register("noflo-noflo-websocket/components/ListenMessages.js", function(exports, require, module){
+var ListenMessages, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ListenMessages = (function(_super) {
+  __extends(ListenMessages, _super);
+
+  function ListenMessages() {
+    var _this = this;
+    this.inPorts = {
+      connection: new noflo.Port('object')
+    };
+    this.outPorts = {
+      string: new noflo.Port('string'),
+      binary: new noflo.Port('binary')
+    };
+    this.inPorts.connection.on('data', function(data) {
+      return _this.subscribe(data);
+    });
+  }
+
+  ListenMessages.prototype.subscribe = function(connection) {
+    var _this = this;
+    if (noflo.isBrowser()) {
+      if (!this.outPorts.string.isAttached()) {
+        return;
+      }
+      connection.addEventListener('message', function(message) {
+        return _this.outPorts.string.send(message.data);
+      }, false);
+      connection.addEventListener('close', function(message) {
+        return _this.outPorts.string.disconnect();
+      }, false);
+      return;
+    }
+    connection.on('message', function(message) {
+      if (message.type === 'utf8' && _this.outPorts.string.isAttached()) {
+        _this.outPorts.string.send(message.utf8Data);
+        return;
+      }
+      if (message.type === 'binary' && _this.outPorts.binary.isAttached()) {
+        _this.outPorts.binary.send(message.binaryData);
+      }
+    });
+    return connection.on('close', function() {
+      if (_this.outPorts.string.isAttached()) {
+        _this.outPorts.string.disconnect();
+      }
+      if (_this.outPorts.binary.isAttached()) {
+        return _this.outPorts.binary.disconnect();
+      }
+    });
+  };
+
+  return ListenMessages;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ListenMessages;
 };
 
 });
@@ -10294,8 +10564,9 @@ exports.getComponent = function() {
 
 });
 require.register("noflo-ui-preview/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-ui-preview","description":"NoFlo runtime environment for client-side previews","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","keywords":[],"dependencies":{"noflo/noflo":"*","noflo/noflo-runtime-iframe":"*","noflo/noflo-ajax":"*","noflo/noflo-core":"*","noflo/noflo-css":"*","noflo/noflo-dom":"*","noflo/noflo-flow":"*","noflo/noflo-interaction":"*","noflo/noflo-localstorage":"*","noflo/noflo-math":"*","noflo/noflo-objects":"*","noflo/noflo-physics":"*","noflo/noflo-strings":"*","d4tocchini/noflo-draggabilly":"*"},"json":["component.json"],"files":["iframe.html"]}');
+module.exports = JSON.parse('{"name":"noflo-ui-preview","description":"NoFlo runtime environment for client-side previews","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","keywords":[],"dependencies":{"noflo/noflo":"*","noflo/noflo-runtime-iframe":"*","noflo/noflo-ajax":"*","noflo/noflo-core":"*","noflo/noflo-css":"*","noflo/noflo-dom":"*","noflo/noflo-flow":"*","noflo/noflo-interaction":"*","noflo/noflo-localstorage":"*","noflo/noflo-math":"*","noflo/noflo-objects":"*","noflo/noflo-physics":"*","noflo/noflo-strings":"*","noflo/noflo-websocket":"*","d4tocchini/noflo-draggabilly":"*"},"json":["component.json"],"files":["iframe.html"]}');
 });
+
 
 
 
@@ -10496,6 +10767,7 @@ require.alias("noflo-noflo-css/index.js", "noflo-ui-preview/deps/noflo-css/index
 require.alias("noflo-noflo-css/component.json", "noflo-ui-preview/deps/noflo-css/component.json");
 require.alias("noflo-noflo-css/components/MoveElement.js", "noflo-ui-preview/deps/noflo-css/components/MoveElement.js");
 require.alias("noflo-noflo-css/components/RotateElement.js", "noflo-ui-preview/deps/noflo-css/components/RotateElement.js");
+require.alias("noflo-noflo-css/components/SetElementTop.js", "noflo-ui-preview/deps/noflo-css/components/SetElementTop.js");
 require.alias("noflo-noflo-css/index.js", "noflo-css/index.js");
 require.alias("noflo-noflo/component.json", "noflo-noflo-css/deps/noflo/component.json");
 require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-css/deps/noflo/src/lib/Graph.js");
@@ -10785,6 +11057,34 @@ require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
 require.alias("component-underscore/index.js", "noflo-noflo-strings/deps/underscore/index.js");
 
+require.alias("noflo-noflo-websocket/index.js", "noflo-ui-preview/deps/noflo-websocket/index.js");
+require.alias("noflo-noflo-websocket/component.json", "noflo-ui-preview/deps/noflo-websocket/component.json");
+require.alias("noflo-noflo-websocket/components/Connect.js", "noflo-ui-preview/deps/noflo-websocket/components/Connect.js");
+require.alias("noflo-noflo-websocket/components/SendMessage.js", "noflo-ui-preview/deps/noflo-websocket/components/SendMessage.js");
+require.alias("noflo-noflo-websocket/components/ListenMessages.js", "noflo-ui-preview/deps/noflo-websocket/components/ListenMessages.js");
+require.alias("noflo-noflo-websocket/index.js", "noflo-websocket/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-websocket/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-websocket/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-websocket/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-websocket/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-websocket/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-websocket/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-websocket/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-websocket/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-websocket/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-websocket/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-websocket/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-websocket/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-websocket/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
 require.alias("d4tocchini-noflo-draggabilly/index.js", "noflo-ui-preview/deps/noflo-draggabilly/index.js");
 require.alias("d4tocchini-noflo-draggabilly/component.json", "noflo-ui-preview/deps/noflo-draggabilly/component.json");
 require.alias("d4tocchini-noflo-draggabilly/components/Draggabilly.js", "noflo-ui-preview/deps/noflo-draggabilly/components/Draggabilly.js");
