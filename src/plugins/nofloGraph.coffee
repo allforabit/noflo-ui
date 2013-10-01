@@ -49,8 +49,11 @@ class NoFloGraphPlugin
     for node in nofloGraph.nodes
       @addNodeDataflow node, dataflowGraph
     for edge in nofloGraph.edges
+      continue unless nofloGraph.getNode edge.from.node
+      continue unless nofloGraph.getNode edge.to.node
       @addEdgeDataflow edge, dataflowGraph
     for iip in nofloGraph.initializers
+      continue unless nofloGraph.getNode iip.to.node
       @addInitialDataflow iip, dataflowGraph
 
   subscribeDataflowEvents: (graph) ->
@@ -119,6 +122,7 @@ class NoFloGraphPlugin
     node.on 'change:x change:y', ->
       node.nofloNode.metadata.x = node.get 'x'
       node.nofloNode.metadata.y = node.get 'y'
+      graph.nofloGraph.emit 'changed'
     node.on 'change:state', (port, value) ->
       metadata = {}
       for iip in graph.nofloGraph.initializers
@@ -151,6 +155,7 @@ class NoFloGraphPlugin
 
     edge.on 'change:route', ->
       edge.nofloEdge.metadata.route = edge.get 'route'
+      graph.nofloGraph.emit 'changed'
 
   subscribeNoFloEvents: (graph, runtime) ->
     graph.on 'addNode', (nfNode) =>
