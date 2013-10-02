@@ -133,18 +133,23 @@ class NoFloGraphPlugin
           graph.nofloGraph.removeInitial node.nofloNode.id, port
       graph.nofloGraph.addInitial value, node.nofloNode.id, port, metadata
     node.on 'bang', (port) ->
-      metadata = {}
       for iip in graph.nofloGraph.initializers
         continue unless iip
         if iip.to.node is node.nofloNode.id and iip.to.port is port
-          metadata = iip.metadata
           graph.nofloGraph.removeInitial node.nofloNode.id, port
       # Transmit bang to the NoFlo runtime
-      graph.nofloGraph.addInitial true, node.nofloNode.id, port, metadata
+      graph.nofloGraph.addInitial true, node.nofloNode.id, port
       # Don't save bang IIP to the graph (#9)
       graph.nofloGraph.removeInitial node.nofloNode.id, port
 
   subscribeDataflowEdge: (edge, graph) ->
+    # Ensure there is no IIP left behind when we make a connection to the port
+    for iip in graph.nofloGraph.initializers
+      continue unless iip
+      if iip.to.node is edge.target.parentNode.nofloNode.id and iip.to.port is edge.target.id
+        graph.nofloGraph.removeInitial edge.target.parentNode.nofloNode.id, edge.target.id
+
+    # Create edge as needed
     unless edge.nofloEdge
       nofloEdge = graph.nofloGraph.addEdge edge.source.parentNode.nofloNode.id, edge.source.id, edge.target.parentNode.nofloNode.id, edge.target.id,
         route: edge.get 'route'
@@ -158,6 +163,9 @@ class NoFloGraphPlugin
       graph.nofloGraph.emit 'changed'
 
   subscribeNoFloEvents: (graph, runtime) ->
+    graph.on 'changed', =>
+      json = JSON.stringify graph.toJSON(), null, 2
+      @dataflow.plugins.source.show json
     graph.on 'addNode', (nfNode) =>
       setTimeout =>
         @addNodeDataflow nfNode, graph.dataflowGraph
@@ -185,10 +193,14 @@ class NoFloGraphPlugin
       @addInitialRuntime iip, runtime
       @dataflow.plugins.log.add "IIP added to #{iip.to.node} #{iip.to.port.toUpperCase()}"
     graph.on 'removeInitial', (iip) =>
-      @dataflow.plugins.log.add "IIP removed from #{iip.to.node} #{iip.to.port.toUpperCase()}"
+      # Unset state
+      node = graph.dataflowGraph.nodes.get iip.to.node
+      node.setState iip.to.port, undefined if node
+
       runtime.sendGraph 'removeinitial',
         from: iip.from
         to: iip.to
+      @dataflow.plugins.log.add "IIP removed from #{iip.to.node} #{iip.to.port.toUpperCase()}"
 
     # Pass network events to edge inspector
     runtime.on 'network', ({command, payload}) =>
@@ -207,10 +219,11 @@ class NoFloGraphPlugin
           if edge.from.node is payload.from.node and edge.from.port is payload.from.port
             eventEdge = edge
       return unless eventEdge
-      eventEdge.dataflowEdge.get('log').add
-        type: command
-        group: payload.group
-        data: payload.data
+      if payload.data?
+        eventEdge.dataflowEdge.get('log').push
+          type: command
+          group: payload.group
+          data: payload.data
 
   addNodeDataflow: (nfNode, dfGraph) ->
     return unless nfNode

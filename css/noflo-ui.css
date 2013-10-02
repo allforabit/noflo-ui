@@ -80,14 +80,31 @@ body {
   border: none;
 }
 
+.dataflow-card .noflo-ui-preview .preview pre {
+  max-height: 300px;
+  color: #7ee67e;
+  font-size: 10px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  font-family: monospace;
+}
+
 .dataflow-node-inspector-inputs label.connected {
   display: none;
 }
 
+.noflo-ui-settings {
+  max-height: 300px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+}
+
 .noflo-ui-settings form label,
-.noflo-ui-settings form div.toolbar {
+.noflo-ui-settings div.toolbar,
+.noflo-ui-settings h2 {
   display: block;
   padding: 15px 20px 10px;
+  margin: 0px;
   border-top: 1px solid hsla(0, 0%, 0%, .1);
   border-bottom: 1px solid hsl(220, 10%, 16%);
   background-color: hsla(0, 100%, 0%, 0.1);
