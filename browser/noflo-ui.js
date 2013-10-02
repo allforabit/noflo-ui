@@ -200,8 +200,44 @@ require.relative = function(parent) {
   return localRequire;
 };
 require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, require, module){
-/*! dataflow.js - v0.0.7 - 2013-09-30 (7:21:56 PM GMT+0200)
+/*! dataflow.js - v0.0.7 - 2013-10-02 (5:53:08 PM GMT+0300)
 * Copyright (c) 2013 Forrest Oliphant; Licensed MIT, GPL */
+// Thanks bobnice http://stackoverflow.com/a/1583281/592125
+
+// Circular buffer storage. Externally-apparent 'length' increases indefinitely
+// while any items with indexes below length-n will be forgotten (undefined
+// will be returned if you try to get them, trying to set is an exception).
+// n represents the initial length of the array, not a maximum
+
+function CircularBuffer(n) {
+  this._array= new Array(n);
+  this.length= 0;
+}
+CircularBuffer.prototype.toString= function() {
+  return '[object CircularBuffer('+this._array.length+') length '+this.length+']';
+};
+CircularBuffer.prototype.get= function(i) {
+  if (i<0 || i<this.length-this._array.length)
+    return undefined;
+  return this._array[i%this._array.length];
+};
+CircularBuffer.prototype.set = function(i, v) {
+  if (i<0 || i<this.length-this._array.length)
+    throw CircularBuffer.IndexError;
+  while (i>this.length) {
+    this._array[this.length%this._array.length] = undefined;
+    this.length++;
+  }
+  this._array[i%this._array.length] = v;
+  if (i==this.length)
+    this.length++;
+};
+CircularBuffer.prototype.push = function(v) {
+  this._array[this.length%this._array.length] = v;
+  this.length++;
+};
+CircularBuffer.IndexError= {};
+
 (function(){
   var App = Backbone.Model.extend({
     "$": function(query) {
@@ -354,7 +390,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
         this.plugins.menu.addPlugin({
           id: info.id,
           icon: info.icon,
-          label: info.name,
+          label: info.label,
           showLabel: false
         });
       }
@@ -825,6 +861,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
       });
       this.unload();
       this.collection.remove(this);
+      this.trigger('remove');
     },
     unload: function(){
       // Stop any processes that need to be stopped
@@ -936,18 +973,6 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
 
   var Edge = Dataflow.prototype.module("edge");
 
-  var EdgeEvent = Backbone.Model.extend({
-    defaults: {
-      "type": "data",
-      "data": "",
-      "group": ""
-    }
-  });
-
-  var EdgeEventLog = Backbone.Collection.extend({
-    model: EdgeEvent
-  });
-
   Edge.Model = Backbone.Model.extend({
     defaults: {
       "z": 0,
@@ -959,7 +984,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
       var nodes, sourceNode, targetNode;
       var preview = this.get("preview");
       this.parentGraph = this.get("parentGraph");
-      this.attributes.log = new EdgeEventLog();
+      this.attributes.log = new CircularBuffer(50);
       if (preview) {
         // Preview edge
         nodes = this.get("parentGraph").nodes;
@@ -1045,6 +1070,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
       }
       // Remove listener
       this.source.parentNode.off("send:"+this.source.id, this.send, this);
+      this.trigger('remove');
     }
   });
 
@@ -1493,6 +1519,8 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
 
       this.listenTo(this.model, "change:label", this.changeLabel);
 
+      this.listenTo(this.model, "remove", this.hideInspector);
+
       this.$inner = this.$(".dataflow-node-inner");
     },
     render: function() {
@@ -1629,11 +1657,8 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
         toggle = true;
         selected = !selected;
         this.model.set("selected", selected);
-        if (selected) {
-          this.showInspector(true);
-        } else {
+        if (!selected) {
           this.fade();
-          this.hideInspector();
         }
       } else {
         // Deselect all
@@ -1642,7 +1667,6 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
         this.model.parentGraph.view.fade();
         selected = true;
         this.model.set("selected", true);
-        this.showInspector();
       }
       this.bringToTop();
       this.model.parentGraph.view.fadeEdges();
@@ -1676,8 +1700,10 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
     selectedChanged: function () {
       if (this.model.get("selected")) {
         this.highlight();
+        this.showInspector();
       } else {
         this.unhighlight();
+        this.hideInspector();
       }
     },
     highlight: function () {
@@ -2586,7 +2612,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
 
       // Listen for select
       this.listenTo(this.model, "change:selected", this.selectedChange);
-
+      this.listenTo(this.model, "remove", this.hideInspector);
     },
     render: function(previewPosition){
       var source = this.model.source;
@@ -2643,8 +2669,10 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
     selectedChange: function () {
       if (this.model.get("selected")){
         this.highlight();
+        this.showInspector();
       } else {
         this.unhighlight();
+        this.hideInspector();
       }
       this.model.parentGraph.trigger("selectionChanged");
     },
@@ -2739,12 +2767,11 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
       if (event) {
         event.stopPropagation();
       }
-      var selected, leaveUnpinned;
+      var selected;
       if (event && (event.ctrlKey || event.metaKey)) {
         // Toggle
         selected = this.model.get("selected");
         selected = !selected;
-        leaveUnpinned = true;
       } else {
         // Deselect all and select this
         selected = true;
@@ -2756,9 +2783,6 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
         this.bringToTop();
         this.model.trigger("select");
         this.unfade();
-        this.showInspector(leaveUnpinned);
-      } else {
-        this.hideInspector();
       }
       // Fade all and highlight related
       this.model.parentGraph.view.fade();
@@ -2941,7 +2965,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
 
   var MenuItemView = Backbone.View.extend({
     tagName: 'li',
-    template: '<button><i class="icon-<%- icon %>"></i><span class="name"><%- label %></span></button>',
+    template: '<button title="<%- label %>"><i class="icon-<%- icon %>"></i><span class="name"><%- label %></span></button>',
     events: {
       'click': 'clicked'
     },
@@ -3050,14 +3074,11 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
     '<div class="dataflow-edge-inspector-route-choose"></div>'+
     '<ul class="dataflow-edge-inspector-events"></ul>';
 
-  var logTemplate = '<li class="<%- type %>"><%- group %><%- data %></li>';
-  
   Edge.InspectView = Backbone.View.extend({
     tagName: "div",
     className: "dataflow-edge-inspector",
     positions: null,
     template: _.template(template),
-    showLogs: 20,
     initialize: function() {
       var templateData = this.model.toJSON();
       if (this.model.id) {
@@ -3087,10 +3108,8 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
 
       this.listenTo(this.model, "change:route", this.render);
       this.listenTo(this.model, "remove", this.remove);
-      this.listenTo(this.model.get('log'), 'add', function () { 
-        this.logDirty = true; 
-      }.bind(this));
-      this.renderLog();
+      // Check if need to render logs
+      this.animate();
     },
     render: function(){
       var route = this.model.get("route");
@@ -3099,38 +3118,37 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
       $choose.children(".route"+route).addClass("active");
       return this;
     },
-    logDirty: false,
+    showLogs: 20,
+    lastLog: 0,
     animate: function (timestamp) {
       // Called from dataflow.shownCards collection (card-view.js)
-      if (this.logDirty) {
-        this.logDirty = false;
-        this.renderLog();
-      }
-    },
-    renderLog: function () {
-      var frag = document.createDocumentFragment();
       var logs = this.model.get('log');
-      var logsToShow;
-      if (logs.length > this.showLogs) {
-        logsToShow = logs.rest(logs.length - this.showLogs);
-      } else {
-        logsToShow = logs.toArray();
+      if (logs.length > this.lastLog) {
+        this.renderLogs(logs);
+        this.lastLog = logs.length;
       }
-      //JANK warning, already taking 14ms with 20 log items
-      _.each(logsToShow, function (item) {
-        this.renderLogItem(item, frag);
-      }, this);
-      this.$log.html(frag);
-      this.$log[0].scrollTop = this.$log[0].scrollHeight;
     },
-    renderLogItem: function (item, fragment) {
-      var html = $(_.template(logTemplate, item.toJSON()));
-      if (fragment && fragment.appendChild) {
-        fragment.appendChild(html[0]);
-      } else {
-        this.$log.append(html);
-        this.$log[0].scrollTop = this.$log[0].scrollHeight;
+    renderLogs: function (logs) {
+      // Add new logs
+      var firstToShow = this.lastLog;
+      if (logs.length - this.lastLog > this.showLogs) {
+        firstToShow = logs.length - this.showLogs;
       }
+      for (var i=firstToShow; i<logs.length; i++){
+        var item = logs.get(i);
+        if (item) {
+          var li = $("<li>")
+            .addClass(item.type)
+            .text( (item.group ? item.group + " " : "")+item.data);
+          this.$log.append(li);
+        }
+      }
+      // Trim list
+      while (this.$log.children().length > this.showLogs) {
+        this.$log.children().first().remove();
+      }
+      // Scroll list
+      this.$log[0].scrollTop = this.$log[0].scrollHeight;
     }
   });
 
@@ -3153,7 +3171,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
       Menu.card.menu.add({
         id: info.id,
         icon: info.icon,
-        label: info.name,
+        label: info.label,
         showLabel: false,
         action: function () {
           Menu.card.hide();
@@ -3227,8 +3245,12 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
         node.x -= 50;
         node.y -= 50;
       });
+
       // Remove selected
       Edit.removeSelected();
+
+      // Update context
+      dataflow.currentGraph.trigger('selectionChanged');
     }
     buttons.children(".cut").click(cut);
     Edit.cut = cut;
@@ -3240,6 +3262,8 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
       selected.forEach(function(edge){
         edge.remove();
       });
+      // Update context
+      dataflow.currentGraph.trigger('selectionChanged');
     }
     Edit.removeEdge = removeEdge;
 
@@ -3499,6 +3523,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
 
     dataflow.addPlugin({
       id: "library", 
+      label: "library",
       name: "", 
       menu: $container, 
       icon: "plus",
@@ -3551,13 +3576,9 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
     );
     var $code = $form.find(".code");
 
-    $code.keydown(function(event){
-      // Don't select / copy / paste nodes in the graph
-      event.stopPropagation();
-    });
-
     dataflow.addPlugin({
       id: "source", 
+      label: "view source",
       name: "", 
       menu: $form, 
       icon: "code",
@@ -3647,6 +3668,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
 
     dataflow.addPlugin({
       id: "log", 
+      label: "log",
       name: "", 
       menu: $log, 
       icon: "th-list",
@@ -3767,6 +3789,12 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
     }
 
     function keyDown(event) {
+
+      // Don't keybind graph actions when could be editing text #10
+      if (event.target.tagName==="TEXTAREA" || 
+          event.target.tagName==="INPUT" || 
+          event.target.contentEditable==="true" ){ return; }
+
       if (event.ctrlKey || event.metaKey) {
         switch (event.which) {
           case 189: // -
@@ -3834,7 +3862,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
       return;
     }
 
-    if (Notification.hasPermission) {
+    if (Notification.hasPermission()) {
       // We already have the permission
       return;
     }
@@ -3914,13 +3942,14 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
   });
 
   Search.initialize = function (dataflow) {
-    var $search = $('<div class="dataflow-plugin-search"><input type="search" placeholder="Search" results="5" /><button><i class="icon-reorder"></i></button></div>');
+    var $search = $('<div class="dataflow-plugin-search"><input type="search" placeholder="Search" results="5" x-webkit-speech /><button><i class="icon-reorder"></i></button></div>');
     var $input = $search.find('input');
     var $button = $search.find('button');
     dataflow.$el.prepend($search);
 
-    $input.on('keyup', function (event) {
+    $input.on('keyup search webkitspeechchange', function (event) {
       if (!$input.val()) {
+        dataflow.removeCard('searchresults');
         return;
       }
       Search.search($input.val(), dataflow);
@@ -3943,6 +3972,7 @@ require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, re
     });
     ResultsView.itemView = ResultView;
     var ResultsCard = new Card.Model({
+      id: 'searchresults',
       dataflow: dataflow,
       card: ResultsView,
       pinned: false
@@ -7432,6 +7462,13 @@ Port = (function(_super) {
     return this.socket !== null;
   };
 
+  Port.prototype.canAttach = function() {
+    if (this.isAttached()) {
+      return false;
+    }
+    return true;
+  };
+
   return Port;
 
 })(EventEmitter);
@@ -7606,12 +7643,19 @@ ArrayPort = (function(_super) {
 
   ArrayPort.prototype.isAttached = function(socketId) {
     if (socketId === void 0) {
+      if (this.sockets.length > 0) {
+        return true;
+      }
       return false;
     }
     if (this.sockets[socketId]) {
       return true;
     }
     return false;
+  };
+
+  ArrayPort.prototype.canAttach = function() {
+    return true;
   };
 
   return ArrayPort;
@@ -8731,7 +8775,7 @@ Graph = (function(_super) {
   Graph.prototype.isExported = function(port, nodeName, portName) {
     var exported, newPort, _i, _len, _ref;
     newPort = this.portName(nodeName, portName);
-    if (port.isAttached()) {
+    if (!port.canAttach()) {
       return false;
     }
     if (this.network.graph.exports.length === 0) {
@@ -9559,6 +9603,9 @@ SetItem = (function(_super) {
       item: new noflo.Port('string')
     };
     this.inPorts.key.on('data', function(data) {
+      if (!data) {
+        return;
+      }
       _this.key = data;
       if (_this.value) {
         return _this.setItem();
@@ -10675,7 +10722,6 @@ ExtractProperty = (function(_super) {
 
   function ExtractProperty() {
     var _this = this;
-    this.key = null;
     this.inPorts = {
       "in": new noflo.Port,
       key: new noflo.Port
@@ -10683,15 +10729,25 @@ ExtractProperty = (function(_super) {
     this.outPorts = {
       out: new noflo.Port
     };
+    this.inPorts.key.on("connect", function() {
+      return _this.keys = [];
+    });
     this.inPorts.key.on("data", function(key) {
-      _this.key = key;
+      return _this.keys.push(key);
     });
     this.inPorts["in"].on("begingroup", function(group) {
       return _this.outPorts.out.beginGroup(group);
     });
     this.inPorts["in"].on("data", function(data) {
-      if ((_this.key != null) && _.isObject(data)) {
-        return _this.outPorts.out.send(data[_this.key]);
+      var key, value, _i, _len, _ref;
+      if ((_this.keys != null) && _.isObject(data)) {
+        value = data;
+        _ref = _this.keys;
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          key = _ref[_i];
+          value = value[key];
+        }
+        return _this.outPorts.out.send(value);
       }
     });
     this.inPorts["in"].on("endgroup", function(group) {
@@ -11819,6 +11875,9 @@ CreateObject = (function(_super) {
     this.inPorts.start.on('endgroup', function() {
       return _this.outPorts.out.endGroup();
     });
+    this.inPorts.start.on('disconnect', function() {
+      return _this.outPorts.out.disconnect();
+    });
   }
 
   return CreateObject;
@@ -12045,7 +12104,7 @@ require.register("noflo-noflo-groups/index.js", function(exports, require, modul
 
 });
 require.register("noflo-noflo-groups/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-groups","description":"Group Utilities for NoFlo","keywords":["noflo","groups","utilities"],"author":"Kenneth Kan <kenhkan@gmail.com>","version":"0.1.0","repo":"kenhkan/groups","dependencies":{"noflo/noflo":"*"},"scripts":["components/ReadGroups.coffee","components/RemoveGroups.coffee","components/Regroup.coffee","components/Group.coffee","components/GroupZip.coffee","components/FilterByGroup.coffee","components/Objectify.coffee","components/ReadGroup.coffee","components/CollectGroups.coffee","components/FirstGroup.coffee","components/MapGroup.coffee","components/MergeGroups.coffee","components/GroupByObjectKey.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"ReadGroups":"components/ReadGroups.coffee","RemoveGroups":"components/RemoveGroups.coffee","Regroup":"components/Regroup.coffee","Group":"components/Group.coffee","GroupZip":"components/GroupZip.coffee","FilterByGroup":"components/FilterByGroup.coffee","Objectify":"components/Objectify.coffee","ReadGroup":"components/ReadGroup.coffee","CollectGroups":"components/CollectGroups.coffee","FirstGroup":"components/FirstGroup.coffee","MapGroup":"components/MapGroup.coffee","MergeGroups":"components/MergeGroups.coffee","GroupByObjectKey":"components/GroupByObjectKey.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-groups","description":"Group Utilities for NoFlo","keywords":["noflo","groups","utilities"],"author":"Kenneth Kan <kenhkan@gmail.com>","version":"0.1.0","repo":"kenhkan/groups","dependencies":{"component/underscore":"*","noflo/noflo":"*"},"scripts":["components/ReadGroups.coffee","components/RemoveGroups.coffee","components/Regroup.coffee","components/Group.coffee","components/GroupZip.coffee","components/FilterByGroup.coffee","components/Objectify.coffee","components/ReadGroup.coffee","components/CollectGroups.coffee","components/FirstGroup.coffee","components/MapGroup.coffee","components/MergeGroups.coffee","components/GroupByObjectKey.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"ReadGroups":"components/ReadGroups.coffee","RemoveGroups":"components/RemoveGroups.coffee","Regroup":"components/Regroup.coffee","Group":"components/Group.coffee","GroupZip":"components/GroupZip.coffee","FilterByGroup":"components/FilterByGroup.coffee","Objectify":"components/Objectify.coffee","ReadGroup":"components/ReadGroup.coffee","CollectGroups":"components/CollectGroups.coffee","FirstGroup":"components/FirstGroup.coffee","MapGroup":"components/MapGroup.coffee","MergeGroups":"components/MergeGroups.coffee","GroupByObjectKey":"components/GroupByObjectKey.coffee"}}}');
 });
 require.register("noflo-noflo-groups/components/ReadGroups.js", function(exports, require, module){
 var ReadGroups, noflo, _,
@@ -12086,7 +12145,9 @@ ReadGroups = (function(_super) {
       var beginGroup;
       beginGroup = function() {
         _this.groups.push(group);
-        return _this.outPorts.out.beginGroup(group);
+        if (_this.outPorts.out.isAttached()) {
+          return _this.outPorts.out.beginGroup(group);
+        }
       };
       if (_this.count >= _this.threshold) {
         return beginGroup(group);
@@ -12101,14 +12162,20 @@ ReadGroups = (function(_super) {
     this.inPorts["in"].on('endgroup', function(group) {
       if (group === _.last(_this.groups)) {
         _this.groups.pop();
-        return _this.outPorts.out.endGroup();
+        if (_this.outPorts.out.isAttached()) {
+          return _this.outPorts.out.endGroup();
+        }
       }
     });
     this.inPorts["in"].on('data', function(data) {
-      return _this.outPorts.out.send(data);
+      if (_this.outPorts.out.isAttached()) {
+        return _this.outPorts.out.send(data);
+      }
     });
     this.inPorts["in"].on('disconnect', function() {
-      _this.outPorts.out.disconnect();
+      if (_this.outPorts.out.isAttached()) {
+        _this.outPorts.out.disconnect();
+      }
       return _this.outPorts.group.disconnect();
     });
   }
@@ -13461,6 +13528,10 @@ RequestAnimationFrame = (function(_super) {
     }
   };
 
+  RequestAnimationFrame.prototype.shutdown = function() {
+    return this.running = false;
+  };
+
   return RequestAnimationFrame;
 
 })(noflo.Component);
@@ -14194,14 +14265,411 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-noflo-runtime-base/src/Base.js", function(exports, require, module){
+var BaseTransport, protocols;
+
+protocols = {
+  Graph: require('./protocol/Graph'),
+  Network: require('./protocol/Network'),
+  Component: require('./protocol/Component')
+};
+
+BaseTransport = (function() {
+  function BaseTransport(options) {
+    this.options = options;
+    if (!this.options) {
+      this.options = {};
+    }
+    this.graph = new protocols.Graph(this);
+    this.network = new protocols.Network(this);
+    this.component = new protocols.Component(this);
+  }
+
+  BaseTransport.prototype.send = function(protocol, topic, payload, context) {};
+
+  BaseTransport.prototype.receive = function(protocol, topic, payload, context) {
+    switch (protocol) {
+      case 'graph':
+        return this.graph.receive(topic, payload, context);
+      case 'network':
+        return this.network.receive(topic, payload, context);
+      case 'component':
+        return this.component.receive(topic, payload, context);
+    }
+  };
+
+  return BaseTransport;
+
+})();
+
+module.exports = BaseTransport;
+
+});
+require.register("noflo-noflo-runtime-base/src/protocol/Graph.js", function(exports, require, module){
+var GraphProtocol, noflo;
+
+noflo = require('noflo');
+
+GraphProtocol = (function() {
+  function GraphProtocol(transport) {
+    this.transport = transport;
+    this.graph = null;
+  }
+
+  GraphProtocol.prototype.send = function(topic, payload, context) {
+    return this.transport.send('graph', topic, payload, context);
+  };
+
+  GraphProtocol.prototype.receive = function(topic, payload, context) {
+    switch (topic) {
+      case 'clear':
+        return this.graph = this.initGraph(payload, context);
+      case 'addnode':
+        return this.addNode(this.graph, payload, context);
+      case 'removenode':
+        return this.removeNode(this.graph, payload, context);
+      case 'renamenode':
+        return this.renameNode(this.graph, payload, context);
+      case 'addedge':
+        return this.addEdge(this.graph, payload, context);
+      case 'removeedge':
+        return this.removeEdge(this.graph, payload, context);
+      case 'addinitial':
+        return this.addInitial(this.graph, payload, context);
+      case 'removeinitial':
+        return this.removeInitial(this.graph, payload, context);
+    }
+  };
+
+  GraphProtocol.prototype.initGraph = function(payload, context) {
+    var graph;
+    if (!payload.baseDir) {
+      this.send('error', new Error('No graph baseDir provided'), context);
+      return;
+    }
+    if (!payload.name) {
+      payload.name = 'NoFlo runtime';
+    }
+    graph = new noflo.Graph(payload.name);
+    graph.baseDir = payload.baseDir;
+    if (this.transport.options.baseDir) {
+      graph.baseDir = this.transport.options.baseDir;
+    }
+    this.subscribeGraph(graph, context);
+    return graph;
+  };
+
+  GraphProtocol.prototype.subscribeGraph = function(graph, context) {
+    var _this = this;
+    graph.on('addNode', function(node) {
+      return _this.send('addnode', node, context);
+    });
+    graph.on('removeNode', function(node) {
+      return _this.send('removenode', node, context);
+    });
+    graph.on('renameNode', function(oldId, newId) {
+      return _this.send('renamenode', {
+        from: oldId,
+        to: newId
+      }, context);
+    });
+    graph.on('addEdge', function(edge) {
+      return _this.send('addedge', edge, context);
+    });
+    graph.on('removeEdge', function(edge) {
+      return _this.send('removeedge', edge, context);
+    });
+    graph.on('addInitial', function(iip) {
+      return _this.send('addinitial', iip, context);
+    });
+    return graph.on('removeInitial', function(iip) {
+      return _this.send('removeinitial', iip, context);
+    });
+  };
+
+  GraphProtocol.prototype.addNode = function(graph, node, context) {
+    if (!(node.id || node.component)) {
+      this.send('error', new Error('No ID or component supplied'), context);
+    }
+    return graph.addNode(node.id, node.component, node.metadata);
+  };
+
+  GraphProtocol.prototype.removeNode = function(graph, payload) {
+    if (!payload.id) {
+      this.send('error', new Error('No ID supplied'), context);
+    }
+    return graph.removeNode(payload.id);
+  };
+
+  GraphProtocol.prototype.renameNode = function(graph, payload, context) {
+    if (!(payload.from || payload.to)) {
+      this.send('error', new Error('No from or to supplied'), context);
+    }
+    return graph.renameNode(payload.from, payload.to);
+  };
+
+  GraphProtocol.prototype.addEdge = function(graph, edge, context) {
+    if (!(edge.from || edge.to)) {
+      this.send('error', new Error('No from or to supplied'), context);
+    }
+    return graph.addEdge(edge.from.node, edge.from.port, edge.to.node, edge.to.port, edge.metadata);
+  };
+
+  GraphProtocol.prototype.removeEdge = function(graph, edge, context) {
+    if (!(edge.from || edge.to)) {
+      this.send('error', new Error('No from or to supplied'), context);
+    }
+    return graph.removeEdge(edge.from.node, edge.from.port, edge.to.node, edge.to.port);
+  };
+
+  GraphProtocol.prototype.addInitial = function(graph, payload, context) {
+    if (!(payload.from || payload.to)) {
+      this.send('error', new Error('No from or to supplied'), context);
+    }
+    return graph.addInitial(payload.from.data, payload.to.node, payload.to.port, payload.metadata);
+  };
+
+  GraphProtocol.prototype.removeInitial = function(graph, payload, context) {
+    if (!payload.to) {
+      this.send('error', new Error('No to supplied'), context);
+    }
+    return graph.removeInitial(payload.to.node, payload.to.port);
+  };
+
+  return GraphProtocol;
+
+})();
+
+module.exports = GraphProtocol;
+
+});
+require.register("noflo-noflo-runtime-base/src/protocol/Network.js", function(exports, require, module){
+var NetworkProtocol, noflo, prepareSocketEvent;
+
+noflo = require('noflo');
+
+prepareSocketEvent = function(event) {
+  var payload;
+  payload = {
+    id: event.id
+  };
+  if (event.socket.from) {
+    payload.from = {
+      node: event.socket.from.process.id,
+      port: event.socket.from.port
+    };
+  }
+  if (event.socket.to) {
+    payload.to = {
+      node: event.socket.to.process.id,
+      port: event.socket.to.port
+    };
+  }
+  if (event.group) {
+    payload.group = event.group;
+  }
+  if (event.data) {
+    if (event.data.toJSON) {
+      payload.data = event.data.toJSON();
+    }
+    if (event.data.toString) {
+      payload.data = event.data.toString();
+    } else {
+      payload.data = event.data;
+    }
+  }
+  if (event.subgraph) {
+    payload.subgraph = event.subgraph;
+  }
+  return payload;
+};
+
+NetworkProtocol = (function() {
+  function NetworkProtocol(transport) {
+    this.transport = transport;
+    this.network = null;
+  }
+
+  NetworkProtocol.prototype.send = function(topic, payload, context) {
+    return this.transport.send('network', topic, payload, context);
+  };
+
+  NetworkProtocol.prototype.receive = function(topic, payload, context) {
+    switch (topic) {
+      case 'start':
+        return this.initNetwork(this.transport.graph.graph, context);
+      case 'stop':
+        return this.stopNetwork(this.network, context);
+    }
+  };
+
+  NetworkProtocol.prototype.initNetwork = function(graph, context) {
+    var _this = this;
+    if (!graph) {
+      this.send('error', new Error('No graph defined'), context);
+      return;
+    }
+    return noflo.createNetwork(graph, function(network) {
+      _this.subscribeNetwork(network, context);
+      _this.network = network;
+      return network.connect(function() {
+        network.sendInitials();
+        return graph.on('addInitial', function() {
+          return network.sendInitials();
+        });
+      });
+    }, true);
+  };
+
+  NetworkProtocol.prototype.subscribeNetwork = function(network, context) {
+    var _this = this;
+    network.on('start', function(event) {
+      return _this.send('started', event.start, context);
+    });
+    network.on('connect', function(event) {
+      return _this.send('connect', prepareSocketEvent(event), context);
+    });
+    network.on('begingroup', function(event) {
+      return _this.send('begingroup', prepareSocketEvent(event), context);
+    });
+    network.on('data', function(event) {
+      return _this.send('data', prepareSocketEvent(event), context);
+    });
+    network.on('endgroup', function(event) {
+      return _this.send('endgroup', prepareSocketEvent(event), context);
+    });
+    network.on('disconnect', function(event) {
+      return _this.send('disconnect', prepareSocketEvent(event), context);
+    });
+    return network.on('end', function(event) {
+      return _this.send('stopped', event.uptime, context);
+    });
+  };
+
+  NetworkProtocol.prototype.stopNetwork = function(network, context) {
+    if (!network) {
+      return;
+    }
+    return network.stop();
+  };
+
+  return NetworkProtocol;
+
+})();
+
+module.exports = NetworkProtocol;
+
+});
+require.register("noflo-noflo-runtime-base/src/protocol/Component.js", function(exports, require, module){
+var ComponentProtocol, noflo;
+
+noflo = require('noflo');
+
+ComponentProtocol = (function() {
+  function ComponentProtocol(transport) {
+    this.transport = transport;
+  }
+
+  ComponentProtocol.prototype.send = function(topic, payload, context) {
+    return this.transport.send('component', topic, payload, context);
+  };
+
+  ComponentProtocol.prototype.receive = function(topic, payload, context) {
+    switch (topic) {
+      case 'list':
+        return this.listComponents(payload, context);
+    }
+  };
+
+  ComponentProtocol.prototype.listComponents = function(baseDir, context) {
+    var loader,
+      _this = this;
+    if (this.transport.options.baseDir) {
+      baseDir = this.transport.options.baseDir;
+    }
+    loader = new noflo.ComponentLoader(baseDir);
+    return loader.listComponents(function(components) {
+      return Object.keys(components).forEach(function(component) {
+        return loader.load(component, function(instance) {
+          if (!instance.isReady()) {
+            instance.once('ready', function() {
+              return _this.sendComponent(component, instance, context);
+            });
+            return;
+          }
+          return _this.sendComponent(component, instance, context);
+        });
+      });
+    });
+  };
+
+  ComponentProtocol.prototype.sendComponent = function(component, instance, context) {
+    var inPorts, outPorts, port, portName, _ref, _ref1;
+    inPorts = [];
+    outPorts = [];
+    _ref = instance.inPorts;
+    for (portName in _ref) {
+      port = _ref[portName];
+      inPorts.push({
+        id: portName,
+        type: port.type
+      });
+    }
+    _ref1 = instance.outPorts;
+    for (portName in _ref1) {
+      port = _ref1[portName];
+      outPorts.push({
+        id: portName,
+        type: port.type
+      });
+    }
+    return this.send('component', {
+      name: component,
+      description: instance.description,
+      inPorts: inPorts,
+      outPorts: outPorts
+    }, context);
+  };
+
+  return ComponentProtocol;
+
+})();
+
+module.exports = ComponentProtocol;
+
+});
+require.register("noflo-noflo-runtime-iframe/index.js", function(exports, require, module){
+/*
+ * This file can be used for general library features of noflo-runtime-iframe.
+ *
+ * The library features can be made available as CommonJS modules that the
+ * components in this project utilize.
+ */
+
+});
+require.register("noflo-noflo-runtime-iframe/component.json", function(exports, require, module){
+module.exports = JSON.parse('{"name":"noflo-runtime-iframe","description":"NoFlo runtime for execution inside an iframe","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-runtime-iframe","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*","noflo/noflo-runtime-base":"*","noflo/noflo-core":"*"},"scripts":["index.js"],"json":["component.json"],"files":["runtime/component.js","html/component.html","runtime/network.js","html/network.html"]}');
+});
 require.register("noflo-ui/index.js", function(exports, require, module){
 
+});
+require.register("noflo-ui/graphs/CreateProjectView.json", function(exports, require, module){
+module.exports = JSON.parse('{"properties":{"environment":{"baseDir":"/noflo-ui","runtime":"html","src":"./preview/iframe-noflo-ui.html","width":"300","height":"300","content":""},"name":"CreateProject"},"exports":[{"private":"template_ylkgg.in","public":"template"},{"private":"container_1cz66.in","public":"container"},{"private":"createempty_xiwbj.start","public":"in"},{"private":"settype_jpzb0.out","public":"project"}],"processes":{"Container_1cz66":{"component":"core/Repeat","metadata":{"x":364,"y":338,"label":"Container"}},"CreateEmpty_xiwbj":{"component":"objects/CreateObject","metadata":{"x":364,"y":252,"label":"CreateEmpty"}},"WriteView_y26g1":{"component":"dom/WriteHtml","metadata":{"x":1220,"y":225,"label":"WriteView"}},"Template_ylkgg":{"component":"core/Repeat","metadata":{"x":365,"y":151,"label":"Template"}},"GetTemplate_9srhi":{"component":"dom/GetElement","metadata":{"x":570,"y":151,"label":"GetTemplate"}},"ReadTemplate_hg2zg":{"component":"dom/ReadHtml","metadata":{"x":772,"y":156,"label":"ReadTemplate"}},"RunTemplate_ca5em":{"component":"strings/StringTemplate","metadata":{"x":1002,"y":154,"label":"RunTemplate"}},"CreateButtonSelector_c662o":{"component":"core/Kick","metadata":{"x":649,"y":540,"label":"CreateButtonSelector"}},"NameInputSelector_6aef":{"component":"core/Kick","metadata":{"x":648,"y":654,"label":"NameInputSelector"}},"SplitView_kcwt4":{"component":"core/Split","metadata":{"x":431,"y":600,"label":"SplitView"}},"GetCreateButton_xrbbu":{"component":"dom/GetElement","metadata":{"x":899,"y":541,"label":"GetCreateButton"}},"ListenClick_ivbl1":{"component":"interaction/ListenMouse","metadata":{"x":1127,"y":535,"label":"ListenClick"}},"GetNameInput_nfcu8":{"component":"dom/GetElement","metadata":{"x":901,"y":653,"label":"GetNameInput"}},"HoldInput_yp3n7":{"component":"core/Kick","metadata":{"x":1554,"y":582,"label":"HoldInput"}},"GetName_lbbg":{"component":"objects/GetObjectKey","metadata":{"x":1971,"y":583,"label":"GetName"}},"GetTypeOption_dj2ez":{"component":"dom/GetElement","metadata":{"x":1762,"y":723,"label":"GetTypeOption"}},"SplitClick_t18pg":{"component":"core/Split","metadata":{"x":1332,"y":540,"label":"SplitClick"}},"HoldOptionSelector_et5sq":{"component":"core/Kick","metadata":{"x":1556,"y":724,"label":"HoldOptionSelector"}},"GetType_el1zd":{"component":"objects/GetObjectKey","metadata":{"x":1971,"y":723,"label":"GetType"}},"SetName_6uy92":{"component":"objects/SetPropertyValue","metadata":{"x":2421,"y":588,"label":"SetName"}},"SetType_jpzb0":{"component":"objects/SetPropertyValue","metadata":{"x":2636,"y":719,"label":"SetType"}},"CreateProject_cmyn":{"component":"objects/CreateObject","metadata":{"x":1967,"y":374,"label":"CreateProject"}},"GetContainer_eivet":{"component":"dom/GetElement","metadata":{"x":572,"y":320,"label":"GetContainer"}},"ui/GenerateId_yp50h":{"component":"ui/GenerateId","metadata":{"x":1969,"y":472,"label":"ui/GenerateId"}},"objects/SetPropertyValue_q280l":{"component":"objects/SetPropertyValue","metadata":{"x":2222,"y":451,"label":"objects/SetPropertyValue"}}},"connections":[{"src":{"process":"Template_ylkgg","port":"out"},"tgt":{"process":"GetTemplate_9srhi","port":"selector"},"metadata":{"route":0}},{"src":{"process":"GetTemplate_9srhi","port":"element"},"tgt":{"process":"ReadTemplate_hg2zg","port":"container"},"metadata":{"route":0}},{"src":{"process":"ReadTemplate_hg2zg","port":"html"},"tgt":{"process":"RunTemplate_ca5em","port":"template"},"metadata":{"route":0}},{"src":{"process":"CreateEmpty_xiwbj","port":"out"},"tgt":{"process":"RunTemplate_ca5em","port":"in"},"metadata":{"route":0}},{"src":{"process":"RunTemplate_ca5em","port":"out"},"tgt":{"process":"WriteView_y26g1","port":"html"},"metadata":{"route":0}},{"src":{"process":"WriteView_y26g1","port":"container"},"tgt":{"process":"SplitView_kcwt4","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitView_kcwt4","port":"out"},"tgt":{"process":"CreateButtonSelector_c662o","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitView_kcwt4","port":"out"},"tgt":{"process":"NameInputSelector_6aef","port":"in"},"metadata":{"route":0}},{"src":{"process":"CreateButtonSelector_c662o","port":"out"},"tgt":{"process":"GetCreateButton_xrbbu","port":"selector"},"metadata":{"route":0}},{"src":{"process":"GetCreateButton_xrbbu","port":"element"},"tgt":{"process":"ListenClick_ivbl1","port":"element"},"metadata":{"route":0}},{"src":{"process":"NameInputSelector_6aef","port":"out"},"tgt":{"process":"GetNameInput_nfcu8","port":"selector"},"metadata":{"route":0}},{"src":{"process":"GetNameInput_nfcu8","port":"element"},"tgt":{"process":"HoldInput_yp3n7","port":"data"},"metadata":{"route":0}},{"src":{"process":"HoldInput_yp3n7","port":"out"},"tgt":{"process":"GetName_lbbg","port":"in"},"metadata":{"route":0}},{"src":{"process":"ListenClick_ivbl1","port":"click"},"tgt":{"process":"SplitClick_t18pg","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitClick_t18pg","port":"out"},"tgt":{"process":"HoldInput_yp3n7","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitClick_t18pg","port":"out"},"tgt":{"process":"HoldOptionSelector_et5sq","port":"in"},"metadata":{"route":0}},{"src":{"process":"HoldOptionSelector_et5sq","port":"out"},"tgt":{"process":"GetTypeOption_dj2ez","port":"selector"},"metadata":{"route":0}},{"src":{"process":"GetTypeOption_dj2ez","port":"element"},"tgt":{"process":"GetType_el1zd","port":"in"},"metadata":{"route":0}},{"src":{"process":"GetName_lbbg","port":"out"},"tgt":{"process":"SetName_6uy92","port":"value"},"metadata":{"route":0}},{"src":{"process":"GetType_el1zd","port":"out"},"tgt":{"process":"SetType_jpzb0","port":"value"},"metadata":{"route":0}},{"src":{"process":"SetName_6uy92","port":"out"},"tgt":{"process":"SetType_jpzb0","port":"in"},"metadata":{"route":0}},{"src":{"process":"GetContainer_eivet","port":"element"},"tgt":{"process":"WriteView_y26g1","port":"container"},"metadata":{"route":0}},{"src":{"process":"Container_1cz66","port":"out"},"tgt":{"process":"GetContainer_eivet","port":"selector"},"metadata":{"route":0}},{"src":{"process":"SplitClick_t18pg","port":"out"},"tgt":{"process":"ui/GenerateId_yp50h","port":"start"},"metadata":{"route":0}},{"src":{"process":"SplitClick_t18pg","port":"out"},"tgt":{"process":"CreateProject_cmyn","port":"start"},"metadata":{"route":0}},{"src":{"process":"ui/GenerateId_yp50h","port":"out"},"tgt":{"process":"objects/SetPropertyValue_q280l","port":"value"},"metadata":{"route":0}},{"src":{"process":"CreateProject_cmyn","port":"out"},"tgt":{"process":"objects/SetPropertyValue_q280l","port":"in"},"metadata":{"route":0}},{"src":{"process":"objects/SetPropertyValue_q280l","port":"out"},"tgt":{"process":"SetName_6uy92","port":"in"},"metadata":{"route":0}},{"data":"#name","tgt":{"process":"NameInputSelector_6aef","port":"data"}},{"data":"#create","tgt":{"process":"CreateButtonSelector_c662o","port":"data"}},{"data":"value","tgt":{"process":"GetName_lbbg","port":"key"}},{"data":"option:checked","tgt":{"process":"HoldOptionSelector_et5sq","port":"data"}},{"data":"value","tgt":{"process":"GetType_el1zd","port":"key"}},{"data":"name","tgt":{"process":"SetName_6uy92","port":"property"}},{"data":"type","tgt":{"process":"SetType_jpzb0","port":"property"}},{"data":"id","tgt":{"process":"objects/SetPropertyValue_q280l","port":"property"}}]}');
+});
+require.register("noflo-ui/graphs/SaveProject.json", function(exports, require, module){
+module.exports = JSON.parse('{"properties":{"environment":{"baseDir":"/noflo-ui","runtime":"html","src":"./preview/iframe-noflo-ui.html","width":"300","height":"300","content":""},"name":"SaveProject"},"exports":[{"private":"newproject_zc9i4.in","public":"newproject"},{"private":"listkey_4a0sp.in","public":"listkey"},{"private":"setlist_vnf10.item","public":"done"}],"processes":{"NewProject_zc9i4":{"component":"core/Repeat","metadata":{"x":527.8333333333334,"y":62,"label":"NewProject"}},"GetId_cmys6":{"component":"objects/GetObjectKey","metadata":{"x":767.8333333333334,"y":66,"label":"GetId"}},"ToJson_mjcoz":{"component":"strings/Jsonify","metadata":{"x":1089.8333333333335,"y":151,"label":"ToJson"}},"SplitId_l6557":{"component":"core/Split","metadata":{"x":1087.8333333333335,"y":-99,"label":"SplitId"}},"SaveProject_h7gsp":{"component":"localstorage/SetItem","metadata":{"x":1350.8333333333335,"y":72,"label":"SaveProject"}},"SendId_j1as0":{"component":"core/Kick","metadata":{"x":1578.8333333333335,"y":18,"label":"SendId"}},"HoldListKey_z8h78":{"component":"strings/SendString","metadata":{"x":2012.8333333333335,"y":-112,"label":"HoldListKey"}},"CompileList_6pcsb":{"component":"strings/CompileString","metadata":{"x":2702.8333333333335,"y":4,"label":"CompileList"}},"GetList_k02vl":{"component":"localstorage/GetItem","metadata":{"x":2215.8333333333335,"y":-111,"label":"GetList"}},"ListKey_4a0sp":{"component":"core/Split","metadata":{"x":1376.8333333333335,"y":-307,"label":"ListKey"}},"SetList_vnf10":{"component":"localstorage/SetItem","metadata":{"x":3376.8333333333335,"y":-235,"label":"SetList"}},"SplitIdAfterSave_6znz7":{"component":"core/Split","metadata":{"x":1793.8333333333335,"y":25,"label":"SplitIdAfterSave"}},"RemoveGroups_m7vcj":{"component":"groups/RemoveGroups","metadata":{"x":2468,"y":38,"label":"RemoveGroups"}},"RemoveGroups_6elq":{"component":"groups/RemoveGroups","metadata":{"x":2466,"y":-88,"label":"RemoveGroups"}},"HoldListKey_60og8":{"component":"strings/SendString","metadata":{"x":3134,"y":-238.5,"label":"HoldListKey"}},"SplitList_o4bc3":{"component":"core/Split","metadata":{"x":2922,"y":18.5,"label":"SplitList"}}},"connections":[{"src":{"process":"NewProject_zc9i4","port":"out"},"tgt":{"process":"GetId_cmys6","port":"in"},"metadata":{"route":8}},{"src":{"process":"GetId_cmys6","port":"object"},"tgt":{"process":"ToJson_mjcoz","port":"in"},"metadata":{"route":8}},{"src":{"process":"GetId_cmys6","port":"out"},"tgt":{"process":"SplitId_l6557","port":"in"},"metadata":{"route":3}},{"src":{"process":"SplitId_l6557","port":"out"},"tgt":{"process":"SendId_j1as0","port":"data"},"metadata":{"route":3}},{"src":{"process":"SaveProject_h7gsp","port":"item"},"tgt":{"process":"SendId_j1as0","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitId_l6557","port":"out"},"tgt":{"process":"SaveProject_h7gsp","port":"key"},"metadata":{"route":3}},{"src":{"process":"ToJson_mjcoz","port":"out"},"tgt":{"process":"SaveProject_h7gsp","port":"value"},"metadata":{"route":8}},{"src":{"process":"ListKey_4a0sp","port":"out"},"tgt":{"process":"HoldListKey_z8h78","port":"string"},"metadata":{"route":5}},{"src":{"process":"SendId_j1as0","port":"out"},"tgt":{"process":"SplitIdAfterSave_6znz7","port":"in"},"metadata":{"route":3}},{"src":{"process":"SplitIdAfterSave_6znz7","port":"out"},"tgt":{"process":"HoldListKey_z8h78","port":"in"},"metadata":{"route":0}},{"src":{"process":"HoldListKey_z8h78","port":"out"},"tgt":{"process":"GetList_k02vl","port":"key"},"metadata":{"route":5}},{"src":{"process":"SplitIdAfterSave_6znz7","port":"out"},"tgt":{"process":"RemoveGroups_m7vcj","port":"in"},"metadata":{"route":3}},{"src":{"process":"GetList_k02vl","port":"item"},"tgt":{"process":"RemoveGroups_6elq","port":"in"},"metadata":{"route":1}},{"src":{"process":"RemoveGroups_6elq","port":"out"},"tgt":{"process":"CompileList_6pcsb","port":"in"},"metadata":{"route":1}},{"src":{"process":"RemoveGroups_m7vcj","port":"out"},"tgt":{"process":"CompileList_6pcsb","port":"in"},"metadata":{"route":3}},{"src":{"process":"ListKey_4a0sp","port":"out"},"tgt":{"process":"HoldListKey_60og8","port":"string"},"metadata":{"route":5}},{"src":{"process":"HoldListKey_60og8","port":"out"},"tgt":{"process":"SetList_vnf10","port":"key"},"metadata":{"route":5}},{"src":{"process":"SplitList_o4bc3","port":"out"},"tgt":{"process":"SetList_vnf10","port":"value"},"metadata":{"route":1}},{"src":{"process":"CompileList_6pcsb","port":"out"},"tgt":{"process":"SplitList_o4bc3","port":"in"},"metadata":{"route":1}},{"src":{"process":"SplitList_o4bc3","port":"out"},"tgt":{"process":"HoldListKey_60og8","port":"in"},"metadata":{"route":0}},{"data":"id","tgt":{"process":"GetId_cmys6","port":"key"}},{"data":",","tgt":{"process":"CompileList_6pcsb","port":"delimiter"}}]}');
 });
 require.register("noflo-ui/graphs/EditGraph.json", function(exports, require, module){
 module.exports = JSON.parse('{"processes":{"DataflowElement":{"component":"ui/WriteTemplate"},"LoadDataflowElement":{"component":"core/Kick"},"DataflowData":{"component":"objects/CreateObject"},"LoadDataflow":{"component":"ui/Dataflow"},"DomReady":{"component":"core/Split"},"OpenGraph":{"component":"core/Merge"},"Determine":{"component":"ui/DetermineRuntime"},"LoadRuntime":{"component":"ui/LoadRuntime"},"Drop":{"component":"core/Drop"},"Listen":{"component":"ui/ListenGraph"},"SplitChanged":{"component":"core/Split"}},"connections":[{"data":"#dataflow-template","tgt":{"process":"DataflowElement","port":"template"}},{"data":".dataflow","tgt":{"process":"LoadDataflowElement","port":"data"}},{"src":{"process":"DataflowData","port":"out"},"tgt":{"process":"DataflowElement","port":"data"}},{"src":{"process":"LoadDataflowElement","port":"out"},"tgt":{"process":"LoadDataflow","port":"container"}},{"src":{"process":"DomReady","port":"out"},"tgt":{"process":"LoadDataflowElement","port":"in"}},{"src":{"process":"DataflowElement","port":"out"},"tgt":{"process":"DomReady","port":"in"}},{"src":{"process":"OpenGraph","port":"out"},"tgt":{"process":"Determine","port":"graph"}},{"src":{"process":"Determine","port":"runtime"},"tgt":{"process":"LoadRuntime","port":"runtime"}},{"src":{"process":"Determine","port":"graph"},"tgt":{"process":"LoadRuntime","port":"graph"}},{"src":{"process":"LoadRuntime","port":"runtime"},"tgt":{"process":"LoadDataflow","port":"runtime"}},{"src":{"process":"LoadRuntime","port":"graph"},"tgt":{"process":"LoadDataflow","port":"graph"}},{"src":{"process":"LoadDataflow","port":"dataflow"},"tgt":{"process":"Drop","port":"in"}},{"src":{"process":"LoadDataflow","port":"graph"},"tgt":{"process":"Listen","port":"graph"}},{"src":{"process":"Listen","port":"changed"},"tgt":{"process":"SplitChanged","port":"in"}}],"exports":[{"private":"dataflowelement.target","public":"container"},{"private":"dataflowdata.start","public":"writetemplate"},{"private":"domready.out","public":"domready"},{"private":"opengraph.in","public":"graph"},{"private":"splitchanged.out","public":"changed"}]}');
 });
 require.register("noflo-ui/graphs/WriteTemplate.json", function(exports, require, module){
 module.exports = JSON.parse('{"properties":{"environment":{"runtime":"html"},"name":"Hello"},"exports":[{"private":"gettemplate.selector","public":"template"},{"private":"gettarget.selector","public":"target"},{"private":"executetemplate.in","public":"data"},{"private":"writetemplate.container","public":"out"}],"processes":{"GetTemplate":{"component":"dom/GetElement","metadata":{"x":200,"y":200}},"ReadTemplate":{"component":"dom/ReadHtml","metadata":{"x":455,"y":200}},"ExecuteTemplate":{"component":"strings/StringTemplate","metadata":{"x":718,"y":198}},"WriteTemplate":{"component":"dom/WriteHtml","metadata":{"x":998,"y":196}},"GetTarget":{"component":"dom/GetElement","metadata":{"x":199,"y":349}}},"connections":[{"src":{"process":"GetTemplate","port":"element"},"tgt":{"process":"ReadTemplate","port":"container"},"metadata":{"route":0}},{"src":{"process":"ReadTemplate","port":"html"},"tgt":{"process":"ExecuteTemplate","port":"template"},"metadata":{"route":0}},{"src":{"process":"ExecuteTemplate","port":"out"},"tgt":{"process":"WriteTemplate","port":"html"},"metadata":{"route":0}},{"src":{"process":"GetTarget","port":"element"},"tgt":{"process":"WriteTemplate","port":"container"},"metadata":{"route":0}}]}');
+});
+require.register("noflo-ui/graphs/CreateProjectView.json", function(exports, require, module){
+module.exports = JSON.parse('{"properties":{"environment":{"baseDir":"/noflo-ui","runtime":"html","src":"./preview/iframe-noflo-ui.html","width":"300","height":"300","content":""},"name":"CreateProject"},"exports":[{"private":"template_ylkgg.in","public":"template"},{"private":"container_1cz66.in","public":"container"},{"private":"createempty_xiwbj.start","public":"in"},{"private":"settype_jpzb0.out","public":"project"}],"processes":{"Container_1cz66":{"component":"core/Repeat","metadata":{"x":364,"y":338,"label":"Container"}},"CreateEmpty_xiwbj":{"component":"objects/CreateObject","metadata":{"x":364,"y":252,"label":"CreateEmpty"}},"WriteView_y26g1":{"component":"dom/WriteHtml","metadata":{"x":1220,"y":225,"label":"WriteView"}},"Template_ylkgg":{"component":"core/Repeat","metadata":{"x":365,"y":151,"label":"Template"}},"GetTemplate_9srhi":{"component":"dom/GetElement","metadata":{"x":570,"y":151,"label":"GetTemplate"}},"ReadTemplate_hg2zg":{"component":"dom/ReadHtml","metadata":{"x":772,"y":156,"label":"ReadTemplate"}},"RunTemplate_ca5em":{"component":"strings/StringTemplate","metadata":{"x":1002,"y":154,"label":"RunTemplate"}},"CreateButtonSelector_c662o":{"component":"core/Kick","metadata":{"x":649,"y":540,"label":"CreateButtonSelector"}},"NameInputSelector_6aef":{"component":"core/Kick","metadata":{"x":648,"y":654,"label":"NameInputSelector"}},"SplitView_kcwt4":{"component":"core/Split","metadata":{"x":431,"y":600,"label":"SplitView"}},"GetCreateButton_xrbbu":{"component":"dom/GetElement","metadata":{"x":899,"y":541,"label":"GetCreateButton"}},"ListenClick_ivbl1":{"component":"interaction/ListenMouse","metadata":{"x":1127,"y":535,"label":"ListenClick"}},"GetNameInput_nfcu8":{"component":"dom/GetElement","metadata":{"x":901,"y":653,"label":"GetNameInput"}},"HoldInput_yp3n7":{"component":"core/Kick","metadata":{"x":1554,"y":582,"label":"HoldInput"}},"GetName_lbbg":{"component":"objects/GetObjectKey","metadata":{"x":1971,"y":583,"label":"GetName"}},"GetTypeOption_dj2ez":{"component":"dom/GetElement","metadata":{"x":1762,"y":723,"label":"GetTypeOption"}},"SplitClick_t18pg":{"component":"core/Split","metadata":{"x":1332,"y":540,"label":"SplitClick"}},"HoldOptionSelector_et5sq":{"component":"core/Kick","metadata":{"x":1556,"y":724,"label":"HoldOptionSelector"}},"GetType_el1zd":{"component":"objects/GetObjectKey","metadata":{"x":1971,"y":723,"label":"GetType"}},"SetName_6uy92":{"component":"objects/SetPropertyValue","metadata":{"x":2421,"y":588,"label":"SetName"}},"SetType_jpzb0":{"component":"objects/SetPropertyValue","metadata":{"x":2636,"y":719,"label":"SetType"}},"CreateProject_cmyn":{"component":"objects/CreateObject","metadata":{"x":1967,"y":374,"label":"CreateProject"}},"GetContainer_eivet":{"component":"dom/GetElement","metadata":{"x":572,"y":320,"label":"GetContainer"}},"ui/GenerateId_yp50h":{"component":"ui/GenerateId","metadata":{"x":1969,"y":472,"label":"ui/GenerateId"}},"objects/SetPropertyValue_q280l":{"component":"objects/SetPropertyValue","metadata":{"x":2222,"y":451,"label":"objects/SetPropertyValue"}}},"connections":[{"src":{"process":"Template_ylkgg","port":"out"},"tgt":{"process":"GetTemplate_9srhi","port":"selector"},"metadata":{"route":0}},{"src":{"process":"GetTemplate_9srhi","port":"element"},"tgt":{"process":"ReadTemplate_hg2zg","port":"container"},"metadata":{"route":0}},{"src":{"process":"ReadTemplate_hg2zg","port":"html"},"tgt":{"process":"RunTemplate_ca5em","port":"template"},"metadata":{"route":0}},{"src":{"process":"CreateEmpty_xiwbj","port":"out"},"tgt":{"process":"RunTemplate_ca5em","port":"in"},"metadata":{"route":0}},{"src":{"process":"RunTemplate_ca5em","port":"out"},"tgt":{"process":"WriteView_y26g1","port":"html"},"metadata":{"route":0}},{"src":{"process":"WriteView_y26g1","port":"container"},"tgt":{"process":"SplitView_kcwt4","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitView_kcwt4","port":"out"},"tgt":{"process":"CreateButtonSelector_c662o","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitView_kcwt4","port":"out"},"tgt":{"process":"NameInputSelector_6aef","port":"in"},"metadata":{"route":0}},{"src":{"process":"CreateButtonSelector_c662o","port":"out"},"tgt":{"process":"GetCreateButton_xrbbu","port":"selector"},"metadata":{"route":0}},{"src":{"process":"GetCreateButton_xrbbu","port":"element"},"tgt":{"process":"ListenClick_ivbl1","port":"element"},"metadata":{"route":0}},{"src":{"process":"NameInputSelector_6aef","port":"out"},"tgt":{"process":"GetNameInput_nfcu8","port":"selector"},"metadata":{"route":0}},{"src":{"process":"GetNameInput_nfcu8","port":"element"},"tgt":{"process":"HoldInput_yp3n7","port":"data"},"metadata":{"route":0}},{"src":{"process":"HoldInput_yp3n7","port":"out"},"tgt":{"process":"GetName_lbbg","port":"in"},"metadata":{"route":0}},{"src":{"process":"ListenClick_ivbl1","port":"click"},"tgt":{"process":"SplitClick_t18pg","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitClick_t18pg","port":"out"},"tgt":{"process":"HoldInput_yp3n7","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitClick_t18pg","port":"out"},"tgt":{"process":"HoldOptionSelector_et5sq","port":"in"},"metadata":{"route":0}},{"src":{"process":"HoldOptionSelector_et5sq","port":"out"},"tgt":{"process":"GetTypeOption_dj2ez","port":"selector"},"metadata":{"route":0}},{"src":{"process":"GetTypeOption_dj2ez","port":"element"},"tgt":{"process":"GetType_el1zd","port":"in"},"metadata":{"route":0}},{"src":{"process":"GetName_lbbg","port":"out"},"tgt":{"process":"SetName_6uy92","port":"value"},"metadata":{"route":0}},{"src":{"process":"GetType_el1zd","port":"out"},"tgt":{"process":"SetType_jpzb0","port":"value"},"metadata":{"route":0}},{"src":{"process":"SetName_6uy92","port":"out"},"tgt":{"process":"SetType_jpzb0","port":"in"},"metadata":{"route":0}},{"src":{"process":"GetContainer_eivet","port":"element"},"tgt":{"process":"WriteView_y26g1","port":"container"},"metadata":{"route":0}},{"src":{"process":"Container_1cz66","port":"out"},"tgt":{"process":"GetContainer_eivet","port":"selector"},"metadata":{"route":0}},{"src":{"process":"SplitClick_t18pg","port":"out"},"tgt":{"process":"ui/GenerateId_yp50h","port":"start"},"metadata":{"route":0}},{"src":{"process":"SplitClick_t18pg","port":"out"},"tgt":{"process":"CreateProject_cmyn","port":"start"},"metadata":{"route":0}},{"src":{"process":"ui/GenerateId_yp50h","port":"out"},"tgt":{"process":"objects/SetPropertyValue_q280l","port":"value"},"metadata":{"route":0}},{"src":{"process":"CreateProject_cmyn","port":"out"},"tgt":{"process":"objects/SetPropertyValue_q280l","port":"in"},"metadata":{"route":0}},{"src":{"process":"objects/SetPropertyValue_q280l","port":"out"},"tgt":{"process":"SetName_6uy92","port":"in"},"metadata":{"route":0}},{"data":"#name","tgt":{"process":"NameInputSelector_6aef","port":"data"}},{"data":"#create","tgt":{"process":"CreateButtonSelector_c662o","port":"data"}},{"data":"value","tgt":{"process":"GetName_lbbg","port":"key"}},{"data":"option:checked","tgt":{"process":"HoldOptionSelector_et5sq","port":"data"}},{"data":"value","tgt":{"process":"GetType_el1zd","port":"key"}},{"data":"name","tgt":{"process":"SetName_6uy92","port":"property"}},{"data":"type","tgt":{"process":"SetType_jpzb0","port":"property"}},{"data":"id","tgt":{"process":"objects/SetPropertyValue_q280l","port":"property"}}]}');
+});
+require.register("noflo-ui/graphs/SaveProject.json", function(exports, require, module){
+module.exports = JSON.parse('{"properties":{"environment":{"baseDir":"/noflo-ui","runtime":"html","src":"./preview/iframe-noflo-ui.html","width":"300","height":"300","content":""},"name":"SaveProject"},"exports":[{"private":"newproject_zc9i4.in","public":"newproject"},{"private":"listkey_4a0sp.in","public":"listkey"},{"private":"setlist_vnf10.item","public":"done"}],"processes":{"NewProject_zc9i4":{"component":"core/Repeat","metadata":{"x":527.8333333333334,"y":62,"label":"NewProject"}},"GetId_cmys6":{"component":"objects/GetObjectKey","metadata":{"x":767.8333333333334,"y":66,"label":"GetId"}},"ToJson_mjcoz":{"component":"strings/Jsonify","metadata":{"x":1089.8333333333335,"y":151,"label":"ToJson"}},"SplitId_l6557":{"component":"core/Split","metadata":{"x":1087.8333333333335,"y":-99,"label":"SplitId"}},"SaveProject_h7gsp":{"component":"localstorage/SetItem","metadata":{"x":1350.8333333333335,"y":72,"label":"SaveProject"}},"SendId_j1as0":{"component":"core/Kick","metadata":{"x":1578.8333333333335,"y":18,"label":"SendId"}},"HoldListKey_z8h78":{"component":"strings/SendString","metadata":{"x":2012.8333333333335,"y":-112,"label":"HoldListKey"}},"CompileList_6pcsb":{"component":"strings/CompileString","metadata":{"x":2702.8333333333335,"y":4,"label":"CompileList"}},"GetList_k02vl":{"component":"localstorage/GetItem","metadata":{"x":2215.8333333333335,"y":-111,"label":"GetList"}},"ListKey_4a0sp":{"component":"core/Split","metadata":{"x":1376.8333333333335,"y":-307,"label":"ListKey"}},"SetList_vnf10":{"component":"localstorage/SetItem","metadata":{"x":3376.8333333333335,"y":-235,"label":"SetList"}},"SplitIdAfterSave_6znz7":{"component":"core/Split","metadata":{"x":1793.8333333333335,"y":25,"label":"SplitIdAfterSave"}},"RemoveGroups_m7vcj":{"component":"groups/RemoveGroups","metadata":{"x":2468,"y":38,"label":"RemoveGroups"}},"RemoveGroups_6elq":{"component":"groups/RemoveGroups","metadata":{"x":2466,"y":-88,"label":"RemoveGroups"}},"HoldListKey_60og8":{"component":"strings/SendString","metadata":{"x":3134,"y":-238.5,"label":"HoldListKey"}},"SplitList_o4bc3":{"component":"core/Split","metadata":{"x":2922,"y":18.5,"label":"SplitList"}}},"connections":[{"src":{"process":"NewProject_zc9i4","port":"out"},"tgt":{"process":"GetId_cmys6","port":"in"},"metadata":{"route":8}},{"src":{"process":"GetId_cmys6","port":"object"},"tgt":{"process":"ToJson_mjcoz","port":"in"},"metadata":{"route":8}},{"src":{"process":"GetId_cmys6","port":"out"},"tgt":{"process":"SplitId_l6557","port":"in"},"metadata":{"route":3}},{"src":{"process":"SplitId_l6557","port":"out"},"tgt":{"process":"SendId_j1as0","port":"data"},"metadata":{"route":3}},{"src":{"process":"SaveProject_h7gsp","port":"item"},"tgt":{"process":"SendId_j1as0","port":"in"},"metadata":{"route":0}},{"src":{"process":"SplitId_l6557","port":"out"},"tgt":{"process":"SaveProject_h7gsp","port":"key"},"metadata":{"route":3}},{"src":{"process":"ToJson_mjcoz","port":"out"},"tgt":{"process":"SaveProject_h7gsp","port":"value"},"metadata":{"route":8}},{"src":{"process":"ListKey_4a0sp","port":"out"},"tgt":{"process":"HoldListKey_z8h78","port":"string"},"metadata":{"route":5}},{"src":{"process":"SendId_j1as0","port":"out"},"tgt":{"process":"SplitIdAfterSave_6znz7","port":"in"},"metadata":{"route":3}},{"src":{"process":"SplitIdAfterSave_6znz7","port":"out"},"tgt":{"process":"HoldListKey_z8h78","port":"in"},"metadata":{"route":0}},{"src":{"process":"HoldListKey_z8h78","port":"out"},"tgt":{"process":"GetList_k02vl","port":"key"},"metadata":{"route":5}},{"src":{"process":"SplitIdAfterSave_6znz7","port":"out"},"tgt":{"process":"RemoveGroups_m7vcj","port":"in"},"metadata":{"route":3}},{"src":{"process":"GetList_k02vl","port":"item"},"tgt":{"process":"RemoveGroups_6elq","port":"in"},"metadata":{"route":1}},{"src":{"process":"RemoveGroups_6elq","port":"out"},"tgt":{"process":"CompileList_6pcsb","port":"in"},"metadata":{"route":1}},{"src":{"process":"RemoveGroups_m7vcj","port":"out"},"tgt":{"process":"CompileList_6pcsb","port":"in"},"metadata":{"route":3}},{"src":{"process":"ListKey_4a0sp","port":"out"},"tgt":{"process":"HoldListKey_60og8","port":"string"},"metadata":{"route":5}},{"src":{"process":"HoldListKey_60og8","port":"out"},"tgt":{"process":"SetList_vnf10","port":"key"},"metadata":{"route":5}},{"src":{"process":"SplitList_o4bc3","port":"out"},"tgt":{"process":"SetList_vnf10","port":"value"},"metadata":{"route":1}},{"src":{"process":"CompileList_6pcsb","port":"out"},"tgt":{"process":"SplitList_o4bc3","port":"in"},"metadata":{"route":1}},{"src":{"process":"SplitList_o4bc3","port":"out"},"tgt":{"process":"HoldListKey_60og8","port":"in"},"metadata":{"route":0}},{"data":"id","tgt":{"process":"GetId_cmys6","port":"key"}},{"data":",","tgt":{"process":"CompileList_6pcsb","port":"delimiter"}}]}');
 });
 require.register("noflo-ui/graphs/EditGraph.json", function(exports, require, module){
 module.exports = JSON.parse('{"processes":{"DataflowElement":{"component":"ui/WriteTemplate"},"LoadDataflowElement":{"component":"core/Kick"},"DataflowData":{"component":"objects/CreateObject"},"LoadDataflow":{"component":"ui/Dataflow"},"DomReady":{"component":"core/Split"},"OpenGraph":{"component":"core/Merge"},"Determine":{"component":"ui/DetermineRuntime"},"LoadRuntime":{"component":"ui/LoadRuntime"},"Drop":{"component":"core/Drop"},"Listen":{"component":"ui/ListenGraph"},"SplitChanged":{"component":"core/Split"}},"connections":[{"data":"#dataflow-template","tgt":{"process":"DataflowElement","port":"template"}},{"data":".dataflow","tgt":{"process":"LoadDataflowElement","port":"data"}},{"src":{"process":"DataflowData","port":"out"},"tgt":{"process":"DataflowElement","port":"data"}},{"src":{"process":"LoadDataflowElement","port":"out"},"tgt":{"process":"LoadDataflow","port":"container"}},{"src":{"process":"DomReady","port":"out"},"tgt":{"process":"LoadDataflowElement","port":"in"}},{"src":{"process":"DataflowElement","port":"out"},"tgt":{"process":"DomReady","port":"in"}},{"src":{"process":"OpenGraph","port":"out"},"tgt":{"process":"Determine","port":"graph"}},{"src":{"process":"Determine","port":"runtime"},"tgt":{"process":"LoadRuntime","port":"runtime"}},{"src":{"process":"Determine","port":"graph"},"tgt":{"process":"LoadRuntime","port":"graph"}},{"src":{"process":"LoadRuntime","port":"runtime"},"tgt":{"process":"LoadDataflow","port":"runtime"}},{"src":{"process":"LoadRuntime","port":"graph"},"tgt":{"process":"LoadDataflow","port":"graph"}},{"src":{"process":"LoadDataflow","port":"dataflow"},"tgt":{"process":"Drop","port":"in"}},{"src":{"process":"LoadDataflow","port":"graph"},"tgt":{"process":"Listen","port":"graph"}},{"src":{"process":"Listen","port":"changed"},"tgt":{"process":"SplitChanged","port":"in"}}],"exports":[{"private":"dataflowelement.target","public":"container"},{"private":"dataflowdata.start","public":"writetemplate"},{"private":"domready.out","public":"domready"},{"private":"opengraph.in","public":"graph"},{"private":"splitchanged.out","public":"changed"}]}');
@@ -14210,7 +14678,7 @@ require.register("noflo-ui/graphs/WriteTemplate.json", function(exports, require
 module.exports = JSON.parse('{"properties":{"environment":{"runtime":"html"},"name":"Hello"},"exports":[{"private":"gettemplate.selector","public":"template"},{"private":"gettarget.selector","public":"target"},{"private":"executetemplate.in","public":"data"},{"private":"writetemplate.container","public":"out"}],"processes":{"GetTemplate":{"component":"dom/GetElement","metadata":{"x":200,"y":200}},"ReadTemplate":{"component":"dom/ReadHtml","metadata":{"x":455,"y":200}},"ExecuteTemplate":{"component":"strings/StringTemplate","metadata":{"x":718,"y":198}},"WriteTemplate":{"component":"dom/WriteHtml","metadata":{"x":998,"y":196}},"GetTarget":{"component":"dom/GetElement","metadata":{"x":199,"y":349}}},"connections":[{"src":{"process":"GetTemplate","port":"element"},"tgt":{"process":"ReadTemplate","port":"container"},"metadata":{"route":0}},{"src":{"process":"ReadTemplate","port":"html"},"tgt":{"process":"ExecuteTemplate","port":"template"},"metadata":{"route":0}},{"src":{"process":"ExecuteTemplate","port":"out"},"tgt":{"process":"WriteTemplate","port":"html"},"metadata":{"route":0}},{"src":{"process":"GetTarget","port":"element"},"tgt":{"process":"WriteTemplate","port":"container"},"metadata":{"route":0}}]}');
 });
 require.register("noflo-ui/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-ui","description":"NoFlo Development Environment","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","version":"0.1.0","keywords":["fbp","noflo","graph","visual","dataflow"],"dependencies":{"meemoo/dataflow":"*","component/emitter":"*","noflo/noflo":"*","noflo/noflo-strings":"*","noflo/noflo-ajax":"*","noflo/noflo-localstorage":"*","noflo/noflo-interaction":"*","noflo/noflo-objects":"*","noflo/noflo-groups":"*","noflo/noflo-dom":"*","noflo/noflo-core":"*"},"noflo":{"components":{"CreateGraph":"components/CreateGraph.coffee","LoadGraph":"components/LoadGraph.coffee","LoadRuntime":"components/LoadRuntime.coffee","ListenGraph":"components/ListenGraph.coffee","DetermineRuntime":"components/DetermineRuntime.coffee","Dataflow":"components/Dataflow.coffee","Router":"components/Router.coffee"},"graphs":{"EditGraph":"graphs/EditGraph.json","WriteTemplate":"graphs/WriteTemplate.json"}},"main":"index.js","scripts":["index.js","src/plugins/nofloLibrary.coffee","src/plugins/nofloGraph.coffee","src/plugins/nofloSettings.coffee","src/plugins/preview.coffee","src/runtimes/base.coffee","src/runtimes/iframe.coffee","src/runtimes/websocket.coffee","components/CreateGraph.coffee","components/LoadGraph.coffee","components/LoadRuntime.coffee","components/ListenGraph.coffee","components/DetermineRuntime.coffee","components/Dataflow.coffee","components/Router.coffee","graphs/EditGraph.json","graphs/WriteTemplate.json"],"json":["graphs/EditGraph.json","graphs/WriteTemplate.json","component.json"],"files":["css/noflo-ui.css","preview/iframe.html","preview/package.json","preview/component.json","index.html","favicon.ico"]}');
+module.exports = JSON.parse('{"name":"noflo-ui","description":"NoFlo Development Environment","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","version":"0.1.0","keywords":["fbp","noflo","graph","visual","dataflow"],"dependencies":{"meemoo/dataflow":"*","component/emitter":"*","noflo/noflo":"*","noflo/noflo-strings":"*","noflo/noflo-ajax":"*","noflo/noflo-localstorage":"*","noflo/noflo-interaction":"*","noflo/noflo-objects":"*","noflo/noflo-groups":"*","noflo/noflo-dom":"*","noflo/noflo-core":"*","noflo/noflo-runtime-iframe":"*"},"noflo":{"components":{"CreateGraph":"components/CreateGraph.coffee","GenerateId":"components/GenerateId.coffee","LoadGraph":"components/LoadGraph.coffee","LoadRuntime":"components/LoadRuntime.coffee","ListenGraph":"components/ListenGraph.coffee","DetermineRuntime":"components/DetermineRuntime.coffee","Dataflow":"components/Dataflow.coffee","Router":"components/Router.coffee"},"graphs":{"CreateProjectView":"graphs/CreateProjectView.json","SaveProject":"graphs/SaveProject.json","EditGraph":"graphs/EditGraph.json","WriteTemplate":"graphs/WriteTemplate.json"}},"main":"index.js","scripts":["index.js","src/plugins/nofloLibrary.coffee","src/plugins/nofloGraph.coffee","src/plugins/nofloSettings.coffee","src/plugins/preview.coffee","src/runtimes/base.coffee","src/runtimes/iframe.coffee","src/runtimes/websocket.coffee","components/CreateGraph.coffee","components/GenerateId.coffee","components/LoadGraph.coffee","components/LoadRuntime.coffee","components/ListenGraph.coffee","components/DetermineRuntime.coffee","components/Dataflow.coffee","components/Router.coffee","graphs/CreateProjectView.json","graphs/SaveProject.json","graphs/EditGraph.json","graphs/WriteTemplate.json"],"json":["graphs/CreateProjectView.json","graphs/SaveProject.json","graphs/EditGraph.json","graphs/WriteTemplate.json","component.json"],"files":["css/noflo-ui.css","preview/iframe.html","preview/package.json","preview/component.json","index.html","favicon.ico","noflo.png"]}');
 });
 require.register("noflo-ui/src/plugins/nofloLibrary.js", function(exports, require, module){
 var Dataflow, NoFloLibraryPlugin, plugin,
@@ -14268,20 +14736,37 @@ NoFloLibraryPlugin = (function() {
       _this = this;
     components = {};
     graph.nodes.forEach(function(node) {
-      components[node.component] = {
-        name: node.component,
-        description: '',
-        inPorts: [],
-        outPorts: []
-      };
+      if (!components[node.component]) {
+        components[node.component] = {
+          name: node.component,
+          description: '',
+          inPorts: [],
+          outPorts: []
+        };
+      }
       graph.edges.forEach(function(edge) {
+        var inport, outport, _i, _j, _len, _len1, _ref, _ref1;
         if (edge.from.node === node.id) {
+          _ref = components[node.component].outPorts;
+          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+            outport = _ref[_i];
+            if (outport.id === edge.from.port) {
+              return;
+            }
+          }
           components[node.component].outPorts.push({
             id: edge.from.port,
             type: 'all'
           });
         }
         if (edge.to.node === node.id) {
+          _ref1 = components[node.component].inPorts;
+          for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+            inport = _ref1[_j];
+            if (inport.id === edge.to.port) {
+              return;
+            }
+          }
           return components[node.component].inPorts.push({
             id: edge.to.port,
             type: 'all'
@@ -14289,7 +14774,15 @@ NoFloLibraryPlugin = (function() {
         }
       });
       return graph.initializers.forEach(function(iip) {
+        var inport, _i, _len, _ref;
         if (iip.to.node === node.id) {
+          _ref = components[node.component].inPorts;
+          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+            inport = _ref[_i];
+            if (inport.id === iip.to.port) {
+              return;
+            }
+          }
           return components[node.component].inPorts.push({
             id: iip.to.port,
             type: 'all'
@@ -14600,8 +15093,7 @@ NoFloGraphPlugin = (function() {
       return graph.nofloGraph.addInitial(value, node.nofloNode.id, port, metadata);
     });
     return node.on('bang', function(port) {
-      var iip, metadata, _i, _len, _ref;
-      metadata = {};
+      var iip, _i, _len, _ref;
       _ref = graph.nofloGraph.initializers;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         iip = _ref[_i];
@@ -14609,17 +15101,26 @@ NoFloGraphPlugin = (function() {
           continue;
         }
         if (iip.to.node === node.nofloNode.id && iip.to.port === port) {
-          metadata = iip.metadata;
           graph.nofloGraph.removeInitial(node.nofloNode.id, port);
         }
       }
-      graph.nofloGraph.addInitial(true, node.nofloNode.id, port, metadata);
+      graph.nofloGraph.addInitial(true, node.nofloNode.id, port);
       return graph.nofloGraph.removeInitial(node.nofloNode.id, port);
     });
   };
 
   NoFloGraphPlugin.prototype.subscribeDataflowEdge = function(edge, graph) {
-    var nofloEdge;
+    var iip, nofloEdge, _i, _len, _ref;
+    _ref = graph.nofloGraph.initializers;
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      iip = _ref[_i];
+      if (!iip) {
+        continue;
+      }
+      if (iip.to.node === edge.target.parentNode.nofloNode.id && iip.to.port === edge.target.id) {
+        graph.nofloGraph.removeInitial(edge.target.parentNode.nofloNode.id, edge.target.id);
+      }
+    }
     if (!edge.nofloEdge) {
       nofloEdge = graph.nofloGraph.addEdge(edge.source.parentNode.nofloNode.id, edge.source.id, edge.target.parentNode.nofloNode.id, edge.target.id, {
         route: edge.get('route')
@@ -14635,6 +15136,11 @@ NoFloGraphPlugin = (function() {
 
   NoFloGraphPlugin.prototype.subscribeNoFloEvents = function(graph, runtime) {
     var _this = this;
+    graph.on('changed', function() {
+      var json;
+      json = JSON.stringify(graph.toJSON(), null, 2);
+      return _this.dataflow.plugins.source.show(json);
+    });
     graph.on('addNode', function(nfNode) {
       return setTimeout(function() {
         _this.addNodeDataflow(nfNode, graph.dataflowGraph);
@@ -14672,11 +15178,16 @@ NoFloGraphPlugin = (function() {
       return _this.dataflow.plugins.log.add("IIP added to " + iip.to.node + " " + (iip.to.port.toUpperCase()));
     });
     graph.on('removeInitial', function(iip) {
-      _this.dataflow.plugins.log.add("IIP removed from " + iip.to.node + " " + (iip.to.port.toUpperCase()));
-      return runtime.sendGraph('removeinitial', {
+      var node;
+      node = graph.dataflowGraph.nodes.get(iip.to.node);
+      if (node) {
+        node.setState(iip.to.port, void 0);
+      }
+      runtime.sendGraph('removeinitial', {
         from: iip.from,
         to: iip.to
       });
+      return _this.dataflow.plugins.log.add("IIP removed from " + iip.to.node + " " + (iip.to.port.toUpperCase()));
     });
     return runtime.on('network', function(_arg) {
       var command, edge, eventEdge, payload, _i, _len, _ref;
@@ -14708,11 +15219,13 @@ NoFloGraphPlugin = (function() {
       if (!eventEdge) {
         return;
       }
-      return eventEdge.dataflowEdge.get('log').add({
-        type: command,
-        group: payload.group,
-        data: payload.data
-      });
+      if (payload.data != null) {
+        return eventEdge.dataflowEdge.get('log').push({
+          type: command,
+          group: payload.group,
+          data: payload.data
+        });
+      }
     });
   };
 
@@ -14828,63 +15341,134 @@ NoFloSettingsPlugin = (function() {
     this.runtime = null;
     this.$settings = $("<div class=\"noflo-ui-settings\"></div>");
     dataflow.disablePlugin('log');
-    return dataflow.addPlugin({
+    dataflow.addPlugin({
       id: 'settings',
       name: '',
+      label: 'settings',
       menu: this.$settings,
       icon: 'cog',
       pinned: false
     });
+    return this.dataflow = dataflow;
   };
 
   NoFloSettingsPlugin.prototype.registerGraph = function(graph, runtime) {
+    var exportsCb, formCb;
     this.$settings.html();
     if (!graph.properties.environment.runtime) {
       return;
     }
     switch (graph.properties.environment.runtime) {
       case 'websocket':
-        return this.renderServerForm(graph);
+        formCb = this.renderServerForm(graph);
+        break;
       default:
-        return this.renderClientForm(graph);
+        formCb = this.renderClientForm(graph);
     }
+    exportsCb = this.renderExportsForm(graph);
+    return this.renderSave(graph, function() {
+      exportsCb();
+      formCb();
+      return graph.emit('changed');
+    });
   };
 
   NoFloSettingsPlugin.prototype.renderServerForm = function(graph) {
-    var $form, $update, $wsUrl;
-    $form = $("<form>      <label>        WebSocket URL        <input class='wsUrl' type='url'>      </label>      <div class='toolbar'>        <button class='update'>Update</button>      </div>     </form>");
+    var $form, $wsUrl;
+    $form = $("<form>      <label>        WebSocket URL        <input class='wsUrl' type='url'>      </label>     </form>");
     $wsUrl = $form.find('.wsUrl');
-    $update = $form.find('.update');
     $wsUrl.val(graph.properties.environment.wsUrl);
-    $update.click(function(event) {
-      event.preventDefault();
-      graph.properties.environment.wsUrl = $wsUrl.val();
-      return graph.emit('changed');
-    });
-    return this.$settings.append($form);
+    this.$settings.append($form);
+    return function() {
+      return graph.properties.environment.wsUrl = $wsUrl.val();
+    };
   };
 
   NoFloSettingsPlugin.prototype.renderClientForm = function(graph) {
-    var $content, $form, $height, $src, $update, $width;
-    $form = $("<form>      <label>        Preview iframe        <input class='src' type='text'>      </label>      <label>        HTML contents        <textarea class='content'></textarea>      </label>      <label>        Preview width        <input class='width' type='number'>      </label>      <label>        Preview height        <input class='height' type='number'>      </label>      <div class='toolbar'>        <button class='update'>Update</button>      </div>     </form>");
+    var $content, $form, $height, $src, $width;
+    $form = $("<form>      <label>        Preview iframe        <input class='src' type='text'>      </label>      <label>        HTML contents        <textarea class='content'></textarea>      </label>      <label>        Preview width        <input class='width' type='number'>      </label>      <label>        Preview height        <input class='height' type='number'>      </label>     </form>");
     $src = $form.find('.src');
     $content = $form.find('.content');
     $width = $form.find('.width');
     $height = $form.find('.height');
-    $update = $form.find('.update');
     $src.val(graph.properties.environment.src);
     $content.val(graph.properties.environment.content);
     $width.val(graph.properties.environment.width);
     $height.val(graph.properties.environment.height);
-    $update.click(function(event) {
-      event.preventDefault();
+    this.$settings.append($form);
+    return function() {
       graph.properties.environment.src = $src.val();
       graph.properties.environment.content = $content.val();
       graph.properties.environment.height = $height.val();
-      graph.properties.environment.width = $width.val();
-      return graph.emit('changed');
+      return graph.properties.environment.width = $width.val();
+    };
+  };
+
+  NoFloSettingsPlugin.prototype.renderExportsForm = function(graph) {
+    var $el, $exports, $form, exportTemplate, exported, getNodeList, privateParts, _i, _len, _ref;
+    $exports = $("<div><h2>Exported ports</h2>      <form class='exports'></form></div>");
+    $form = $exports.find('.exports');
+    exportTemplate = "    <label>Public      <input type='text' name='public' value='<%- public %>'>    </label>    <label>Private      <select name='privateNode'>        <%= nodeList %>      </select>      <input type='text' name='privatePort' value='<%- privatePort %>'>    </label>    ";
+    getNodeList = function(selectedNode) {
+      var node, nodeOpts, selected, _i, _len, _ref;
+      nodeOpts = [];
+      _ref = graph.nodes;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        node = _ref[_i];
+        selected = '';
+        if (node.id.toLowerCase() === selectedNode) {
+          selected = ' selected="selected"';
+        }
+        nodeOpts.push("<option value='" + node.id + "'" + selected + ">" + node.metadata.label + "</option>");
+      }
+      return nodeOpts.join('');
+    };
+    _ref = graph.exports;
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      exported = _ref[_i];
+      $el = $('<div class="export"></div>');
+      privateParts = exported["private"].split('.');
+      exported.privateNode = privateParts[0];
+      exported.privatePort = privateParts[1];
+      exported.nodeList = getNodeList(exported.privateNode);
+      $el.html(_.template(exportTemplate, exported));
+      $form.append($el);
+    }
+    $el = $('<div class="export"></div>');
+    $el.html(_.template(exportTemplate, {
+      "public": '',
+      privateNode: '',
+      privatePort: '',
+      nodeList: getNodeList()
+    }));
+    $form.append($el);
+    this.$settings.append($exports);
+    return function() {
+      graph.exports = [];
+      return $form.find('div.export').each(function() {
+        var privateNode, privatePort, pub;
+        pub = $(this).find('input[name="public"]').val();
+        privateNode = $(this).find('option:selected').val();
+        privatePort = $(this).find('input[name="privatePort"]').val();
+        if (pub && privateNode && privatePort) {
+          return graph.exports.push({
+            "public": pub,
+            "private": "" + privateNode + "." + privatePort
+          });
+        }
+      });
+    };
+  };
+
+  NoFloSettingsPlugin.prototype.renderSave = function(graph, callback) {
+    var $save, $update;
+    $save = $("      <div class='toolbar'>        <button class='update'>Update</button>      </div>      ");
+    this.$settings.append($save);
+    $update = $save.find('.update');
+    return $update.click(function(event) {
+      event.preventDefault();
+      return callback();
     });
-    return this.$settings.append($form);
   };
 
   return NoFloSettingsPlugin;
@@ -14919,6 +15503,7 @@ NoFloPreview = (function() {
     dataflow.addPlugin({
       id: 'preview',
       name: '',
+      label: 'preview',
       menu: this.$connector,
       icon: 'eye-open',
       pinned: true
@@ -15251,6 +15836,22 @@ WebSocketRuntime = (function(_super) {
     return 'websocket';
   };
 
+  WebSocketRuntime.prototype.getElement = function() {
+    var console;
+    console = document.createElement('pre');
+    this.on('network', function(message) {
+      if (message.command !== 'output') {
+        return;
+      }
+      console.innerHTML = "" + console.innerHTML + message.payload.message + "\n";
+      return console.scrollTop = console.scrollHeight;
+    });
+    this.on('disconnected', function() {
+      return console.innerHTML = '';
+    });
+    return console;
+  };
+
   WebSocketRuntime.prototype.connect = function(preview) {
     var _this = this;
     if (this.connection || this.connecting) {
@@ -15308,11 +15909,13 @@ WebSocketRuntime = (function(_super) {
   };
 
   WebSocketRuntime.prototype.normalizePreview = function(preview) {
+    var hostname;
     if (!preview) {
       preview = {};
     }
     if (!preview.wsUrl) {
-      preview.wsUrl = "ws://" + location.hostname + ":3569";
+      hostname = location.hostname ? location.hostname : "localhost";
+      preview.wsUrl = "ws://" + hostname + ":3569";
     }
     return preview;
   };
@@ -15395,6 +15998,47 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-ui/components/GenerateId.js", function(exports, require, module){
+var GenerateId, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+GenerateId = (function(_super) {
+  __extends(GenerateId, _super);
+
+  function GenerateId() {
+    var _this = this;
+    this.inPorts = {
+      start: new noflo.Port('bang')
+    };
+    this.outPorts = {
+      out: new noflo.Port('string')
+    };
+    this.inPorts.start.on('data', function() {
+      _this.outPorts.out.send(_this.randomString());
+      return _this.outPorts.out.disconnect();
+    });
+  }
+
+  GenerateId.prototype.randomString = function(num) {
+    if (num == null) {
+      num = 60466176;
+    }
+    num = Math.floor(Math.random() * num);
+    return num.toString(36);
+  };
+
+  return GenerateId;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new GenerateId;
+};
+
+});
 require.register("noflo-ui/components/LoadGraph.js", function(exports, require, module){
 var LoadGraph, noflo,
   __hasProp = {}.hasOwnProperty,
@@ -15424,11 +16068,24 @@ LoadGraph = (function(_super) {
   LoadGraph.prototype.doAsync = function(graphDefinition, done) {
     var _this = this;
     return noflo.graph.loadJSON(graphDefinition, function(graph) {
-      graph.baseDir = _this.basedir;
-      _this.outPorts.out.send(graph);
+      if (graph.properties.environment && graph.properties.environment.baseDir) {
+        graph.baseDir = graph.properties.environment.baseDir;
+      } else {
+        graph.baseDir = _this.basedir;
+      }
+      _this.outPorts.out.send(_this.normalizeGraph(graph));
       _this.outPorts.out.disconnect();
       return done();
     });
+  };
+
+  LoadGraph.prototype.normalizeGraph = function(graph) {
+    if (!graph.properties.environment) {
+      graph.properties.environment = {
+        runtime: 'html'
+      };
+    }
+    return graph;
   };
 
   return LoadGraph;
@@ -15581,25 +16238,14 @@ DetermineRuntime = (function(_super) {
       graph: new noflo.Port('object')
     };
     this.inPorts.graph.on('data', function(data) {
-      var graph;
-      graph = _this.normalizeGraph(data);
-      _this.outPorts.runtime.send(_this.determineRuntime(graph));
-      return _this.outPorts.graph.send(graph);
+      _this.outPorts.runtime.send(_this.determineRuntime(data));
+      return _this.outPorts.graph.send(data);
     });
     this.inPorts.graph.on('disconnect', function() {
       _this.outPorts.runtime.disconnect();
       return _this.outPorts.graph.disconnect();
     });
   }
-
-  DetermineRuntime.prototype.normalizeGraph = function(graph) {
-    if (!graph.properties.environment) {
-      graph.properties.environment = {
-        runtime: 'html'
-      };
-    }
-    return graph;
-  };
 
   DetermineRuntime.prototype.determineRuntime = function(graph) {
     switch (graph.properties.environment.runtime) {
@@ -15622,21 +16268,11 @@ exports.getComponent = function() {
 
 });
 require.register("noflo-ui/components/Dataflow.js", function(exports, require, module){
-var Dataflow, DataflowComponent, noflo,
+var DataflowComponent, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
-
-Dataflow = require('/meemoo-dataflow').Dataflow;
-
-require('../src/plugins/nofloLibrary');
-
-require('../src/plugins/nofloGraph');
-
-require('../src/plugins/nofloSettings');
-
-require('../src/plugins/preview');
 
 DataflowComponent = (function(_super) {
   __extends(DataflowComponent, _super);
@@ -15672,10 +16308,15 @@ DataflowComponent = (function(_super) {
   }
 
   DataflowComponent.prototype.loadDataflow = function() {
-    var dataflow, env;
+    var Dataflow, dataflow, env;
     if (!(this.graph && this.container && this.runtime)) {
       return;
     }
+    Dataflow = require('/meemoo-dataflow').Dataflow;
+    require('../src/plugins/nofloLibrary');
+    require('../src/plugins/nofloGraph');
+    require('../src/plugins/nofloSettings');
+    require('../src/plugins/preview');
     dataflow = new Dataflow({
       appendTo: this.container
     });
@@ -15728,6 +16369,7 @@ Router = (function(_super) {
     this.outPorts = {
       main: new noflo.Port('string'),
       "new": new noflo.Port('string'),
+      newproject: new noflo.Port('string'),
       graph: new noflo.Port('string'),
       example: new noflo.Port('string'),
       missed: new noflo.Port('string')
@@ -15741,6 +16383,11 @@ Router = (function(_super) {
       if (url === 'new') {
         _this.outPorts["new"].send(url);
         _this.outPorts["new"].disconnect();
+        return;
+      }
+      if (url === 'newproject') {
+        _this.outPorts.newproject.send(url);
+        _this.outPorts.newproject.disconnect();
         return;
       }
       if (url.substr(0, 6) === 'graph/') {
@@ -15769,6 +16416,7 @@ exports.getComponent = function() {
 };
 
 });
+
 
 
 
@@ -16004,6 +16652,8 @@ require.alias("noflo-noflo-groups/components/MapGroup.js", "noflo-ui/deps/noflo-
 require.alias("noflo-noflo-groups/components/MergeGroups.js", "noflo-ui/deps/noflo-groups/components/MergeGroups.js");
 require.alias("noflo-noflo-groups/components/GroupByObjectKey.js", "noflo-ui/deps/noflo-groups/components/GroupByObjectKey.js");
 require.alias("noflo-noflo-groups/index.js", "noflo-groups/index.js");
+require.alias("component-underscore/index.js", "noflo-noflo-groups/deps/underscore/index.js");
+
 require.alias("noflo-noflo/component.json", "noflo-noflo-groups/deps/noflo/component.json");
 require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-groups/deps/noflo/src/lib/Graph.js");
 require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-groups/deps/noflo/src/lib/InternalSocket.js");
@@ -16076,6 +16726,97 @@ require.alias("noflo-noflo-core/components/Split.js", "noflo-ui/deps/noflo-core/
 require.alias("noflo-noflo-core/components/RunInterval.js", "noflo-ui/deps/noflo-core/components/RunInterval.js");
 require.alias("noflo-noflo-core/components/MakeFunction.js", "noflo-ui/deps/noflo-core/components/MakeFunction.js");
 require.alias("noflo-noflo-core/index.js", "noflo-core/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-core/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-core/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-core/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-core/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-core/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-core/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-core/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-core/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-core/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-core/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-core/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-core/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-core/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("component-underscore/index.js", "noflo-noflo-core/deps/underscore/index.js");
+
+require.alias("noflo-noflo-runtime-iframe/index.js", "noflo-ui/deps/noflo-runtime-iframe/index.js");
+require.alias("noflo-noflo-runtime-iframe/component.json", "noflo-ui/deps/noflo-runtime-iframe/component.json");
+require.alias("noflo-noflo-runtime-iframe/index.js", "noflo-runtime-iframe/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-runtime-iframe/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-runtime-iframe/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-iframe/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("noflo-noflo-runtime-base/src/Base.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/src/Base.js");
+require.alias("noflo-noflo-runtime-base/src/protocol/Graph.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/src/protocol/Graph.js");
+require.alias("noflo-noflo-runtime-base/src/protocol/Network.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/src/protocol/Network.js");
+require.alias("noflo-noflo-runtime-base/src/protocol/Component.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/src/protocol/Component.js");
+require.alias("noflo-noflo-runtime-base/src/Base.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-runtime-base/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-runtime-base/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-base/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("noflo-noflo-runtime-base/src/Base.js", "noflo-noflo-runtime-base/index.js");
+require.alias("noflo-noflo-core/index.js", "noflo-noflo-runtime-iframe/deps/noflo-core/index.js");
+require.alias("noflo-noflo-core/component.json", "noflo-noflo-runtime-iframe/deps/noflo-core/component.json");
+require.alias("noflo-noflo-core/components/Callback.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Callback.js");
+require.alias("noflo-noflo-core/components/DisconnectAfterPacket.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/DisconnectAfterPacket.js");
+require.alias("noflo-noflo-core/components/Drop.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Drop.js");
+require.alias("noflo-noflo-core/components/Group.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Group.js");
+require.alias("noflo-noflo-core/components/Kick.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Kick.js");
+require.alias("noflo-noflo-core/components/Merge.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Merge.js");
+require.alias("noflo-noflo-core/components/Output.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Output.js");
+require.alias("noflo-noflo-core/components/Repeat.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Repeat.js");
+require.alias("noflo-noflo-core/components/RepeatAsync.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/RepeatAsync.js");
+require.alias("noflo-noflo-core/components/Split.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Split.js");
+require.alias("noflo-noflo-core/components/RunInterval.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/RunInterval.js");
+require.alias("noflo-noflo-core/components/MakeFunction.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/MakeFunction.js");
 require.alias("noflo-noflo/component.json", "noflo-noflo-core/deps/noflo/component.json");
 require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-core/deps/noflo/src/lib/Graph.js");
 require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-core/deps/noflo/src/lib/InternalSocket.js");

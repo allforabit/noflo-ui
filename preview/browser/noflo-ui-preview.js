@@ -3408,6 +3408,13 @@ Port = (function(_super) {
     return this.socket !== null;
   };
 
+  Port.prototype.canAttach = function() {
+    if (this.isAttached()) {
+      return false;
+    }
+    return true;
+  };
+
   return Port;
 
 })(EventEmitter);
@@ -3582,12 +3589,19 @@ ArrayPort = (function(_super) {
 
   ArrayPort.prototype.isAttached = function(socketId) {
     if (socketId === void 0) {
+      if (this.sockets.length > 0) {
+        return true;
+      }
       return false;
     }
     if (this.sockets[socketId]) {
       return true;
     }
     return false;
+  };
+
+  ArrayPort.prototype.canAttach = function() {
+    return true;
   };
 
   return ArrayPort;
@@ -4707,7 +4721,7 @@ Graph = (function(_super) {
   Graph.prototype.isExported = function(port, nodeName, portName) {
     var exported, newPort, _i, _len, _ref;
     newPort = this.portName(nodeName, portName);
-    if (port.isAttached()) {
+    if (!port.canAttach()) {
       return false;
     }
     if (this.network.graph.exports.length === 0) {
@@ -6656,6 +6670,10 @@ RequestAnimationFrame = (function(_super) {
     }
   };
 
+  RequestAnimationFrame.prototype.shutdown = function() {
+    return this.running = false;
+  };
+
   return RequestAnimationFrame;
 
 })(noflo.Component);
@@ -7553,6 +7571,9 @@ SetItem = (function(_super) {
       item: new noflo.Port('string')
     };
     this.inPorts.key.on('data', function(data) {
+      if (!data) {
+        return;
+      }
       _this.key = data;
       if (_this.value) {
         return _this.setItem();
@@ -8307,7 +8328,6 @@ ExtractProperty = (function(_super) {
 
   function ExtractProperty() {
     var _this = this;
-    this.key = null;
     this.inPorts = {
       "in": new noflo.Port,
       key: new noflo.Port
@@ -8315,15 +8335,25 @@ ExtractProperty = (function(_super) {
     this.outPorts = {
       out: new noflo.Port
     };
+    this.inPorts.key.on("connect", function() {
+      return _this.keys = [];
+    });
     this.inPorts.key.on("data", function(key) {
-      _this.key = key;
+      return _this.keys.push(key);
     });
     this.inPorts["in"].on("begingroup", function(group) {
       return _this.outPorts.out.beginGroup(group);
     });
     this.inPorts["in"].on("data", function(data) {
-      if ((_this.key != null) && _.isObject(data)) {
-        return _this.outPorts.out.send(data[_this.key]);
+      var key, value, _i, _len, _ref;
+      if ((_this.keys != null) && _.isObject(data)) {
+        value = data;
+        _ref = _this.keys;
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          key = _ref[_i];
+          value = value[key];
+        }
+        return _this.outPorts.out.send(value);
       }
     });
     this.inPorts["in"].on("endgroup", function(group) {
@@ -9450,6 +9480,9 @@ CreateObject = (function(_super) {
     });
     this.inPorts.start.on('endgroup', function() {
       return _this.outPorts.out.endGroup();
+    });
+    this.inPorts.start.on('disconnect', function() {
+      return _this.outPorts.out.disconnect();
     });
   }
 
