@@ -1,0 +1,190 @@
+<link rel="import" href="noflo-node-menu.html">
+<link rel="import" href="noflo-node-inspector.html">
+<link rel="import" href="noflo-graph-inspector.html">
+<link rel="import" href="noflo-edge-menu.html">
+<link rel="import" href="../bower_components/the-card/the-card/the-card.html">
+<polymer-element name="noflo-context" attributes="project graphs component node edge search clear">
+  <script>
+    Polymer('noflo-context', {
+      project: null,
+      search: '',
+      graphs: [],
+      nodes: [],
+      edges: [],
+      node: null,
+      edge: null,
+      component: '',
+      clear: false,
+      enteredView: function () {
+        this.graphObserver = new ArrayObserver(this.graphs, this.graphsModified.bind(this));
+        this.nodeObserver = new ArrayObserver(this.nodes, this.nodesModified.bind(this));
+        this.edgeObserver = new ArrayObserver(this.edges, this.edgesModified.bind(this));
+        this.contextBar = document.getElementById('context');
+      },
+      nodeChanged: function () {
+        if (!this.node) {
+          return;
+        }
+        if (this.nodes.indexOf(this.node) !== -1) {
+          this.nodes.splice(this.nodes.indexOf(this.node), 1);
+          this.node.classList.remove('selected');
+          this.node = null;
+          return;
+        }
+        this.nodes.push(this.node);
+        this.node.classList.add('selected');
+        this.node = null;
+      },
+      edgeChanged: function () {
+        if (!this.edge) {
+          return;
+        }
+        if (this.edges.indexOf(this.edge) !== -1) {
+          this.edges.splice(this.edges.indexOf(this.edge), 1);
+          this.edge.pathTouch.classList.remove('selected');
+          this.edge = null;
+          return;
+        }
+        this.edges.push(this.edge);
+        this.edge.pathTouch.classList.add('selected');
+        this.edge = null;
+      },
+      projectChanged: function () {
+        this.fire('project', this.project);
+      },
+      graphsModified: function () {
+        this.fire('graphs', this.graphs);
+        this.fire('currentgraph', this.graphs[this.graphs.length - 1]);
+      },
+      nodesModified: function () {
+        this.fire('nodes', this.nodes);
+        if (this.nodes.length) {
+          this.showNodeCards();
+        } else {
+          this.hideNodeCards();
+        }
+      },
+      nodeInspectors: {},
+      showNodeCards: function () {
+        if (!this.nodeMenu) {
+          var menu = document.createElement('noflo-node-menu');
+          menu.nodes = this.nodes;
+          this.nodeMenu = document.createElement('the-card');
+          this.nodeMenu.type = 'node-menu';
+          this.nodeMenu.appendChild(menu);
+          this.nodeMenu.addTo(this.contextBar.getMain());
+        }
+
+        this.nodes.forEach(function (node) {
+          var id = node.getAttribute('name');
+          if (this.nodeInspectors[id]) {
+            return;
+          }
+          var inspector = document.createElement('noflo-node-inspector');
+          inspector.node = node;
+          inspector.graph = this.graphs[this.graphs.length - 1];
+          this.nodeInspectors[id] = document.createElement('the-card');
+          this.nodeInspectors[id].type = 'node-inspector';
+          this.nodeInspectors[id].appendChild(inspector);
+          this.nodeInspectors[id].addTo(this.contextBar.getMain());
+        }.bind(this));
+
+        var found;
+        for (var id in this.nodeInspectors) {
+          found = false;
+          this.nodes.forEach(function (node) {
+            if (node.getAttribute('name') === id) {
+              found = true;
+            }
+          });
+          if (!found) {
+            this.nodeInspectors[id].parentNode.removeChild(this.nodeInspectors[id]);
+            delete this.nodeInspectors[id];
+          }
+        }
+      },
+      hideNodeCards: function () {
+        if (this.nodeMenu) {
+          this.nodeMenu.parentNode.removeChild(this.nodeMenu);
+          this.nodeMenu = null;
+        }
+
+        for (var id in this.nodeInspectors) {
+          this.nodeInspectors[id].parentNode.removeChild(this.nodeInspectors[id]);
+          delete this.nodeInspectors[id];
+        }
+      },
+      edgesModified: function () {
+        this.fire('edges', this.edges);
+        if (this.edges.length) {
+          this.showEdgeCards();
+        } else {
+          this.hideEdgeCards();
+        }
+      },
+      showEdgeCards: function () {
+        if (this.edgeMenu) {
+          return;
+        }
+        var menu = document.createElement('noflo-edge-menu');
+        menu.edges = this.edges;
+        this.edgeMenu = document.createElement('the-card');
+        this.edgeMenu.type = 'edge-menu';
+        this.edgeMenu.appendChild(menu);
+        this.edgeMenu.addTo(this.contextBar.getMain());
+      },
+      hideEdgeCards: function () {
+        if (!this.edgeMenu) {
+          return;
+        }
+        this.edgeMenu.parentNode.removeChild(this.edgeMenu);
+        this.edgeMenu = null;
+      },
+      componentChanged: function () {
+        this.fire('component', this.component);
+      },
+      clearChanged: function () {
+        if (!this.clear) {
+          return;
+        }
+        this.project = null;
+        this.graphs.splice(0, this.graphs.length);
+        this.nodes.splice(0, this.nodes.length);
+        this.edges.splice(0, this.edges.length);
+        this.clear = false;
+      },
+      buttons: function () {
+        this.fire('button', {
+          id: 'graph-inspector',
+          icon: 'gear',
+          label: 'Graph settings',
+          search: 'graph settings'
+        });
+      },
+      searchChanged: function () {
+        if (!this.search) {
+          return;
+        }
+        if (this.search === 'graph settings') {
+          this.showGraphInspector();
+          return;
+        }
+        if (this.graphInspector) {
+          this.graphInspector.parentNode.removeChild(this.graphInspector);
+          this.graphInspector = null;
+        }
+      },
+      showGraphInspector: function () {
+        if (this.graphs.length === 0) {
+          return;
+        }
+        var inspector = document.createElement('noflo-graph-inspector');
+        inspector.graph = this.graphs[this.graphs.length - 1];
+        this.graphInspector = document.createElement('the-card');
+        this.graphInspector.type = 'graph-inspector';
+        this.graphInspector.appendChild(inspector);
+        this.graphInspector.addTo(this.contextBar.getMain());
+      }
+    });
+  </script>
+</polymer-element>

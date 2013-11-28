@@ -10,6 +10,18 @@ class WebSocketRuntime extends Base
 
   getType: -> 'websocket'
 
+  getElement: ->
+    console = document.createElement 'pre'
+
+    @on 'network', (message) ->
+      return unless message.command is 'output'
+      console.innerHTML = "#{console.innerHTML}#{message.payload.message}\n"
+      console.scrollTop = console.scrollHeight
+    @on 'disconnected', ->
+      console.innerHTML = ''
+
+    console
+
   connect: (preview) ->
     return if @connection or @connecting
 
@@ -21,7 +33,7 @@ class WebSocketRuntime extends Base
     @connection.addEventListener 'open', =>
       @connecting = false
       @emit 'status',
-        state: 'online'
+        online: true
         label: 'connected'
       @emit 'connected'
       @flush()
@@ -31,7 +43,7 @@ class WebSocketRuntime extends Base
     @connection.addEventListener 'close', =>
       @connection = null
       @emit 'status',
-        state: 'offline'
+        online: false
         label: 'disconnected'
       @emit 'disconnected'
     , false
@@ -59,8 +71,9 @@ class WebSocketRuntime extends Base
     unless preview
       preview = {}
     unless preview.wsUrl
-      # preview.wsUrl = "ws://#{location.hostname}:#{location.port}"
-      preview.wsUrl = "ws://#{location.hostname}:3569"
+      hostname = if location.hostname then location.hostname else "localhost"
+      # preview.wsUrl = if "ws://#{location.hostname}:#{location.port}"
+      preview.wsUrl = "ws://#{hostname}:3569"
     preview
 
   handleError: (error) =>

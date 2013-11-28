@@ -1,0 +1,81 @@
+<link rel="import" href="noflo-new-graph.html">
+<link rel="import" href="noflo-new-project.html">
+<polymer-element name="noflo-main" attributes="projects sketches examples">
+  <template>
+    <section id="projects">
+      <h2>Projects</h2>
+      <p>{{ projects.length }} projects</p>
+      <button on-click="{{ newProject }}">New project</button>
+      <ul>
+        <template repeat="{{ project in projects }}">
+          <li on-click="{{ openProject }}" data-id="{{ project.id }}">
+            <h2>{{ project.name }}</h2>
+            <p>{{ project.graphs.length }} graphs and {{ project.components.length }} components</p>
+          </li>
+        </template>
+      </ul>
+    </section>
+    <section id="sketches">
+      <h2>Sketches</h2>
+      <p>{{ sketches.length }} projects</p>
+      <button on-click="{{ newSketch }}">New sketch</button>
+      <ul>
+        <template repeat="{{ sketch in sketches }}">
+          <li on-click="{{ openSketch }}" data-id="{{ sketch.id }}">
+            <the-graph-thumb graphjson="{{ sketch }}" width="200" height="120"></the-graph-thumb>
+            <h2>{{ sketch.properties.name }}</h2>
+          </li>
+        </template>
+      </ul>
+    </section>
+    <section id="examples">
+      <h2>Examples</h2>
+      <p>{{ examples.length }} projects</p>
+      <ul>
+        <template repeat="{{ examples }}">
+        <li><a href="#example/{{ id }}">{{ name }}</a></li>
+        </template>
+      </ul>
+    </section>
+  </template>
+  <script>
+    Polymer('noflo-main', {
+      projects: [],
+      examples: [],
+      sketches: [],
+      openSketch: function (event, details, sender) {
+        event.preventDefault();
+        window.location.hash = '#graph/' + sender.getAttribute('data-id');
+      },
+      openProject: function (event, details, sender) {
+        event.preventDefault();
+        var project = null;
+        this.projects.forEach(function (p) {
+          if (p.id === sender.getAttribute('data-id')) {
+            project = p;
+          }
+        });
+        if (!project) {
+          return;
+        }
+        window.location.hash = '#project/' + project.id + '/' + project.main;
+      },
+      newSketch: function (event) {
+        event.preventDefault();
+        var dialog = document.createElement('noflo-new-graph');
+        this.parentNode.parentNode.appendChild(dialog);
+        dialog.addEventListener('new', function (event) {
+          this.fire('newsketch', event.detail);
+        }.bind(this));
+      },
+      newProject: function (event) {
+        event.preventDefault();
+        var dialog = document.createElement('noflo-new-project');
+        this.parentNode.parentNode.appendChild(dialog);
+        dialog.addEventListener('new', function (event) {
+          this.fire('newproject', event.detail);
+        }.bind(this));
+      }
+    });
+  </script>
+</polymer-element>

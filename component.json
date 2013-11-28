@@ -12,7 +12,6 @@
     "dataflow"
   ],
   "dependencies": {
-    "meemoo/dataflow": "*",
     "component/emitter": "*",
     "noflo/noflo": "*",
     "noflo/noflo-strings": "*",
@@ -22,46 +21,39 @@
     "noflo/noflo-objects": "*",
     "noflo/noflo-groups": "*",
     "noflo/noflo-dom": "*",
-    "noflo/noflo-core": "*"
+    "noflo/noflo-core": "*",
+    "noflo/noflo-polymer": "*",
+    "noflo/noflo-runtime-iframe": "*"
   },
   "noflo": {
     "components": {
+      "AppendTo": "components/AppendTo.coffee",
+      "ConnectRuntime": "components/ConnectRuntime.coffee",
       "CreateGraph": "components/CreateGraph.coffee",
-      "LoadGraph": "components/LoadGraph.coffee",
+      "GenerateId": "components/GenerateId.coffee",
+      "LoadGraphEditor": "components/LoadGraphEditor.coffee",
       "LoadRuntime": "components/LoadRuntime.coffee",
-      "ListenGraph": "components/ListenGraph.coffee",
       "DetermineRuntime": "components/DetermineRuntime.coffee",
-      "Dataflow": "components/Dataflow.coffee",
       "Router": "components/Router.coffee"
-    },
-    "graphs": {
-      "EditGraph": "graphs/EditGraph.json",
-      "WriteTemplate": "graphs/WriteTemplate.json"
     }
   },
   "main": "index.js",
   "scripts": [
     "index.js",
-    "src/plugins/nofloLibrary.coffee",
-    "src/plugins/nofloGraph.coffee",
-    "src/plugins/nofloSettings.coffee",
-    "src/plugins/preview.coffee",
+    "src/plugins/source.coffee",
     "src/runtimes/base.coffee",
     "src/runtimes/iframe.coffee",
     "src/runtimes/websocket.coffee",
+    "components/AppendTo.coffee",
+    "components/ConnectRuntime.coffee",
     "components/CreateGraph.coffee",
-    "components/LoadGraph.coffee",
+    "components/GenerateId.coffee",
+    "components/LoadGraphEditor.coffee",
     "components/LoadRuntime.coffee",
-    "components/ListenGraph.coffee",
     "components/DetermineRuntime.coffee",
-    "components/Dataflow.coffee",
-    "components/Router.coffee",
-    "graphs/EditGraph.json",
-    "graphs/WriteTemplate.json"
+    "components/Router.coffee"
   ],
   "json": [
-    "graphs/EditGraph.json",
-    "graphs/WriteTemplate.json",
     "component.json"
   ],
   "files": [
@@ -70,6 +62,8 @@
     "preview/package.json",
     "preview/component.json",
     "index.html",
-    "favicon.ico"
+    "favicon.ico",
+    "noflo.png",
+    "examples.json"
   ]
 }

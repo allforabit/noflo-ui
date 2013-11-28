@@ -1,0 +1,116 @@
+<polymer-element name="noflo-node-inspector" attributes="node graph">
+  <style>
+    ul.ports li {
+      display: block;
+    }
+    ul.ports li label span {
+      float: left;
+      clear: left;
+      font-size: 8pt;
+      padding-top: 8px;
+      width: 100px;
+      height: 27px;
+      overflow: hidden;
+    }
+    ul.ports li label input {
+      width: 113px;
+      height: 19px;
+      border: none;
+      font-family: "SourceCodePro",Helvetica,Arial,sans-serif;
+      padding: 8px;
+      background-color: hsl(184, 50%, 11%);
+      color: hsl(184, 40%, 89%);
+    }
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button {
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    ul.ports li button {
+      padding: 8px;
+      height: 19px;
+      width: 19px;
+    }
+    ul.ports li label button {
+      background-color: hsl(184, 50%, 11%);
+      color: hsl(184, 40%, 89%);
+      display: block;
+      padding: 8px;
+      height: 19px;
+      width: 19px;
+    }
+  </style>
+  <template>
+  <h1 on-keyup="{{ updateLabel }}" contenteditable>{{ node.label }}</h1>
+    <h2>{{ node.component }}</h2>
+    <ul class="ports">
+      <template repeat="{{ port in inports }}">
+        <li>
+        <label><span>{{ port.name }}</span>
+          <template if="{{ port.type == 'bang' }}">
+            <button name="{{ port.name }}" on-click="{{ sendBang }}"><i class="fa fa-bolt"></i></button>
+          </template>
+          <template if="{{ port.type == 'boolean' }}">
+            <input type="checkbox" name="{{ port.name }}" checked="{{ port.value }}" on-blur="{{ updateValue }}">
+          </template>
+          <template if="{{ port.type != 'bang' && port.type != 'boolean' }}">
+            <input type="{{ port.type }}" name="{{ port.name }}" value="{{ port.value }}" on-blur="{{ updateValue }}">
+          </template>
+          </label>
+          <template if="{{ port.type != 'bang' && port.value != undefined }}">
+            <button data-port="{{ port.name }}" on-click="{{ removeValue }}"><i class="fa fa-ban"></i></button>
+          </template>
+        </li>
+      </template>
+    </ul>
+  </template>
+  <script>
+    Polymer('noflo-node-inspector', {
+      inports: [],
+      enteredView: function () {
+        this.updatePorts();
+      },
+      updateLabel: function (event, detail, sender) {
+        this.node.label = sender.innerText;
+      },
+      updatePorts: function () {
+        this.inports = [];
+        this.node.getInports().forEach(function (port) {
+          if (port.isConnected()) {
+            return;
+          }
+          this.inports.push({
+            name: port.name,
+            type: port.type,
+            value: port.getValue()
+          });
+        }.bind(this));
+      },
+      updateValue: function (event, detail, sender) {
+        event.preventDefault();
+        if (!sender.value) {
+          return;
+        }
+        var port = this.node.getInportByName(sender.getAttribute('name'));
+        port.setValue(sender.value);
+      },
+      removeValue: function (event, detail, sender) {
+        event.preventDefault();
+        var name = sender.getAttribute('data-port');
+        var port = this.node.getInportByName(name);
+        port.removeValue();
+        this.inports.forEach(function (port) {
+          if (port.name === name) {
+            port.value = null;
+          }
+        });
+      },
+      sendBang: function (event, detail, sender) {
+        event.preventDefault();
+        var name = sender.getAttribute('name');
+        var port = this.node.getInportByName(name);
+        port.sendBang();
+      }
+    });
+  </script>
+</polymer-element>

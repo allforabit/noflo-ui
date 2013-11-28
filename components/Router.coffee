@@ -5,21 +5,34 @@ class Router extends noflo.Component
     @inPorts =
       url: new noflo.Port 'string'
     @outPorts =
+      route: new noflo.Port 'bang'
       main: new noflo.Port 'string'
-      new: new noflo.Port 'string'
+      project: new noflo.Port 'string'
       graph: new noflo.Port 'string'
       example: new noflo.Port 'string'
       missed: new noflo.Port 'string'
+      clear: new noflo.Port 'boolean'
 
     @inPorts.url.on 'data', (url) =>
+      if @outPorts.route.isAttached()
+        @outPorts.route.send true
+        @outPorts.route.disconnect()
+
       if url is ''
+        @outPorts.clear.send true
+        @outPorts.clear.disconnect()
         @outPorts.main.send url
         @outPorts.main.disconnect()
         return
 
-      if url is 'new'
-        @outPorts.new.send url
-        @outPorts.new.disconnect()
+      if url.substr(0, 8) is 'project/'
+        remainder = url.substr 8
+        parts = remainder.split '/'
+        @outPorts.project.send parts.shift()
+        @outPorts.project.disconnect()
+        for part in parts
+          @outPorts.graph.send part
+        @outPorts.graph.disconnect()
         return
 
       if url.substr(0, 6) is 'graph/'

@@ -1,0 +1,134 @@
+<polymer-element name="noflo-runtime" attributes="graphs">
+  <template>
+    <template if="{{ currentGraph }}">
+    <div class="status {{ status.state }}">{{ status.label }} <span class="state"><i class="fa fa-{{ icon }}"></i></span></div>
+    <div class="runcontrol">
+      <template if="{{ status.online }}">
+        <template if="{{ execution.running }}">
+          {{ execution.label }} <button class="stop" on-click="{{ stop }}"><i class="fa fa-pause"></i></button>
+        </template>
+        <template if="{{ execution.running == false }}">
+          {{ execution.label }} <button class="start" on-click="{{ start }}"><i class="fa fa-play"></i></button>
+        </template>
+      </template>
+    </div>
+  </template>
+  </template>
+  <script>
+    Polymer('noflo-runtime', {
+      currentGraph: null,
+      graphs: null,
+      runtime: null,
+      icon: 'cloud',
+      status: {
+        label: 'offline',
+        state: 'offline',
+        online: false
+      },
+      execution: {
+        label: 'stopped',
+        running: false
+      },
+      card: null,
+      graphsChanged: function () {
+        if (!this.graphs || this.graphs.length === 0) {
+          this.currentGraph = null;
+          return;
+        }
+        // Use the top-level graph as the runtime main graph
+        this.currentGraph = this.graphs[0];
+      },
+      currentGraphChanged: function () {
+        if (this.runtime) {
+          this.stop();
+          this.execution.running = false;
+          this.execution.stopped = true;
+          this.runtime = null;
+        }
+        if (this.card) {
+          this.card.parentNode.removeChild(this.card);
+          this.card = null;
+        }
+        if (!this.currentGraph) {
+          return;
+        }
+        var runtime = require('/noflo-ui/src/runtimes/' + this.determineRuntime());
+        this.runtime = new runtime(this.currentGraph);
+        this.subscribeRuntime();
+        switch (this.runtime.getType()) {
+          case 'iframe':
+            this.icon = 'globe';
+            break;
+          default:
+            this.icon = 'cloud';
+            break;
+        }
+        this.fire('runtime', this.runtime);
+      },
+      subscribeRuntime: function () {
+        this.runtime.on('status', function (status) {
+          this.status.online = status.online;
+          if (status.online) {
+            this.status.state = 'online';
+          } else {
+            this.status.state = 'offline';
+          }
+          this.status.label = status.label;
+        }.bind(this));
+        this.runtime.on('execution', function (status) {
+          if (status.running) {
+            this.execution.running = true;
+          } else {
+            this.execution.running = false;
+          }
+          this.execution.label = status.label;
+        }.bind(this));
+      },
+      determineRuntime: function () {
+        if (!this.currentGraph.properties.environment) {
+          return 'iframe';
+        }
+        switch (this.currentGraph.properties.environment.runtime) {
+          case 'html':
+            return 'iframe';
+          case 'websocket':
+            return 'websocket';
+          default:
+            return 'iframe';
+        }
+      },
+      start: function (event) {
+        event.preventDefault();
+        if (this.card) {
+          this.runtime.start();
+          return;
+        }
+        this.showCard();
+        if (this.runtime.getType() === 'iframe') {
+          this.runtime.once('connected', function () {
+            this.runtime.start();
+          }.bind(this));
+          return;
+        }
+        this.runtime.start();
+      },
+      stop: function (event) {
+        if (event) {
+          event.preventDefault();
+        }
+        this.runtime.stop();
+      },
+      showCard: function () {
+        if (this.card) {
+          return;
+        }
+        var contextPanel = document.getElementById('context');
+        this.card = document.createElement('the-card');
+        this.card.type = 'noflo-runtime-preview';
+        // Move the preview element of the runtime into the card
+        this.card.appendChild(this.runtime.getElement());
+        this.card.addTo(contextPanel.getMain());
+      }
+    });
+  </script>
+</polymer-element>

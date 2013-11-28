@@ -1,0 +1,85 @@
+<link rel="import" href="noflo-menu.html">
+<link rel="import" href="noflo-search-results.html">
+<polymer-element name="noflo-search" attributes="buttons results">
+  <template>
+    <input value="{{ search }}" type="search" placeholder="Search" x-webkit-speech>
+    <button on-click="{{ menu }}"><i class="fa fa-bars"></i></button>
+  </template>
+  <script>
+    Polymer('noflo-search', {
+      menuCard: null,
+      resultsCard: null,
+      buttons: [],
+      results: [],
+      search: '',
+      enteredView: function () {
+        this.contextBar = document.getElementById('context');
+        this.observer = new ArrayObserver(this.results, this.resultsModified.bind(this));
+      },
+      menu: function (event) {
+        event.preventDefault();
+        this.search = '';
+        if (this.menuCard) {
+          this.menuCard.parentNode.removeChild(this.menuCard);
+          this.menuCard = null;
+          return;
+        }
+        var menu = document.createElement('noflo-menu');
+        menu.buttons = this.buttons;
+        if (this.buttons.length === 0) {
+          this.fire('menu', menu);
+        }
+        menu.addEventListener('search', function (event) {
+          this.search = event.detail;
+        }.bind(this));
+        menu.addEventListener('click', function (event) {
+          if (this.menuCard) {
+            this.menuCard.parentNode.removeChild(this.menuCard);
+            this.menuCard = null;
+          }
+        }.bind(this));
+        this.menuCard = document.createElement('the-card');
+        this.menuCard.type = 'noflo-menu';
+        this.menuCard.appendChild(menu);
+        this.menuCard.addTo(this.contextBar.getMain(), true);
+      },
+      searchChanged: function () {
+        event.preventDefault();
+        if (this.search === '') {
+          if (this.resultsCard) {
+            this.resultsCard.parentNode.removeChild(this.resultsCard);
+            this.resultsCard = null;
+          }
+          return;
+        }
+        while (this.results.length) {
+          this.results.pop();
+        }
+        this.fire('search', this.search);
+      },
+      resultsModified: function () {
+        if (this.resultsCard || this.search === '') {
+          return;
+        }
+        if (this.results.length === 0) {
+          if (this.resultsCard) {
+            this.resultsCard.parentNode.removeChild(this.resultsCard);
+            this.resultsCard = null;
+          }
+          return;
+        }
+        var results = document.createElement('noflo-search-results');
+        results.results = this.results;
+        results.search = this.search;
+        results.addEventListener('resultclick', function () {
+          this.search = '';
+        }.bind(this));
+
+        this.resultsCard = document.createElement('the-card');
+        this.resultsCard.type = 'noflo-search-results';
+        this.resultsCard.appendChild(results);
+        this.resultsCard.addTo(this.contextBar.getMain(), true);
+      }
+    });
+  </script>
+</polymer-element>
