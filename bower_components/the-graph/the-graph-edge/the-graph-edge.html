@@ -1,0 +1,300 @@
+<polymer-element name="the-graph-edge" attributes="source target route connection group sourceNode sourcePort targetNode targetPort">
+
+  <style>
+    path.edge-touch {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 15px;
+    }
+  </style>
+
+  <script>
+  (function(){
+    "use strict";
+
+    var determinePortSides = function (sourceX, sourceY, targetX, targetY) {
+      var edgeType = ['east', 'west', 'R->L'];
+      var xDiff = targetX - sourceX;
+      var yDiff = targetY - sourceY;
+
+      // TODO: Get from source node's clientHeight?
+      var nodeH = 60;
+      var nodeW = 60;
+
+      if (Math.abs(xDiff) < Math.abs(yDiff)){
+        if (sourceY < targetY) {
+          // S: bottom to top
+          edgeType = ['south', 'north', 'B->T'];
+        } else {
+          // N bottom to left
+          edgeType = ['south', 'west', 'B->L'];
+          if (sourceX+nodeW+10 < targetX) {
+            // NE: right to left
+            edgeType = ['east', 'west', 'R->L'];
+          }
+        }
+      } else {
+        if (sourceX < targetX) {
+          // E: right to left
+          edgeType = ['east', 'west', 'R->L'];
+        } else {
+          // W: right to top
+          edgeType = ['east', 'north', 'R->T'];
+          if (sourceY+nodeH+10 < targetY) {
+            // SW: bottom to top
+            edgeType = ['south', 'north', 'B->T'];
+          }
+        }
+      }
+      return edgeType;
+    };
+
+    var makePath = function (sourcePos, targetPos, edgeType, scale){
+      var sourceX = sourcePos.left + sourcePos.width / 2;
+      var sourceY = sourcePos.top + sourcePos.height / 2;
+      var targetX = targetPos.left + targetPos.width / 2;
+      var targetY = targetPos.top + targetPos.height / 2;
+      var nodeW = 60;
+      var nodeW2 = 60 / 2;
+      var nodeH = 60;
+      var nodeH2 = 60 / 2;
+
+      var startX = sourceX;
+      var startY = sourceY;
+      var endX = targetX;
+      var endY = targetY;
+      var c1X, c1Y, c2X, c2Y;
+
+      var xDiff = targetX - sourceX;
+      var yDiff = targetY - sourceY;
+
+      switch (edgeType) {
+        case "B->T":
+          // bottom to top
+          c1X = startX;
+          c1Y = startY + (endY - startY)/2;
+          c2X = endX;
+          c2Y = c1Y;
+          break;
+        case "B->L":
+          // bottom to left
+          c1X = startX + ( startX<endX ? nodeW : 0-nodeW );
+          c1Y = startY + nodeH;
+          c2X = endX - nodeW;
+          c2Y = endY;
+          break;
+        case "R->T":
+          // right to top
+          c1X = startX + nodeW;
+          c1Y = startY + ( startY<endY ? nodeH : 0-nodeH );
+          c2X = endX;
+          c2Y = endY - nodeH;
+          break;
+        case "R->L":
+          /* falls through */
+        default:
+          // right to left
+          c1X = startX + (endX - startX)/2;
+          c1Y = startY;
+          c2X = c1X;
+          c2Y = endY;
+          break;
+        }
+
+      var d = [
+        "M", startX, startY, 
+        "C", c1X, c1Y,
+             c2X, c2Y,
+             endX, endY
+      ];
+
+      return d.join(" ");
+    };
+
+    Polymer('the-graph-edge', {
+      source: '',
+      target: '',
+      route: 0,
+      zoom: 1,
+      group: null,
+      targetNode: null,
+      targetPort: null,
+      sourceNode: null,
+      sourcePort: null,
+      enteredView: function () {
+        // Find graph in parents, since the-graph-export has an edge child
+        var graph = null;
+        var parent = this.parentNode;
+        while (parent && !graph) {
+          if (parent.nodeName === "THE-GRAPH") {
+            graph = parent;
+          }
+          parent = parent.parentNode;
+        }
+        if (!graph || !graph.$.edges || !graph.$.edges.$.connections) {
+          throw new Error('Wire element needs to have a "the-graph" ancestor.');
+        }
+
+        this.group = graph.$.edges.$.connections;
+      },
+      leftView: function () {
+        if (!this.path) {
+          return;
+        }
+        this.group.removeChild(this.path);
+        this.group.removeChild(this.pathTouch);
+      },
+      getSource: function () {
+        var split = this.source.split('.');
+        return {
+          node: split[0],
+          port: split[1]
+        };
+      },
+      getTarget: function () {
+        var split = this.target.split('.');
+        return {
+          node: split[0],
+          port: split[1]
+        };
+      },
+      groupChanged: function () {
+        if (!this.group) {
+          return;
+        }
+        // Make touchable path
+        this.pathTouch = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        this.pathTouch.setAttributeNS(null, "class", "edge-touch" );
+
+        // Add event for touchable path
+        this.pathTouch.addEventListener('click', this.onClick.bind(this), false);
+
+        // Make visible path
+        this.path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        this.routeChanged();
+
+        // Add paths to main svg g
+        this.group.appendChild(this.path);
+        this.group.appendChild(this.pathTouch);
+
+        // Render edge
+        this.drawEdge();
+      },
+      bringToTop: function () {
+        // Reappending is how to bring SVG element to top
+        this.group.appendChild(this.path);
+        this.group.appendChild(this.pathTouch);
+      },
+      routeChanged: function () {
+        if (this.sourcePort) {
+          this.sourcePort.route = this.route;
+        }
+        if (this.targetPort) {
+          this.targetPort.route = this.route;
+        }
+        if (!this.path) {
+          return;
+        }
+        this.path.setAttributeNS(null, "class", "edge route"+this.route );
+      },
+      drawEdge: function () {
+        if (!this.path || !this.sourceNode || !this.targetNode || !this.sourcePort || !this.targetPort) {
+          return;
+        }
+        var source = this.sourceNode.getZoomedPosition();
+        var target = this.targetNode.getZoomedPosition();
+
+        var edgeType = determinePortSides(source.x, source.y, target.x, target.y);
+        if (!this.sourcePort || !this.targetPort) {
+          return;
+        }
+
+        var mod = 3;
+        this.sourcePort.setAttribute('side', edgeType[0]);
+        var sourcePos = {
+          left: source.x + mod + this.sourcePort.offsetLeft,
+          top: source.y + mod + this.sourcePort.offsetTop,
+          width: this.sourcePort.clientWidth,
+          height: this.sourcePort.clientHeight
+        };
+
+        this.targetPort.setAttribute('side', edgeType[1]);
+        var targetPos = {
+          left: target.x + mod + this.targetPort.offsetLeft,
+          top: target.y + mod + this.targetPort.offsetTop,
+          width: this.targetPort.clientWidth,
+          height: this.targetPort.clientHeight
+        };
+        if (this.sourceNode.classList.contains('highlight')) {
+          // Highlighted ports are bigger
+          var sourceDiameter = this.sourceNode.offsetWidth;
+          sourcePos.left -= sourceDiameter / 4;
+          sourcePos.top -= sourceDiameter / 4;
+        } else {
+          // Account for the triangular shape of the port
+          sourcePos.left += this.sourcePort.offsetWidth / 2.7;
+          sourcePos.top += this.sourcePort.offsetHeight / 2.8;
+        }
+        if (this.targetNode.classList.contains('highlight')) {
+          // Highlighted ports are bigger
+          var targetDiameter = this.targetNode.offsetWidth;
+          targetPos.left -= targetDiameter / 4;
+          targetPos.top -= targetDiameter / 4;
+        }
+        var d = makePath(sourcePos, targetPos, edgeType[2], this.zoom);
+
+        this.path.setAttributeNS(null, "d", d);
+        this.pathTouch.setAttributeNS(null, "d", d);
+      },
+      sourceNodeChanged: function () {
+        this.sourceNode.addEventListener("moved", this.sourceMoved.bind(this));
+        this.sourceNode.addEventListener("highlight", this.sourceMoved.bind(this));
+        this.sourceNode.addEventListener("ports", this.sourceMoved.bind(this));
+      },
+      sourcePortChanged: function (port) {
+        this.sourcePort.route = this.route;
+        this.sourcePort.addEventListener("side", this.sourceMoved.bind(this));
+        this.drawEdge();
+      },
+      sourceMoved: function () {
+        this.drawEdge();
+      },
+      targetNodeChanged: function () {
+        this.targetNode.addEventListener("moved", this.targetMoved.bind(this));
+        this.targetNode.addEventListener("highlight", this.targetMoved.bind(this));
+        this.targetNode.addEventListener("ports", this.targetMoved.bind(this));
+      },
+      targetPortChanged: function () {
+        this.targetPort.route = this.route;
+        this.targetPort.addEventListener("side", this.targetMoved.bind(this));
+        this.drawEdge();
+      },
+      targetMoved: function () {
+        this.drawEdge();
+      },
+      onClick: function () {
+        this.fire('edgeclick', this);
+      },
+      toJSON: function () {
+        var edgeSource = this.getSource();
+        var edgeTarget = this.getTarget();
+        return {
+          src: {
+            process: edgeSource.node,
+            port: edgeSource.port
+          },
+          tgt: {
+            process: edgeTarget.node,
+            port: edgeTarget.port
+          },
+          metadata: {
+            route: this.route
+          }
+        };
+      }
+    });
+
+  })();
+  </script>
+  
+</polymer-element>

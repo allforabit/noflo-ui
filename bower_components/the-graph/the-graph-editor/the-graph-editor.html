@@ -1,0 +1,166 @@
+<link rel="import" href="../the-library/the-library.html">
+<link rel="import" href="../the-graph/the-graph.html">
+<link rel="import" href="../the-graph-nav/the-graph-nav.html">
+
+<polymer-element name="the-graph-editor" attributes="grid snap width height" lightdom>
+  <template>
+    <link rel="stylesheet" href="../themes/default/the-graph.css">
+    <the-library id="library"></the-library>
+    <the-graph id="graph" name="{{ graph.properties.name }}" snap="{{snap}}" grid="{{grid}}" scale="{{scale}}" pan="{{pan}}" width="{{width}}" height="{{height}}"></the-graph>
+    <the-graph-nav id="nav" scale="{{scale}}" pan="{{pan}}" viewwidth="{{width}}" viewheight="{{height}}"></the-graph-nav>
+  </template>
+  <script>
+  (function () {
+    "use strict";
+
+    Polymer('the-graph-editor', {
+      graph: {},
+      library: {},
+      grid: 60,
+      snap: 30,
+      width: 800,
+      height: 600,
+      scale: 1,
+      pan: "0 0",
+      plugins: {},
+      ready: function () {
+      },
+      addPlugin: function (name, plugin) {
+        this.plugins[name] = plugin;
+        plugin.register(this);
+      },
+      enteredView: function () {
+        var wheelEventName = "onwheel" in document.createElement("div") ? "wheel" :
+          (document.onmousewheel !== undefined ? "mousewheel" : undefined);
+
+        if (!wheelEventName) { return; }
+
+        this.addEventListener(wheelEventName, function (event) {
+          event.preventDefault();
+          
+          var pan = this.pan.split(" ");
+          var x = parseInt(pan[0], 10);
+          var y = parseInt(pan[1], 10);
+          x += event.wheelDeltaX !== undefined ? event.wheelDeltaX : event.deltaX ;
+          y += event.wheelDeltaY !== undefined ? event.wheelDeltaY : event.deltaY ;
+          this.pan = x + " " + y;
+        });
+      },
+      leftView: function () {
+        for (var name in this.plugins) {
+          this.plugins[name].unregister(this);
+          delete this.plugins[name];
+        }
+      },
+      widthChanged: function () {
+        this.style.width = this.width + "px";
+      },
+      heightChanged: function () {
+        this.style.height = this.height + "px";
+      },
+      graphChanged: function () {
+        this.buildInitialLibrary();
+
+        var graphEl = this.$.graph;
+        graphEl.graph = this.graph;
+        graphEl.library = this.$.library;
+
+        // Reference the graph element
+        this.$.nav.graph = graphEl;
+      },
+      buildInitialLibrary: function () {
+        Object.keys(this.graph.processes).forEach(function (id) {
+          var node = this.graph.processes[id];
+          var component = {
+            name: node.component,
+            description: '',
+            inports: [],
+            outports: []
+          };
+
+          this.graph.connections.forEach(function (edge) {
+            var i;
+            if (edge.src && edge.src.process === id) {
+              for (i = 0; i < component.outports.length; i++) {
+                if (component.outports[i].name === edge.src.port) {
+                  return;
+                }
+              }
+              component.outports.push({
+                name: edge.src.port,
+                type: 'all'
+              });
+            }
+            if (edge.tgt.process === id) {
+              for (i = 0; i < component.inports.length; i++) {
+                if (component.inports[i].name === edge.tgt.port) {
+                  return;
+                }
+              }
+              component.inports.push({
+                name: edge.tgt.port,
+                type: 'all'
+              });
+            }
+          });
+          this.registerComponent(component);
+        }.bind(this));
+      },
+      registerComponent: function (definition) {
+        if (!this.library[definition.name]) {
+          // New component, register
+          this.library[definition.name] = definition;
+          this.$.library.components.push(this.library[definition.name]);
+          return;
+        }
+        // Update existing
+        var component = this.library[definition.name];
+        if (definition.description) {
+          component.description = definition.description;
+        }
+        if (definition.icon) {
+          component.icon = definition.icon;
+        }
+        definition.inports.forEach(function (defPort) {
+          var port = null;
+          component.inports.forEach(function (p) {
+            if (p.name === defPort.name) {
+              port = p;
+            }
+          });
+          if (port) {
+            port.type = defPort.type;
+            return;
+          }
+          component.inports.push({
+            name: defPort.name,
+            type: defPort.type,
+            array: defPort.array
+          });
+        });
+        definition.outports.forEach(function (defPort) {
+          var port = null;
+          component.outports.forEach(function (p) {
+            if (p.name === defPort.name) {
+              port = p;
+            }
+          });
+          if (port) {
+            port.type = defPort.type;
+            return;
+          }
+          component.outports.push({
+            name: defPort.name,
+            type: defPort.type,
+            array: defPort.array
+          });
+        });
+      },
+      toJSON: function () {
+        return this.$.graph.toJSON();
+      }
+    });
+
+  })();
+  </script>
+</polymer-element>

@@ -1,0 +1,34 @@
+{
+  "name": "the-graph",
+  "keywords": [
+    "graph",
+    "flow",
+    "noflo"
+  ],
+  "description": "Polymer elements for graph editing",
+  "dependencies": {
+    "polymer": "0.0.20131107",
+    "the-behavior": "*",
+    "font-awesome": "~4.0.3"
+  },
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests",
+    "docs",
+    "tools"
+  ],
+  "homepage": "https://github.com/the-grid/the-graph",
+  "_release": "5b84449b30",
+  "_resolution": {
+    "type": "branch",
+    "branch": "master",
+    "commit": "5b84449b3043dbcae90b77b560a5d2d3c27efb31"
+  },
+  "_source": "git://github.com/the-grid/the-graph.git",
+  "_target": "*",
+  "_originalSource": "the-graph"
+}
