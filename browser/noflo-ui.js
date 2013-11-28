@@ -199,4030 +199,6 @@ require.relative = function(parent) {
 
   return localRequire;
 };
-require.register("meemoo-dataflow/build/dataflow.build.js", function(exports, require, module){
-/*! dataflow.js - v0.0.7 - 2013-09-30 (7:21:56 PM GMT+0200)
-* Copyright (c) 2013 Forrest Oliphant; Licensed MIT, GPL */
-(function(){
-  var App = Backbone.Model.extend({
-    "$": function(query) {
-      return this.$el.find(query);
-    },
-    initialize: function(q){
-      this.el = document.createElement("div");
-      this.el.className = "dataflow";
-      this.$el = $(this.el);
-
-      // Make available in console
-      this.$el.data("dataflow", this);
-
-      // Setup cards
-      var Card = Dataflow.prototype.module("card");
-      this.shownCards = new Card.Collection();
-      this.shownCards.view = new Card.CollectionView({
-        collection: this.shownCards
-      });
-      this.$el.append(this.shownCards.view.$el);
-
-      // Debug mode
-      this.debug = this.get("debug");
-
-      // Show controls?
-      this.controls = this.get("controls");
-      if (this.controls !== false) {
-        // Default to true
-        this.controls = true;
-      }
-
-      if (this.controls) {
-        // Add plugins
-        for (var name in this.plugins) {
-          if (this.plugins[name].initialize) {
-            this.plugins[name].initialize(this);
-          }
-        }
-      }
-
-      // Show form fields on inputs?
-      this.inputs = this.get("inputs");
-      if (this.inputs !== false) {
-        // Default to true
-        this.inputs = true;
-      }
-
-      // Wires and names editable?
-      this.editable = this.get("editable");
-      if (this.editable !== false) {
-        // Default to true
-        this.editable = true;
-      }
-
-      // Add the main element to the page
-      var appendTo = this.get("appendTo");
-      appendTo = appendTo ? appendTo : "body";
-      if (appendTo==="body") {
-        // Fill whole page
-        $("html, body").css({
-          margin: "0px",
-          padding: "0px",
-          width: "100%",
-          height: "100%"
-        });
-      }
-      $(appendTo).append(this.el);
-
-      if (!this.id) {
-        this.id = $(appendTo).attr('id');
-      }
-
-      // Initialize state
-      this.loadState();
-    },
-    
-    // Create the object to contain the modules
-    modules: {},
-    module: function(name) {
-      // Create a new module reference scaffold or load an existing module.
-      // If this module has already been created, return it.
-      if (this.modules[name]) {
-        return this.modules[name];
-      }
-      // Create a module scaffold and save it under this name
-      this.modules[name] = {};
-      return this.modules[name];
-    },
-    // Create the object to contain the nodes
-    nodes: {},
-    node: function(name) {
-      // Create a new node reference scaffold or load an existing node.
-      // If this node has already been created, return it.
-      if (this.nodes[name]) {
-        return this.nodes[name];
-      }
-      // Create a node scaffold and save it under this name
-      this.nodes[name] = {
-        description: ''
-      };
-      return this.nodes[name];
-    },
-    plugins: {},
-    plugin: function(name) {
-      if (this.plugins[name]) {
-        return this.plugins[name];
-      }
-      this.plugins[name] = {};
-      return this.plugins[name];
-    },
-    addCard: function (card, leaveUnpinned) {
-      if (!leaveUnpinned) {
-        // Clear unpinned
-        this.hideCards();
-      }
-      if (this.shownCards.get(card)) {
-        // Bring to top
-        this.shownCards.view.bringToTop(card);
-      } else {
-        // Add to collection
-        this.shownCards.add(card);
-      }
-    },
-    removeCard: function (card) {
-      this.shownCards.remove(card);
-    },
-    hideCards: function () {
-      // Clear unpinned
-      var unpinned = this.shownCards.where({pinned:false});
-      this.shownCards.remove(unpinned);
-    },
-    addPlugin: function (info) {
-      var plugin = this.plugins[info.id];
-      if (!plugin) {
-        this.plugins[info.id] = plugin = {};
-      }
-      plugin.info = info;
-      plugin.enabled = true;
-
-      if (info.menu) {
-        var Card = Dataflow.prototype.module("card");
-        var card = new Card.Model({
-          dataflow: this,
-          card: {el:info.menu}, // HACK since plugins are not bb views
-          pinned: (info.pinned ? true : false)
-        });
-
-        plugin.card = card;
-
-        this.plugins.menu.addPlugin({
-          id: info.id,
-          icon: info.icon,
-          label: info.name,
-          showLabel: false
-        });
-      }
-    },
-    showPlugin: function (name) {
-      if (this.plugins[name] && this.plugins[name].card) {
-        this.addCard(this.plugins[name].card);
-        if (typeof this.plugins[name].onShow === 'function') {
-          // Let the plugin know it has been shown
-          this.plugins[name].onShow();
-        }
-      }
-    },
-    enablePlugin: function (name) {
-      var plugin = this.plugins[name];
-      if (plugin) {
-        this.addPlugin(plugin.info);
-      }
-    },
-    disablePlugin: function (name) {
-      this.plugins.menu.disablePlugin(name);
-    },
-    showContextBar: function () {
-      this.contextBar.view.$el.show();
-    },
-    hideContextBar: function () {
-      this.contextBar.view.$el.hide();
-    },
-    contexts: {},
-    prepareContext: function (ctx) {
-      if (this.contexts[ctx]) {
-        return this.contexts[ctx];
-      }
-
-      var MenuCard = this.module('menucard');
-      this.contexts[ctx] = new MenuCard.Model({
-        id: 'context-' + ctx,
-        dataflow: this,
-        pinned: true
-      });
-      this.contexts[ctx].view = new MenuCard.View({
-        model: this.contexts[ctx]
-      });
-      return this.contexts[ctx];
-    },
-    addContext: function (info) {
-      _.each(info.contexts, function (ctx) {
-        var context = this.prepareContext(ctx);
-        context.menu.add(info);
-      }, this);
-    },
-    changeContext: function (selectedNodes, selectedEdges) {
-      var add = function (ctx, label) {
-        if (!this.contexts[ctx]) {
-          return;
-        }
-        this.contexts[ctx].set('label', label);
-        if (!this.shownCards.get('context-' + ctx)) {
-          this.shownCards.add(this.contexts[ctx]);
-        }
-      }.bind(this);
-      var remove = function (ctx) {
-        if (!this.shownCards.get('context-' + ctx)) {
-          return;
-        }
-        this.shownCards.remove('context-' + ctx);
-      }.bind(this);
-      if (selectedNodes.length > 1) {
-        add('nodes', selectedNodes.length + ' nodes');
-        remove('node');
-      } else if (selectedNodes.length === 1) {
-        add('node', selectedNodes[0].get('label'));
-        remove('nodes');
-      } else {
-        remove('node');
-        remove('nodes');
-      }
-      if (selectedEdges.length > 1) {
-        add('edges', selectedEdges.length + ' edges');
-        remove('edge');
-      } else if (selectedEdges.length === 1) {
-        add('edge', selectedEdges[0].id);
-        remove('edges');
-      } else {
-        remove('edge');
-        remove('edges');
-      }
-    },
-    loadGraph: function (source) {
-      if (this.graph) {
-        if (this.currentGraph.view) {
-          this.currentGraph.view.remove();
-        }
-        if (this.graph.view) {
-          this.graph.view.remove();
-        }
-        this.graph.remove();
-      }
-      var Graph = this.module("graph");
-
-      source.dataflow = this;
-      var newGraph = new Graph.Model(source);
-      newGraph.view = new Graph.View({model: newGraph});
-      this.$el.append(newGraph.view.render().el);
-
-      // For debugging
-      this.graph = this.currentGraph = newGraph;
-
-      return newGraph;
-    },
-    showGraph: function(graph){
-      // Hide current
-      this.currentGraph.view.$el.detach();
-      // Show new
-      this.$el.append(graph.view.el);
-      graph.view.render();
-      this.currentGraph = graph;
-    },
-    debug: false,
-    log: function(message) {
-      this.trigger("log", message, arguments);
-      if (this.debug) {
-        console.log("Dataflow: ", arguments);
-      }
-    },
-    types: [
-      "all",
-      "canvas:2d",
-      "canvas:webgl",
-      "string",
-      "number",
-      "int",
-      "object",
-      "array"
-    ]
-  });
-
-  // Our global
-  window.Dataflow = App;
-  if (typeof exports === 'object') {
-    // CommonJS export
-    exports.Dataflow = App;
-  }
-
-  // Backbone hacks
-  // Discussed here http://stackoverflow.com/a/13075845/592125
-  Backbone.View.prototype.addEvents = function(events) {
-    this.delegateEvents( _.extend(_.clone(this.events), events) );
-  };
-
-  // Simple collection view
-  Backbone.CollectionView = Backbone.Model.extend({
-    // this.tagName and this.itemView should be set
-    prepend: false,
-    initialize: function(options){
-      if (options.tagName) {
-        this.tagName = options.tagName;
-      }
-      if (options.className) {
-        this.className = options.className;
-      }
-      if (options.itemView) {
-        this.itemView = options.itemView;
-      }
-      this.el = document.createElement(this.tagName);
-      this.el.className = this.className;
-      this.$el = $(this.el);
-      this.parent = options.parent;
-      var collection = this.collection = this.get("collection");
-      collection.each(this.addItem, this);
-      collection.on("add", this.addItem, this);
-      collection.on("remove", this.removeItem, this);
-    },
-    addItem: function(item){
-      if (!item.view) {
-        item.view = new this.itemView({
-          model:item,
-          parent: this.parent
-        });
-        item.view.render();
-      }
-      if (this.prepend) {
-        this.$el.prepend(item.view.el);
-      } else {
-        this.$el.append(item.view.el);
-      }
-    },
-    removeItem: function(item){
-      item.view.remove();
-    }
-  });
-}());
-
-// All code has been downloaded and evaluated and app is ready to be initialized.
-// jQuery(function($) {
-
-//   // Router
-//   var DataflowRouter = Backbone.Router.extend({
-//     routes: {
-//       "": "index"
-//     },
-//     index: function() {
-
-//     }
-//   });
-//   Dataflow.router = new DataflowRouter();
-//   Backbone.history.start();
-
-// });
-
-(function(Dataflow) {
-  var StateModel = Backbone.Model.extend({});
-
-  Dataflow.prototype.loadState = function () {
-    // Initialize State with localStorage
-    var stateKey = 'dataflow-' + (this.id ? this.id : this.cid);
-    var stateData = JSON.parse(window.localStorage.getItem(stateKey));
-    if (!stateData) {
-      stateData = {};
-    }
-
-    var state = new StateModel(stateData);
-    this.set('state', state);
-
-    // Set up persistence
-    state.on('change', function (stateInstance) {
-      window.localStorage.setItem(stateKey, JSON.stringify(stateInstance.toJSON()));
-    });
-  };
-
-}(Dataflow));
-
-(function(Dataflow) {
- 
-  var Graph = Dataflow.prototype.module("graph");
-
-  // Dependencies
-  var Node = Dataflow.prototype.module("node");
-  var Edge = Dataflow.prototype.module("edge");
-
-  Graph.Model = Backbone.Model.extend({
-    defaults: {
-      nodes: [],
-      edges: [],
-      panX: 0,
-      panY: 0,
-      zoom: 1
-    },
-    initialize: function() {
-      this.dataflow = this.get("dataflow");
-
-      var i;
-
-      // Set up nodes 
-      var nodes = this.nodes = new Node.Collection();
-      nodes.parentGraph = this;
-      // Node events
-      nodes.on("all", function(){
-        this.trigger("change");
-      }, this);
-      nodes.on("add", function(node){
-        this.dataflow.trigger("node:add", this, node);
-      }, this);
-      nodes.on("remove", function(node){
-        // Remove related edges and unload running processes if defined
-        node.remove();
-        this.dataflow.trigger("node:remove", this, node);
-      }, this);
-      // Convert nodes array to backbone collection
-      var nodesArray = this.get("nodes");
-      for(i=0; i<nodesArray.length; i++) {
-        var node = nodesArray[i];
-        node.parentGraph = this;
-        if (node.type && this.dataflow.nodes[node.type]) {
-          node = new this.dataflow.nodes[node.type].Model(node);
-          nodes.add(node);
-        } else {
-          this.dataflow.log("node "+node.id+" not added: node type ("+node.type+") not found", node);
-        }
-      }
-
-      // Set up edges
-      var edges = this.edges = new Edge.Collection();
-      edges.parentGraph = this;
-      // Edge events
-      edges.on("all", function(){
-        this.trigger("change");
-      }, this);
-      edges.on("add", function(edge){
-        this.dataflow.trigger("edge:add", this, edge);
-      }, this);
-      edges.on("remove", function(edge){
-        this.dataflow.trigger("edge:remove", this, edge);
-      }, this);
-      // Convert edges array to backbone collection
-      var edgesArray = this.get("edges");
-      for(i=0; i<edgesArray.length; i++) {
-        var edge = edgesArray[i];
-        edge.parentGraph = this;
-        edge.id = edge.source.node+":"+edge.source.port+"::"+edge.target.node+":"+edge.target.port;
-        // Check that nodes and ports exist
-        var sourceNode = nodes.get(edge.source.node);
-        var targetNode = nodes.get(edge.target.node);
-        if (sourceNode && targetNode && sourceNode.outputs.get(edge.source.port) && targetNode.inputs.get(edge.target.port)) {
-          edge = new Edge.Model(edge);
-          edges.add(edge);
-        } else {
-          this.dataflow.log("edge "+edge.id+" not added: node or port not found", edge);
-        }
-      }
-      // Attach collections to graph
-      this.set({
-        nodes: nodes,
-        edges: edges
-      });
-
-      // Listen for un/select
-      this.on("selectionChanged", this.selectionChanged, this);
-      this.on("select:node", this.selectNode, this);
-      this.on("select:edge", this.selectEdge, this);
-
-      // Pass graph change events up to dataflow
-      this.on("change", function(){
-        this.dataflow.trigger("change", this);
-      }, this);
-    },
-    selectNode: function (node) {
-      this.dataflow.trigger("select:node", this, node);
-    },
-    selectEdge: function (edge) {
-      this.dataflow.trigger("select:edge", this, edge);
-    },
-    selectionChanged: function () {
-      var selectedNodes = this.nodes.where({selected:true});
-      var selectedEdges = this.edges.where({selected:true});
-      this.dataflow.changeContext(selectedNodes, selectedEdges);
-    },
-    remove: function(){
-      while(this.nodes.length > 0){
-        this.nodes.remove(this.nodes.at(this.nodes.length-1));
-      }
-    },
-    toJSON: function(){
-      return {
-        nodes: this.nodes,
-        edges: this.edges
-      };
-    }
-  });
-
-}(Dataflow));
-
-( function(Dataflow) {
-
-  var Node = Dataflow.prototype.module("node");
- 
-  // Dependencies
-  var Input = Dataflow.prototype.module("input");
-  var Output = Dataflow.prototype.module("output");
-
-  Node.Model = Backbone.Model.extend({
-    defaults: function () {
-      return {
-        label: "",
-        description: "",
-        type: "test",
-        x: 200,
-        y: 100,
-        state: {},
-        selected: false
-      };
-    },
-    initialize: function() {
-      this.parentGraph = this.get("parentGraph");
-      this.type = this.get("type");
-
-      // Default label to type
-      if (this.get("label")===""){
-        this.set({
-          "label": this.get("type")
-        });
-      }
-
-      // Convert inputs array to backbone collection
-      var inputArray = this.inputs;
-      this.inputs = new Input.Collection();
-      this.inputs.parentNode = this;
-      for(var i=0; i<inputArray.length; i++) {
-        var input = inputArray[i];
-
-        // Save defaults to state
-        var state = this.get("state");
-        if (input.value !== undefined && state[input.id] === undefined) {
-          state[input.id] = input.value;
-        }
-
-        input.parentNode = this;
-        input = new Input.Model(input);
-        this.inputs.add(input);
-      }
-
-      // Convert outputs array to backbone collection
-      var outputArray = this.outputs;
-      this.outputs = new Output.Collection();
-      this.outputs.parentNode = this;
-      for(i=0; i<outputArray.length; i++) {
-        var output = outputArray[i];
-        output.parentNode = this;
-        output = new Output.Model(output);
-        this.outputs.add(output);
-      }
-
-      // Selection event
-      this.on("change:selected", this.changeSelected, this);
-
-    },
-    changeSelected: function() {
-      if (this.get("selected")){
-        this.parentGraph.trigger("select:node", this);
-      }
-    },
-    setState: function (name, value) {
-      var state = this.get("state");
-      if (state[name] === value) {
-        return;
-      }
-      state[name] = value;
-      if (this["input"+name]){
-        this["input"+name](value);
-      }
-      this.trigger("change:state", name, value); //TODO: design this
-    },
-    setBang: function (name) {
-      if (this["input"+name]){
-        this["input"+name]();
-      }
-      this.trigger("bang", name);
-    },
-    send: function (name, value) {
-      // This isn't the only way that values are sent, see github.com/forresto/dataflow-webaudio
-      // Values sent here will not be `set()` on the recieving node
-      // The listener is set up in Edge/initialize
-
-      // To make this synchronous
-      // this.trigger("send:"+name, value);
-
-      // Otherwise, to make this safe for infinite loops
-      var self = this;
-      _.defer(function(){
-        self.trigger("send:"+name, value);
-      });
-    },
-    recieve: function (name, value) {
-      // The listener is set up in Edge/initialize
-      if ( typeof this["input"+name] === "function" ) {
-        this["input"+name](value);
-      } else {
-        this["_"+name] = value;
-      }
-    },
-    remove: function(){
-      // Node removed from graph's nodes collection
-      this.inputs.each(function(input){
-        input.remove();
-      });
-      this.outputs.each(function(output){
-        output.remove();
-      });
-      this.unload();
-      this.collection.remove(this);
-    },
-    unload: function(){
-      // Stop any processes that need to be stopped
-    },
-    toString: function(){
-      return this.id + " ("+this.type+")";
-    },
-    toJSON: function(){
-      return {
-        id: this.get("id"),
-        label: this.get("label"),
-        type: this.get("type"),
-        x: this.get("x"),
-        y: this.get("y"),
-        state: this.get("state")
-      };
-    },
-    inputs:[
-      // {
-      //   id: "input",
-      //   type: "all"
-      // }
-    ],
-    outputs:[
-      // {
-      //   id:"output",
-      //   type: "all"
-      // }
-    ]
-  });
-
-  Node.Collection = Backbone.Collection.extend({
-    model: Node.Model,
-    comparator: function(node) {
-      // Sort nodes by x position
-      return node.get("x");
-    }
-  });
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Input = Dataflow.prototype.module("input");
- 
-  Input.Model = Backbone.Model.extend({
-    defaults: {
-      id: "input",
-      description: "",
-      label: "",
-      type: "all"
-    },
-    initialize: function() {
-      this.parentNode = this.get("parentNode");
-      if (this.get("label")===""){
-        this.set({label: this.id});
-      }
-      this.connected = [];
-    },
-    connect: function(edge){
-      this.connected.push(edge);
-      this.connected = _.uniq(this.connected);
-      this.trigger('connected');
-    },
-    disconnect: function(edge){
-      this.connected = _.without(this.connected, edge);
-      if (this.connected.length === 0) {
-        this.trigger('disconnected');
-      }
-    },
-    remove: function(){
-      // Port removed from node's inputs collection
-      // Remove related edges
-      while (this.connected.length > 0) {
-        this.connected[0].remove();
-      }
-    }
-
-  });
-
-  Input.Collection = Backbone.Collection.extend({
-    model: Input.Model
-  });
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Input = Dataflow.prototype.module("input");
-  var Output = Dataflow.prototype.module("output");
- 
-  // Output extends input
-  Output.Model = Input.Model.extend({
-    defaults: {
-      id: "output",
-      label: "",
-      type: "all",
-      description: ""
-    }
-  });
-
-  Output.Collection = Backbone.Collection.extend({
-    model: Output.Model
-  });
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Edge = Dataflow.prototype.module("edge");
-
-  var EdgeEvent = Backbone.Model.extend({
-    defaults: {
-      "type": "data",
-      "data": "",
-      "group": ""
-    }
-  });
-
-  var EdgeEventLog = Backbone.Collection.extend({
-    model: EdgeEvent
-  });
-
-  Edge.Model = Backbone.Model.extend({
-    defaults: {
-      "z": 0,
-      "route": 0,
-      "selected": false,
-      "log": null
-    },
-    initialize: function() {
-      var nodes, sourceNode, targetNode;
-      var preview = this.get("preview");
-      this.parentGraph = this.get("parentGraph");
-      this.attributes.log = new EdgeEventLog();
-      if (preview) {
-        // Preview edge
-        nodes = this.get("parentGraph").nodes;
-        var source = this.get("source");
-        var target = this.get("target");
-        if (source) {
-          sourceNode = nodes.get( this.get("source").node );
-          this.source = sourceNode.outputs.get( this.get("source").port );
-        } else if (target) {
-          targetNode = nodes.get( this.get("target").node );
-          this.target = targetNode.inputs.get( this.get("target").port );
-        }
-      } else {
-        // Real edge
-        // this.parentGraph = this.get("parentGraph");
-        nodes = this.parentGraph.nodes;
-        try{
-          sourceNode = nodes.get( this.get("source").node );
-          this.source = sourceNode.outputs.get( this.get("source").port );
-          targetNode = nodes.get( this.get("target").node );
-          this.target = targetNode.inputs.get( this.get("target").port );
-        }catch(e){
-          // Dataflow.log("node or port not found for edge", this);
-        }
-
-        this.source.connect(this);
-        this.target.connect(this);
-
-        // Set up listener
-        sourceNode.on("send:"+this.source.id, this.send, this);
-
-        this.bringToTop();
-
-        // Selection event
-        this.on("select", this.select, this);
-      }
-    },
-    select: function() {
-      this.parentGraph.trigger("select:edge", this);
-    },
-    send: function (value) {
-      this.target.parentNode.recieve( this.target.id, value );
-    },
-    isConnectedToPort: function(port) {
-      return ( this.source === port || this.target === port );
-    },
-    isConnectedToNode: function(node) {
-      return ( this.source.parentNode === node || this.target.parentNode === node );
-    },
-    toString: function(){
-      if (this.id) {
-        return this.id;
-      }
-      return this.get("source").node+":"+this.get("source").port+"::"+this.get("target").node+":"+this.get("target").port;
-    },
-    toJSON: function(){
-      return {
-        source: this.get("source"),
-        target: this.get("target"),
-        route: this.get("route")
-      };
-    },
-    bringToTop: function(){
-      var topZ = 0;
-      this.parentGraph.edges.each(function(edge){
-        if (edge !== this) {
-          var thisZ = edge.get("z");
-          if (thisZ > topZ) {
-            topZ = thisZ;
-          }
-          if (edge.view){
-            edge.view.unhighlight();
-          }
-        }
-      }, this);
-      this.set("z", topZ+1);
-    },
-    remove: function(){
-      this.source.disconnect(this);
-      this.target.disconnect(this);
-      if (this.collection) {
-        this.collection.remove(this);
-      }
-      // Remove listener
-      this.source.parentNode.off("send:"+this.source.id, this.send, this);
-    }
-  });
-
-  Edge.Collection = Backbone.Collection.extend({
-    model: Edge.Model,
-    comparator: function(edge) {
-      // Sort edges by z order (z set by clicking; not saved to JSON)
-      return edge.get("z");
-    }
-  });
-
-}(Dataflow) );
-
-(function(Dataflow) {
-
-  var Graph = Dataflow.prototype.module("graph");
-
-  // Dependencies
-  var Node = Dataflow.prototype.module("node");
-  var Edge = Dataflow.prototype.module("edge");
-
-  var minZoom = 0.20;
-  var maxZoom = 1.1;
-
-  var cssZoomSupported = document.createElement("div").style.hasOwnProperty("zoom");
-
-  var template = 
-    '<div class="dataflow-graph-panzoom">'+
-      '<div class="dataflow-graph zoom-normal">'+
-        '<div class="dataflow-edges">'+
-          '<svg class="dataflow-svg-edges" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" width="800" height="800"></svg>'+
-        '</div>'+
-        '<div class="dataflow-nodes" />'+
-      '</div>'+
-    '</div>'+
-    '<div class="dataflow-graph-controls">'+
-      '<button class="dataflow-graph-gotoparent"><i class="icon-chevron-left"></i> back to parent</button>'+
-    '</div>';
-
-  Graph.View = Backbone.View.extend({
-    template: _.template(template),
-    className: "dataflow-g",
-    events: {
-      "click .dataflow-graph": "deselect",
-      "dragstart .dataflow-graph-panzoom": "panStart",
-      "drag .dataflow-graph-panzoom": "pan",
-      "dragstop .dataflow-graph-panzoom": "panStop",
-      "click .dataflow-graph-gotoparent": "gotoParent",
-      "mousewheel": "mouseWheel"
-      // ".dataflow-graph transformstart": "pinchStart",
-      // ".dataflow-graph transform": "pinch",
-      // ".dataflow-graph transformend": "pinchEnd"
-    },
-    initialize: function() {
-      // Graph container
-      this.$el.html(this.template(this.model.toJSON()));
-
-      var nodes = this.model.get("nodes");
-      var edges = this.model.get("edges");
-
-      // Initialize nodes
-      this.nodes = nodes.view = {};
-      this.model.nodes.each(this.addNode, this);
-      this.model.nodes.on("add", this.addNode, this);
-      this.model.nodes.on("remove", this.removeNode, this);
-      // Initialize edges
-      this.edges = edges.view = {};
-      this.model.edges.each(this.addEdge, this);
-      this.model.edges.on("add", this.addEdge, this);
-      this.model.edges.on("remove", this.removeEdge, this);
-
-      // For subgraphs only: navigate up
-      var parentNode = this.model.get("parentNode");
-      if (!parentNode){
-        this.$(".dataflow-graph-controls").hide();
-      }
-
-      this.$(".dataflow-graph-panzoom").draggable({
-        helper: function(){
-          var h = $("<div>");
-          this.model.dataflow.$el.append(h);
-          return h;
-        }.bind(this)
-      });
-
-      // Cache the graph div el
-      this.$graphEl = this.$(".dataflow-graph");
-      this.graphEl = this.$(".dataflow-graph")[0];
-
-      // Default 3D transform
-      this.$graphEl.css({
-        transform: "translate3d(0, 0, 0) " +
-                   "scale3d(1, 1, 1) ",
-        transformOrigin: "left top"
-      });
-
-      this.bindInteraction();
-    },
-    panStartOffset: null,
-    panStart: function (event, ui) {
-      if (!ui) { return; }
-      this.panStartOffset = ui.offset;
-    },
-    pan: function (event, ui) {
-      if (!ui) { return; }
-      var scale = this.model.get('zoom');
-      var deltaX = ui.offset.left - this.panStartOffset.left;
-      var deltaY = ui.offset.top - this.panStartOffset.top;
-      this.$(".dataflow-graph").css({
-        transform: "translate3d("+deltaX/scale+"px, "+deltaY/scale+"px, 0)"
-      });
-    },
-    panStop: function (event, ui) {
-      this.$(".dataflow-graph").css({
-        transform: "translate3d(0, 0, 0)"
-      });
-      var scale = this.model.get('zoom');
-      var deltaX = ui.offset.left - this.panStartOffset.left;
-      var deltaY = ui.offset.top - this.panStartOffset.top;
-      this.model.set({
-        panX: this.model.get("panX") + deltaX/scale,
-        panY: this.model.get("panY") + deltaY/scale
-      });
-    },
-    tempPanX: 0,
-    tempPanY: 0,
-    setPanDebounce: _.debounce(function () {
-      // Moves the graph back to 0,0 and changes pan, which will rerender wires
-      this.$(".dataflow-graph").css({
-        transform: "translate3d(0, 0, 0)"
-      });
-      this.model.set({
-        panX: this.model.get("panX") + this.tempPanX,
-        panY: this.model.get("panY") + this.tempPanY
-      });
-      this.tempPanX = 0;
-      this.tempPanY = 0;
-    }, 250),
-    mouseWheel: function (event) {
-      event.preventDefault();
-      var oe = event.originalEvent;
-      this.tempPanX += oe.wheelDeltaX/6;
-      this.tempPanY += oe.wheelDeltaY/6;
-      this.$(".dataflow-graph").css({
-        transform: "translate3d("+this.tempPanX+"px, "+this.tempPanY+"px, 0)"
-      });
-      this.setPanDebounce();
-    },
-    gotoParent: function () {
-      var parentNode = this.model.get("parentNode");
-      if (parentNode){
-        this.model.dataflow.showGraph( parentNode.parentGraph );
-      }
-    },
-    bindInteraction: function () {
-      this.bindZoom();
-      this.bindScroll();
-    },
-    bindZoom: function () {
-      if (!window.Hammer) {
-        return;
-      }
-      var currentZoom, startX, startY, originX, originY, scale, deltaX, deltaY, distance_to_origin_x, distance_to_origin_y;
-      var self = this;
-      Hammer( this.$(".dataflow-graph-panzoom")[0] )
-        .on('transformstart', function (event) {
-          currentZoom = self.model.get('zoom');
-          startX = event.gesture.center.pageX;
-          startY = event.gesture.center.pageY;
-          originX = startX/currentZoom;
-          originY = startY/currentZoom;
-          var graphOffset = self.$el.offset();
-          distance_to_origin_x = originX - graphOffset.left;
-          distance_to_origin_y = originY - graphOffset.top;
-          self.$graphEl.css({
-            transformOrigin: originX+"px "+originY+"px"
-            // transformOrigin: startX+"px "+startY+"px"
-          });
-        })
-        .on('transform', function (event) {
-          scale = Math.max(minZoom/currentZoom, Math.min(event.gesture.scale, maxZoom/currentZoom));
-          deltaX = (event.gesture.center.pageX - startX) / currentZoom;
-          deltaY = (event.gesture.center.pageY - startY) / currentZoom;
-          self.$graphEl.css({
-            transform: "translate3d("+deltaX+"px,"+deltaY+"px, 0) " +
-                       "scale3d("+scale+","+scale+", 1) "
-          });
-        })
-        .on('transformend', function (event) {
-          // Reset 3D transform
-          self.$graphEl.css({
-            transform: "translate3d(0, 0, 0) " +
-                       "scale3d(1, 1, 1) "
-          });
-          // Zoom
-          var zoom = currentZoom * scale;
-          zoom = Math.max(minZoom, Math.min(zoom, maxZoom));
-          self.model.set('zoom', zoom);
-          distance_to_origin_x *= zoom;
-          distance_to_origin_y *= zoom;
-          self.model.set({
-            panX: self.model.get("panX") + deltaX,
-            panY: self.model.get("panY") + deltaY
-          });
-          console.log(self.model.attributes);
-        });
-
-      var onZoom = function () {
-        var z = self.model.get('zoom');
-        var lastClass = self.zoomClass;
-        self.zoomClass = z < 0.5 ? "zoom-tiny" : (z < 0.8 ? "zoom-small" : (z < 1.3 ? "zoom-normal" : "zoom-big"));
-        self.$graphEl
-          .removeClass(lastClass)
-          .addClass(self.zoomClass);
-        self.graphEl.style.zoom = self.model.get('zoom');
-      };
-
-      this.model.on('change:zoom', onZoom);
-
-      // Initial zoom this.model from localStorage
-      if (this.model.get('zoom') !== 1) {
-        onZoom();
-      }
-    },
-    zoomClass: 1,
-    zoomIn: function () {
-      var currentZoom = this.model.get('zoom');
-      var zoom = currentZoom * 0.9;
-      zoom = Math.max(minZoom, zoom); 
-      if (zoom !== currentZoom) {
-        this.model.set('zoom', zoom);
-      }
-    },
-    zoomOut: function () {
-      var currentZoom = this.model.get('zoom');
-      var zoom = currentZoom * 1.1;
-      zoom = Math.min(maxZoom, zoom); 
-      if (zoom !== currentZoom) {
-        this.model.set('zoom', zoom);
-      }
-    },
-    zoomCenter: function () {
-      var currentZoom = this.model.get('zoom');
-      var zoom = 1;
-      if (zoom !== currentZoom) {
-        this.model.set('zoom', 1);
-      }
-    },
-    bindScroll: function () {
-    },
-    render: function() {
-      // HACK to get them to show correct positions on load
-      var self = this;
-      _.defer(function(){
-        self.rerenderEdges();
-      }, this);
-
-      return this;
-    },
-    addNode: function(node){
-      // Initialize
-      var CustomType = this.model.dataflow.nodes[node.type];
-      if (CustomType && CustomType.View) {
-        node.view = new CustomType.View({
-          model:node,
-          graph: this
-        });
-      } else {
-        var BaseNode = this.model.dataflow.node("base");
-        node.view = new BaseNode.View({
-          model:node,
-          graph: this
-        });
-      }
-      // Save to local collection
-      this.nodes[node.id] = node.view;
-      // Render
-      node.view.render();
-      this.$(".dataflow-nodes").append(node.view.el);
-    },
-    removeNode: function(node){
-      node.view.remove();
-      this.nodes[node.id] = null;
-      delete this.nodes[node.id];
-    },
-    addEdge: function(edge){
-      // Initialize
-      edge.view = new Edge.View({model:edge});
-      // Save to local collection
-      this.edges[edge.id] = edge.view;
-      // Render
-      edge.view.render();
-      this.$('.dataflow-svg-edges')[0].appendChild(edge.view.el);
-    },
-    removeEdge: function(edge){
-      if (edge.view) {
-        edge.view.remove();
-      }
-      this.edges[edge.id] = null;
-      delete this.edges[edge.id];
-    },
-    rerenderEdges: function(){
-      _.each(this.edges, function(edgeView){
-        edgeView.render();
-      }, this);
-    },
-    sizeSVG: function(){
-      // TODO timeout to not do this with many edge resizes at once
-      try{
-        var svg = this.$('.dataflow-svg-edges')[0];
-        var rect = svg.getBBox();
-        var width =  Math.max( Math.round(rect.x+rect.width +50), 50 );
-        var height = Math.max( Math.round(rect.y+rect.height+50), 50 );
-        svg.setAttribute("width", width);
-        svg.setAttribute("height", height);
-      } catch (error) {}
-    },
-    deselect: function () {
-      this.model.nodes.invoke("set", {selected:false});
-      this.model.edges.invoke("set", {selected:false});
-      // this.model.nodes.each(function (node) {
-      //   node.set("selected", false);
-      // }, this);
-      this.model.trigger("selectionChanged");
-      this.unfade();
-      this.model.dataflow.hideCards();
-    },
-    fade: function () {
-      this.model.nodes.each(function(node){
-        if (node.view) {
-          if (!node.get('selected')) {
-            node.view.fade();
-          }
-        }
-      });
-      this.fadeEdges();
-    },
-    fadeEdges: function () {
-      this.model.edges.each(function(edge){
-        if (edge.get("selected") || edge.source.parentNode.get("selected") || edge.target.parentNode.get("selected")) {
-          edge.view.unfade();
-        } else {
-          edge.view.fade();
-        }
-      });
-    },
-    unfade: function () {
-      this.model.nodes.each(function(node){
-        if (node.view) {
-          node.view.unfade();
-        }
-      });
-      this.model.edges.each(function(edge){
-        if (edge.view) {
-          edge.view.unfade();
-        }
-      });
-    }
-  });
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Node = Dataflow.prototype.module("node");
-
-  // Dependencies
-  var Input = Dataflow.prototype.module("input");
-  var Output = Dataflow.prototype.module("output");
-
-  var template = 
-    '<div class="outer" />'+
-    '<div class="dataflow-node-header">'+
-      '<h1 class="dataflow-node-title" title="<%- label %>: <%- type %>"><%- label %></h1>'+
-    '</div>'+
-    '<div class="dataflow-node-ports">'+
-      '<div class="dataflow-node-ins"></div>'+
-      '<div class="dataflow-node-outs"></div>'+
-      '<div style="clear:both;"></div>'+
-    '</div>'+
-    '<div class="dataflow-node-inner"></div>';
-
-  var innerTemplate = "";
-
-  var zoom;
- 
-  Node.View = Backbone.View.extend({
-    template: _.template(template),
-    innerTemplate: _.template(innerTemplate),
-    className: "dataflow-node",
-    events: function(){
-      return {
-        "click .dataflow-node-header":  "select",
-        "dragstart": "dragStart",
-        "drag":      "drag",
-        "dragstop":  "dragStop"
-      };
-    },
-    initialize: function(options) {
-      this.$el.html(this.template(this.model.toJSON()));
-
-      this.graph = options.graph;
-
-      // Add type class
-      this.$el.addClass(this.model.type);
-
-      if (!this.model.parentGraph.dataflow.editable) {
-        // No edit name
-        this.$(".dataflow-node-edit").hide();
-      }
-
-      // Initialize i/o views
-      this.inputs = this.model.inputs.view = new Input.CollectionView({
-        collection: this.model.inputs,
-        parent: this
-      });
-      // Outs
-      this.outputs = this.model.outputs.view = new Output.CollectionView({
-        collection: this.model.outputs,
-        parent: this
-      });
-
-      var self = this;
-      this.$el.draggable({
-        handle: "h1",
-        helper: function(){
-          return $('<div>');
-        }
-      });
-
-      this.$el.data("dataflow-node-view", this);
-
-      // Inner template
-      this.$(".dataflow-node-inner").append(this.innerTemplate);
-
-      // Listener to reset inputs list
-      // this.inputs.on("change", function(input){
-      //   this.$inputsList = null;
-      // }, this);
-
-      // Listen for graph panning
-      this.listenTo(this.model.parentGraph, "change:panX change:panY", this.bumpPosition);
-
-      // Selected listener
-      this.listenTo(this.model, "change:selected", this.selectedChanged);
-
-      this.listenTo(this.model, "change:label", this.changeLabel);
-
-      this.$inner = this.$(".dataflow-node-inner");
-    },
-    render: function() {
-      // Initial position
-      this.$el.css({
-        left: this.model.get("x") + this.model.parentGraph.get("panX"),
-        top: this.model.get("y") + this.model.parentGraph.get("panY")
-      });
-
-      this.$(".dataflow-node-ins").html(this.inputs.el);
-      this.$(".dataflow-node-outs").html(this.outputs.el);
-
-      // Hide controls
-      this.$(".dataflow-node-controls").hide();
-      this.$(".label-edit").hide();
-
-      return this;
-    },
-    _alsoDrag: [],
-    _dragDelta: {},
-    $dragHelpers: $('<div class="dataflow-nodes-helpers">'),
-    dragStart: function(event, ui){
-      if (!ui){ return; }
-      // Select this
-      if (!this.model.get("selected")){
-        this.select(event, true);
-      }
-
-      // Don't drag graph
-      event.stopPropagation();
-
-      // Current zoom
-      zoom = this.model.parentGraph.get('zoom');
-
-      this.$dragHelpers.css({
-        transform: "translate3d(0,0,0)"
-      });
-      this.$el.parent().append( this.$dragHelpers );
-
-      // Make helper and save start position of all other selected
-      var self = this;
-      this._alsoDrag = this.model.collection.where({selected:true});
-
-      _.each(this._alsoDrag, function(node){
-        var $el = node.view.$el;
-        // Add helper
-        var helper = $('<div class="dataflow-node helper">').css({
-          width: $el.width(),
-          height: $el.height(),
-          left: parseInt($el.css('left'), 10),
-          top: parseInt($el.css('top'), 10)
-        });
-        this.$dragHelpers.append(helper);
-      }, this);
-
-    },
-    changeLabel: function () {
-      var label = this.model.get("label");
-      var type = this.model.get("type");
-      this.$(".dataflow-node-title")
-        .text( label )
-        .attr("title", label + ": " + type);
-    },
-    drag: function(event, ui){
-      if (!ui){ return; }
-      // Don't drag graph
-      event.stopPropagation();
-
-      var x = (ui.position.left - ui.originalPosition.left) / zoom;
-      var y = (ui.position.top - ui.originalPosition.top) / zoom;
-      this.$dragHelpers.css({
-        transform: "translate3d("+x+"px,"+y+"px,0)"
-      });
-    },
-    dragStop: function(event, ui){
-      if (!ui){ return; }
-      // Don't drag graph
-      event.stopPropagation();
-
-      var panX = this.model.parentGraph.get("panX");
-      var panY = this.model.parentGraph.get("panY");
-      var deltaX = (ui.position.left - ui.originalPosition.left) / zoom;
-      var deltaY = (ui.position.top - ui.originalPosition.top) / zoom;
-      // this.moveToPosition(this.model.get("x") + deltaX, this.model.get("y") + deltaY);
-      // Also drag
-      if (this._alsoDrag.length) {
-        _.each(this._alsoDrag, function(node){
-          node.view.moveToPosition(node.get("x") + deltaX, node.get("y") + deltaY);
-        }, this);
-        this._alsoDrag = [];
-      }
-      // Remove helpers
-      this.$dragHelpers.empty();
-      this.$dragHelpers.remove();
-    },
-    bumpPosition: function () {
-      this.$el.css({
-        left: this.model.get("x") + this.model.parentGraph.get("panX"),
-        top: this.model.get("y") + this.model.parentGraph.get("panY")
-      });
-      this.model.trigger("change:x change:y");
-    },
-    moveToPosition: function(x, y){
-      this.model.set({
-        x: x,
-        y: y
-      }, {
-        // Don't trigger wire move until bumped
-        silent: true
-      });
-      this.bumpPosition();
-    },
-    removeModel: function(){
-      this.model.remove();
-    },
-    bringToTop: function () {
-      var topZ = 0;
-      this.model.collection.each(function(node){
-        var thisZ = parseInt(node.view.el.style.zIndex, 10);
-        if (thisZ > topZ) {
-          topZ = thisZ;
-        }
-      }, this);
-      this.el.style.zIndex = topZ+1;
-    },
-    select: function(event, deselectOthers){
-      // Don't click graph
-      if (event) {
-        event.stopPropagation();
-      }
-      var toggle = false;
-      var selected = this.model.get("selected");
-      if (event && (event.ctrlKey || event.metaKey)) {
-        toggle = true;
-        selected = !selected;
-        this.model.set("selected", selected);
-        if (selected) {
-          this.showInspector(true);
-        } else {
-          this.fade();
-          this.hideInspector();
-        }
-      } else {
-        // Deselect all
-        this.model.parentGraph.edges.invoke("set", {selected:false});
-        this.model.parentGraph.nodes.invoke("set", {selected:false});
-        this.model.parentGraph.view.fade();
-        selected = true;
-        this.model.set("selected", true);
-        this.showInspector();
-      }
-      this.bringToTop();
-      this.model.parentGraph.view.fadeEdges();
-      this.model.parentGraph.trigger("selectionChanged");
-    },
-    inspector: null,
-    getInspector: function () {
-      if (!this.inspector) {
-        var inspect = new Node.InspectView({model:this.model});
-        var Card = Dataflow.prototype.module("card");
-        this.inspector = new Card.Model({
-          dataflow: this.model.parentGraph.dataflow,
-          card: inspect
-        });
-      }
-      return this.inspector;
-    },
-    showInspector: function(leaveUnpinned){
-      this.model.parentGraph.dataflow.addCard( this.getInspector(), leaveUnpinned );
-    },
-    hideInspector: function () {
-      this.model.parentGraph.dataflow.removeCard( this.getInspector() );
-    },
-    fade: function(){
-      this.$el.addClass("fade");
-      this.$el.removeClass("ui-selected");
-    },
-    unfade: function(){
-      this.$el.removeClass("fade");
-    },
-    selectedChanged: function () {
-      if (this.model.get("selected")) {
-        this.highlight();
-      } else {
-        this.unhighlight();
-      }
-    },
-    highlight: function () {
-      this.$el.removeClass("fade");
-      this.$el.addClass("ui-selected");
-    },
-    unhighlight: function () {
-      this.$el.removeClass("ui-selected");
-    }//,
-    // $inputList: null,
-    // getInputList: function() {
-    //   if (!this.$inputList) {
-    //     this.$inputList = $("<div>");
-    //     var model = this.model.toJSON();
-    //     this.$inputList.html( this.inspectTemplate(model) );
-    //     if (model.id !== model.label) {
-    //       this.$inputList.children(".dataflow-node-inspector-title").prepend(model.id + ": ");
-    //     }
-    //     var $inputs = this.$inputList.children(".dataflow-node-inspector-inputs");
-    //     this.model.inputs.each(function(input){
-    //       if (input.view && input.view.$input) {
-    //         $inputs.append( input.view.$input );
-    //       }
-    //     }, this);
-    //   }
-    //   return this.$inputList;
-    // }
-  });
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Input = Dataflow.prototype.module("input");
-
-  // Dependencies
-  var Edge = Dataflow.prototype.module("edge");
-
-  var template = 
-    '<span class="dataflow-port-plug in" title="drag to edit wire"></span>'+ //i18n
-    '<span class="dataflow-port-hole in" title="drag to make new wire"></span>'+ //i18n
-    '<label class="dataflow-port-label in" title="<%= description %>">'+
-      '<%= label %>'+
-    '</label>';  
-
-  var zoom = 1;
- 
-  Input.View = Backbone.View.extend({
-    template: _.template(template),
-    tagName: "li",
-    className: "dataflow-port dataflow-in",
-    events: {
-      "click":  "getTopEdge",
-      "drop":   "connectEdge",
-      "dragstart .dataflow-port-hole":  "newEdgeStart",
-      "drag      .dataflow-port-hole":  "newEdgeDrag",
-      "dragstop  .dataflow-port-hole":  "newEdgeStop",
-      "dragstart .dataflow-port-plug":  "changeEdgeStart",
-      "drag      .dataflow-port-plug":  "changeEdgeDrag",
-      "dragstop  .dataflow-port-plug":  "changeEdgeStop"
-    },
-    $input: null,
-    initialize: function(options) {
-      this.$el.html(this.template(this.model.toJSON()));
-      this.$el.addClass(this.model.get("type"));
-
-      this.parent = options.parent;
-
-      // Reset hole position
-      var node = this.parent.model;
-      var graph = node.parentGraph;
-      this.listenTo(node, "change:x change:y", function(){
-        this._holePosition = null;
-      }.bind(this));
-      this.listenTo(graph, "change:panX change:panY", function(){
-        this._holePosition = null;
-      }.bind(this));
-
-      var nodeState = node.get('state');
-      if (nodeState && nodeState[this.model.id]) {
-        this.$el.addClass('hasvalue');
-      }
-
-      if (!this.model.parentNode.parentGraph.dataflow.editable) {
-        // No drag and drop
-        return;
-      }
-
-      var self = this;
-      this.$(".dataflow-port-plug").draggable({
-        cursor: "pointer",
-        helper: function(){
-          var helper = $('<span class="dataflow-port-plug in helper" />');
-          self.parent.graph.$el.append(helper);
-          return helper;
-        },
-        disabled: true,
-        // To prevent accidental disconnects
-        distance: 10,
-        delay: 100
-      });
-      this.$(".dataflow-port-hole").draggable({
-        cursor: "pointer",
-        helper: function(){
-          var helper = $('<span class="dataflow-port-plug out helper" />')
-            .data({port: self.model});
-          self.parent.graph.$el.append(helper);
-          return helper;
-        }
-      });
-      this.$el.droppable({
-        accept: ".dataflow-port-plug.in, .dataflow-port-hole.out",
-        activeClassType: "droppable-hover",
-        refreshPositions: true
-      });
-
-      if (!this.model.parentNode.parentGraph.dataflow.inputs) {
-        // No direct inputs
-        return;
-      }
-
-      // Initialize direct input
-      var type = this.model.get("type");
-      var state = this.model.parentNode.get("state");
-      options = this.model.get("options");
-      if (options !== undefined) {
-        // Normalize options
-        if (_.isString(options)) {
-          options = options.split(' ');
-          this.model.set('options', options);
-        }
-        if (_.isArray(options)) {
-          var o = {};
-          for (var i=0; i<options.length; i++){
-            o[options[i]] = options[i];
-          }
-          options = o;
-          this.model.set('options', options);
-        }
-      }
-      var input = this.renderInput(type, options);
-
-      var val;
-      if (state && state[this.model.id] !== undefined){
-        // Use the stored state
-        val = state[this.model.id];
-      } else if (this.model.get("value") !== undefined) {
-        // Use the default
-        val = this.model.get("value");
-      }
-
-      this.setInputValue(input, type, val);
-
-      this.model.parentNode.on('change:state', function () {
-        var state = this.model.parentNode.get('state');
-        if (!state || state[this.model.id] === undefined) {
-          this.$el.removeClass('hasvalue');
-          return;
-        }
-        this.setInputValue(input, type, state[this.model.id]);
-        this.$el.addClass('hasvalue');
-      }.bind(this));
-
-      var label = $('<label class="input-type-' + type + '">')
-        .append( input )
-        .prepend( '<span>' + this.model.get("label") + "</span> " );
-      this.$input = label;
-
-      // Update connection state on the input field
-      if (this.model.connected.length) {
-        label.addClass('connected');
-      }
-      this.model.on('connected', function () {
-        this.$input.addClass('connected');
-      }, this);
-      this.model.on('disconnected', function () {
-        this.$input.removeClass('connected');
-      }, this);
-    },
-    renderInput: function (type, options) {
-      var input;
-      if (options) {
-        input = $('<select class="input input-select">');
-        for (var name in options) {
-          var option = $('<option value="'+options[name]+'">'+name+'</option>')
-            .data("val", options[name]);
-          input.append(option);
-        }
-        input.change(this.inputSelect.bind(this));
-        return input;
-      }
-      
-      switch (type) {
-        case 'int':
-        case 'float':
-        case 'number':
-          var attributes = {};
-          if (this.model.get("min") !== undefined) {
-            attributes.min = this.model.get("min");
-          }
-          if (this.model.get("max") !== undefined) {
-            attributes.max = this.model.get("max");
-          }
-          if (type === "int") {
-            attributes.step = 1;
-          }
-          input = $('<input type="number" class="input input-number">')
-            .attr(attributes)
-            .addClass(type === "int" ? "input-int" : "input-float");
-          if (type == 'int') {
-            input.change(this.inputInt.bind(this));
-          } else {
-            input.change(this.inputFloat.bind(this));
-          }
-          return input;
-        case 'boolean':
-          input = $('<input type="checkbox" class="input input-boolean"><div class="input-boolean-checkbox"/>');
-          input.change(this.inputBoolean.bind(this));
-          return input;
-        case 'object':
-          input = $('<textarea class="input input-object"></textarea>');
-          input.on('change, keyup', this.inputObject.bind(this));
-          return input;
-        case 'bang':
-          input = $('<button class="input input-bang">!</button>');
-          input.click(this.inputBang.bind(this));
-          return input;
-        default:
-          input = $('<input class="input input-string">');
-          input.change(this.inputString.bind(this));
-          return input;
-      }
-    },
-    setInputValue: function (input, type, value) {
-      if (!input) {
-        return;
-      }
-      if (input[0].tagName === 'SELECT') {
-        $('option', input).each(function () {
-          var selectVal = $(this).data('val');
-          $(this).prop('selected', selectVal == value);
-        });
-        return;
-      }
-      if (type === 'boolean') {
-        input.prop('checked', value);
-        return;
-      }
-      if (type === 'object') {
-        input.text(JSON.stringify(value, null, 2));
-        return;
-      }
-      input.val(value);
-    },
-    inputSelect: function(e){
-      var val = $(e.target).find(":selected").data("val");
-      this.model.parentNode.setState(this.model.id, val);
-    },
-    inputInt: function(e){
-      this.model.parentNode.setState(this.model.id, parseInt($(e.target).val(), 10));
-    },
-    inputFloat: function(e){
-      this.model.parentNode.setState(this.model.id, parseFloat($(e.target).val()));
-    },
-    inputString: function(e){
-      this.model.parentNode.setState(this.model.id, $(e.target).val());
-    },
-    inputBoolean: function(e){
-      this.model.parentNode.setState(this.model.id, $(e.target).prop("checked"));
-    },
-    inputObject: function(e){
-      try {
-        var obj = JSON.parse($(e.target).text());
-        this.model.parentNode.setState(this.model.id, obj);
-      } catch (err) {
-        // TODO: We need error handling in the form
-      }
-    },
-    inputBang: function(){
-      this.model.parentNode.setBang(this.model.id);
-    },
-    render: function(){
-      return this;
-    },
-    newEdgeStart: function(event, ui){
-      if (!ui) { return; }
-      // Don't drag node
-      event.stopPropagation();
-      
-      ui.helper.data({
-        route: this.topRoute
-      });
-      this.previewEdgeNew = new Edge.Model({
-        target: {
-          node: this.model.parentNode.id,
-          port: this.model.id
-        },
-        parentGraph: this.model.parentNode.parentGraph,
-        preview: true,
-        route: this.topRoute
-      });
-      this.previewEdgeNewView = new Edge.View({
-        model: this.previewEdgeNew
-      });
-      var graphSVGElement = this.model.parentNode.parentGraph.view.$('.dataflow-svg-edges')[0];
-      graphSVGElement.appendChild(this.previewEdgeNewView.el);
-
-      zoom = this.model.parentNode.parentGraph.get('zoom');
-    },
-    newEdgeDrag: function(event, ui){
-      if (!this.previewEdgeNewView || !ui) {
-        return;
-      }
-      // Don't drag node
-      event.stopPropagation();
-
-      ui.position.top = event.clientY / zoom;
-      ui.position.left = event.clientX / zoom;
-      var df = this.model.parentNode.parentGraph.view.el;
-      ui.position.left += df.scrollLeft;
-      ui.position.top += df.scrollTop;
-      this.previewEdgeNewView.render({
-        left: ui.position.left - df.scrollLeft,
-        top: ui.position.top - df.scrollTop
-      });
-      this.model.parentNode.parentGraph.view.sizeSVG();
-    },
-    newEdgeStop: function(event, ui){
-      // Don't drag node
-      event.stopPropagation();
-
-      // Clean up preview edge
-      this.previewEdgeNewView.remove();
-      delete this.previewEdgeNew;
-      delete this.previewEdgeNewView;
-    },
-    getTopEdge: function() {
-      var topEdge;
-      var topZ = -1;
-      if (this.isConnected){
-        // Will get the top matching edge
-        this.model.parentNode.parentGraph.edges.each(function(edge){
-          var thisZ = edge.get("z");
-          if(edge.target === this.model && thisZ > topZ ){
-            topEdge = edge;
-            topZ = thisZ;
-          }
-          if (edge.view) {
-            edge.view.unhighlight();
-          }
-        }, this);
-        if (topEdge && topEdge.view) {
-          topEdge.view.bringToTop();
-        }
-      }
-      return topEdge;
-    },
-    changeEdgeStart: function(event, ui){
-      if (!ui) { return; }
-      // Don't drag node
-      event.stopPropagation();
-
-      if (this.isConnected){
-        var changeEdge = this.getTopEdge();
-        if (changeEdge){
-          // Remove edge
-          changeEdge.remove();
-
-          // Make preview
-          if (ui) {
-            ui.helper.data({
-              port: changeEdge.source,
-              route: changeEdge.get("route")
-            });
-          }
-          this.previewEdgeChange = new Edge.Model({
-            source: changeEdge.get("source"),
-            route: changeEdge.get("route"),
-            parentGraph: this.model.parentNode.parentGraph,
-            preview: true
-          });
-          this.previewEdgeChangeView = new Edge.View({
-            model: this.previewEdgeChange
-          });
-          var graphSVGElement = this.model.parentNode.parentGraph.view.$('.dataflow-svg-edges')[0];
-          graphSVGElement.appendChild(this.previewEdgeChangeView.el);
-          
-          zoom = this.model.parentNode.parentGraph.get('zoom');
-        }
-      }
-    },
-    changeEdgeDrag: function(event, ui){
-      if (!ui) { return; }
-      // Don't drag node
-      event.stopPropagation();
-      
-      if (this.previewEdgeChange) {
-        this.previewEdgeChangeView.render(ui.offset);
-        this.model.parentNode.parentGraph.view.sizeSVG();
-      }
-    },
-    changeEdgeStop: function(event, ui){
-      // Don't drag node
-      event.stopPropagation();
-
-      // Clean up preview edge
-      if (this.previewEdgeChange) {
-        this.previewEdgeChangeView.remove();
-        delete this.previewEdgeChange;
-        delete this.previewEdgeChangeView;
-      }
-    },
-    connectEdge: function(event, ui) {
-      // Dropped to this el
-      var otherPort = ui.helper.data("port");
-      var oldLength = this.model.parentNode.parentGraph.edges.length;
-
-      if (otherPort.parentNode.parentGraph.dataflow !== this.model.parentNode.parentGraph.dataflow) {
-        // from another widget
-        return false;
-      }
-
-      var route = 0;
-      if (ui.helper.data("route") !== undefined) {
-        route = ui.helper.data("route");
-      }
-
-      this.model.parentNode.parentGraph.edges.add({
-        id: otherPort.parentNode.id+":"+otherPort.id+"::"+this.model.parentNode.id+":"+this.model.id,
-        parentGraph: this.model.parentNode.parentGraph,
-        source: {
-          node: otherPort.parentNode.id,
-          port: otherPort.id
-        },
-        target: {
-          node: this.model.parentNode.id,
-          port: this.model.id
-        },
-        route: route
-      });
-      // Tells changeEdgeStop to remove to old edge
-      ui.helper.data("removeChangeEdge", (oldLength < this.model.parentNode.parentGraph.edges.length));
-    },
-    _holePosition: null,
-    holePosition: function(){
-      // this._holePosition gets reset when graph panned or node moved
-      if (!this._holePosition) {
-        if (!this.parent){
-          this.parent = this.options.parent;
-        }
-        var node = this.parent.model;
-        var graph = node.parentGraph;
-        var $graph = this.parent.graph.$el;
-        var index = this.$el.index();
-        var left = graph.get("panX") + node.get("x") + 18;
-        var top = graph.get("panY") + node.get("y") + 48 + index*20;
-        this._holePosition = { left:left, top:top };
-      }
-      return this._holePosition;
-    },
-    isConnected: false,
-    plugSetActive: function(){
-      try {
-        this.$(".dataflow-port-plug").draggable("enable");
-      } catch (e) { }
-      this.$(".dataflow-port-plug, .dataflow-port-hole").addClass("active");
-      this.isConnected = true;
-    },
-    plugCheckActive: function(){
-      var topEdge;
-      var topEdgeZ = -1;
-      this.model.parentNode.parentGraph.edges.each(function(edge){
-        if (edge.target === this.model) {
-          var z = edge.get("z");
-          if (z > topEdgeZ) {
-            topEdge = edge;
-            topEdgeZ = z;
-          }
-        }
-      }, this);
-      if (topEdge) {
-        this.bringToTop(topEdge);
-      } else {
-        try {
-          this.$(".dataflow-port-plug").draggable("disable");
-        } catch (e) { }
-        this.$(".dataflow-port-plug, .dataflow-port-hole").removeClass("active");
-        this.isConnected = false;
-      }
-    },
-    topRoute: 0,
-    bringToTop: function (edge) {
-      var route = edge.get("route");
-      if (route !== undefined) {
-        this.$(".dataflow-port-hole, .dataflow-port-plug").removeClass("route"+this.topRoute);
-        this.$(".dataflow-port-hole, .dataflow-port-plug").addClass("route"+route);
-        this.topRoute = route;
-      }
-    }
-  });
-
-  Input.CollectionView = Backbone.CollectionView.extend({
-    tagName: "ul",
-    itemView: Input.View
-  }); 
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Output = Dataflow.prototype.module("output");
-
-  // Dependencies
-  var Edge = Dataflow.prototype.module("edge");
- 
-  var template = 
-    '<span class="dataflow-port-label out" title="<%= description %>"><%= label %></span>'+
-    '<span class="dataflow-port-hole out" title="drag to make new wire"></span>'+
-    '<span class="dataflow-port-plug out" title="drag to edit wire"></span>';
-
-  var zoom = 1;
-
-  Output.View = Backbone.View.extend({
-    template: _.template(template),
-    tagName: "li",
-    className: "dataflow-port dataflow-out",
-    events: {
-      "click": "getTopEdge",
-      "drop":  "connectEdge",
-      "dragstart .dataflow-port-hole": "newEdgeStart",
-      "drag      .dataflow-port-hole": "newEdgeDrag",
-      "dragstop  .dataflow-port-hole": "newEdgeStop",
-      "dragstart .dataflow-port-plug": "changeEdgeStart",
-      "drag      .dataflow-port-plug": "changeEdgeDrag",
-      "dragstop  .dataflow-port-plug": "changeEdgeStop"
-    },
-    initialize: function (options) {
-      this.$el.html(this.template(this.model.toJSON()));
-      this.$el.addClass(this.model.get("type"));
-
-      this.parent = options.parent;
-
-      // Reset hole position
-      var node = this.parent.model;
-      var graph = node.parentGraph;
-      this.listenTo(node, "change:x change:y change:w", function(){
-        this._holePosition = null;
-      }.bind(this));
-      this.listenTo(graph, "change:panX change:panY", function(){
-        this._holePosition = null;
-      }.bind(this));
-
-      if (!this.model.parentNode.parentGraph.dataflow.editable) {
-        // No drag and drop
-        return;
-      }
-
-      var self = this;
-      this.$(".dataflow-port-plug").draggable({
-        cursor: "pointer",
-        helper: function(){
-          var helper = $('<span class="dataflow-port-plug out helper" />');
-          self.parent.graph.$el.append(helper);
-          return helper;
-        },
-        disabled: true,
-        // To prevent accidental disconnects
-        distance: 10,
-        delay: 100
-      });
-      this.$(".dataflow-port-hole").draggable({
-        cursor: "pointer",
-        helper: function(){
-          var helper = $('<span class="dataflow-port-plug in helper" />')
-            .data({port: self.model});
-          self.parent.graph.$el.append(helper);
-          return helper;
-        }
-      });
-      this.$el.droppable({
-        accept: ".dataflow-port-plug.out, .dataflow-port-hole.in",
-        activeClassType: "droppable-hover"
-      });
-    },
-    render: function () {
-      return this;
-    },
-    newEdgeStart: function(event, ui){
-      // Don't drag node
-      event.stopPropagation();
-      if (!ui) { return; }
-
-      ui.helper.data({
-        route: this.topRoute
-      });
-      this.previewEdge = new Edge.Model({
-        source: {
-          node: this.model.parentNode.id,
-          port: this.model.id
-        },
-        parentGraph: this.model.parentNode.parentGraph,
-        preview: true,
-        route: this.topRoute
-      });
-      this.previewEdgeView = new Edge.View({
-        model: this.previewEdge
-      });
-      var graphSVGElement = this.model.parentNode.parentGraph.view.$('.dataflow-svg-edges')[0];
-      graphSVGElement.appendChild(this.previewEdgeView.el);
-
-      zoom = this.model.parentNode.parentGraph.get('zoom');
-
-    },
-    newEdgeDrag: function(event, ui){
-      // Don't drag node
-      event.stopPropagation();
-      if (!this.previewEdgeView || !ui) {
-        return;
-      }
-      ui.position.top = event.clientY / zoom;
-      ui.position.left = event.clientX / zoom;
-      var df = this.model.parentNode.parentGraph.view.el;
-      ui.position.left += df.scrollLeft;
-      ui.position.top += df.scrollTop;
-      this.previewEdgeView.render({
-        left: ui.position.left - df.scrollLeft,
-        top: ui.position.top - df.scrollTop
-      });
-    },
-    newEdgeStop: function(event, ui){
-      // Don't drag node
-      event.stopPropagation();
-
-      // Clean up preview edge
-      this.previewEdgeView.remove();
-      delete this.previewEdge;
-      delete this.previewEdgeView;
-    },
-    getTopEdge: function() {
-      var topEdge;
-      var topZ = -1;
-      if (this.isConnected){
-        // Will get the top matching edge
-        this.model.parentNode.parentGraph.edges.each(function(edge){
-          var thisZ = edge.get("z");
-          if(edge.source === this.model && thisZ > topZ ){
-            topEdge = edge;
-            topZ = thisZ;
-          }
-          if (edge.view) {
-            edge.view.unhighlight();
-          }
-        }, this);
-        if (topEdge && topEdge.view) {
-          topEdge.view.bringToTop();
-        }
-      }
-      return topEdge;
-    },
-    changeEdgeStart: function(event, ui){
-      if (!ui) { return; }
-      // Don't drag node
-      event.stopPropagation();
-
-      if (this.isConnected){
-        var changeEdge = this.getTopEdge();
-        if (changeEdge){
-          // Remove edge
-          changeEdge.remove();
-
-          // Make preview
-          if (ui) {
-            ui.helper.data({
-              port: changeEdge.target,
-              route: changeEdge.get("route")
-            });
-          }
-          this.previewEdgeChange = new Edge.Model({
-            target: changeEdge.get("target"),
-            route: changeEdge.get("route"),
-            parentGraph: this.model.parentNode.parentGraph,
-            preview: true
-          });
-          this.previewEdgeChangeView = new Edge.View({
-            model: this.previewEdgeChange
-          });
-          var graphSVGElement = this.model.parentNode.parentGraph.view.$('.dataflow-svg-edges')[0];
-          graphSVGElement.appendChild(this.previewEdgeChangeView.el);
-
-          zoom = this.model.parentNode.parentGraph.get('zoom');
-        }
-      }
-    },
-    changeEdgeDrag: function(event, ui){
-      if (!ui) { return; }
-      // Don't drag node
-      event.stopPropagation();
-
-      if (this.previewEdgeChange) {
-        this.previewEdgeChangeView.render(ui.offset);
-        this.model.parentNode.parentGraph.view.sizeSVG();
-      }
-    },
-    changeEdgeStop: function(event, ui){
-      // Don't drag node
-      event.stopPropagation();
-
-      // Clean up preview edge
-      if (this.previewEdgeChange) {
-        this.previewEdgeChangeView.remove();
-        delete this.previewEdgeChange;
-        delete this.previewEdgeChangeView;
-      }
-    },
-    connectEdge: function(event, ui) {
-      // Dropped to this el
-      var otherPort = ui.helper.data("port");
-      var oldLength = this.model.parentNode.parentGraph.edges.length;
-
-      if (otherPort.parentNode.parentGraph.dataflow !== this.model.parentNode.parentGraph.dataflow) {
-        // from another widget
-        return false;
-      }
-
-      var route = 0;
-      if (ui.helper.data("route") !== undefined) {
-        route = ui.helper.data("route");
-      }
-
-      this.model.parentNode.parentGraph.edges.add({
-        id: this.model.parentNode.id+":"+this.model.id+"::"+otherPort.parentNode.id+":"+otherPort.id,
-        parentGraph: this.model.parentNode.parentGraph,
-        source: {
-          node: this.model.parentNode.id,
-          port: this.model.id
-        },
-        target: {
-          node: otherPort.parentNode.id,
-          port: otherPort.id
-        },
-        route: route
-      });
-      // Tells changeEdgeStop to remove to old edge
-      ui.helper.data("removeChangeEdge", (oldLength < this.model.parentNode.parentGraph.edges.length));
-    },
-    _holePosition: null,
-    holePosition: function () {
-      // this._holePosition gets reset when graph panned or node moved
-      if (!this._holePosition) {
-        if (!this.parent){
-          this.parent = this.options.parent;
-        }
-        var node = this.parent.model;
-        var graph = node.parentGraph;
-        var $graph = this.parent.graph.$el;
-        var index = this.$el.index();
-        var width = node.get("w") !== undefined ? node.get("w") : 175;
-        var left = graph.get("panX") + node.get("x") + width - 18;
-        var top = graph.get("panY") + node.get("y") + 48 + index*20;
-        this._holePosition = { left:left, top:top };
-      }
-      return this._holePosition;
-    },
-    isConnected: false,
-    plugSetActive: function(){
-      try {
-        this.$(".dataflow-port-plug").draggable("enable");
-      } catch (e) { }
-      this.$(".dataflow-port-plug, .dataflow-port-hole").addClass("active");
-      this.isConnected = true;
-    },
-    plugCheckActive: function(){
-      var topEdge;
-      var topEdgeZ = -1;
-      this.model.parentNode.parentGraph.edges.each(function(edge){
-        if (edge.source === this.model) {
-          var z = edge.get("z");
-          if (z > topEdgeZ) {
-            topEdge = edge;
-            topEdgeZ = z;
-          }
-        }
-      }, this);
-      if (topEdge) {
-        this.bringToTop(topEdge);
-      } else {
-        try {
-          this.$(".dataflow-port-plug").draggable("disable");
-        } catch (e) { }
-        this.$(".dataflow-port-plug, .dataflow-port-hole").removeClass("active");
-        this.isConnected = false;
-      }
-    },
-    topRoute: 0,
-    bringToTop: function (edge) {
-      var route = edge.get("route");
-      if (route !== undefined) {
-        this.$(".dataflow-port-hole").removeClass("route"+this.topRoute);
-        this.$(".dataflow-port-hole").addClass("route"+route);
-        this.topRoute = route;
-      }
-    }
-  });
-
-  Output.CollectionView = Backbone.CollectionView.extend({
-    tagName: "ul",
-    itemView: Output.View
-  }); 
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Edge = Dataflow.prototype.module("edge");
-
-  // Thanks bobince http://stackoverflow.com/a/3642265/592125
-  var makeSvgElement = function(tag, attrs) {
-    var svg = document.createElementNS('http://www.w3.org/2000/svg', tag);
-    for (var k in attrs) {
-      if (k === "xlink:href") {
-        // Pssh namespaces...
-        svg.setAttributeNS('http://www.w3.org/1999/xlink','href', attrs[k]);
-      } else {
-        svg.setAttribute(k, attrs[k]);
-      }
-    }
-    return svg;
-  };
-
-  var addClass = function (el, name) {
-    if (el.classList) {
-      el.classList.add(name);
-    } else {
-      el.className = "dataflow-edge " + name;
-    }
-  };
-
-  var removeClass = function (el, name) {
-    if (el.classList) {
-      el.classList.remove(name);
-    } else {
-      el.className = "dataflow-edge"; 
-    }
-  };
-  
-  Edge.View = Backbone.View.extend({
-    tagName: "div",
-    className: "dataflow-edge",
-    positions: null,
-    initialize: function() {
-      this.positions = {
-        from: null, 
-        to: null
-      };
-      // Render on source/target view move
-      if (this.model.source) {
-        this.model.source.parentNode.on("change:x change:y change:w", this.render, this);
-        // this.model.source.parentNode.inputs.on("add remove", this.render, this);
-        // this.model.source.parentNode.outputs.on("add remove", this.render, this);
-      }
-      if (this.model.target) {
-        this.model.target.parentNode.on("change:x change:y", this.render, this);
-      }
-      // Set port plug active
-      if (this.model.source && this.model.source.view) {
-        // Port plug active
-        this.model.source.view.plugSetActive();
-        // Port hole color
-        this.model.source.view.bringToTop(this.model);
-      }
-      if (this.model.target && this.model.target.view) {
-        // Port plug active
-        this.model.target.view.plugSetActive();
-        // Port hole color
-        this.model.target.view.bringToTop(this.model);
-      }
-      // Made SVG elements
-      this.el = makeSvgElement("g", {
-        "class": "dataflow-edge"
-      });
-      this.elEdge = makeSvgElement("path", {
-        "class": "dataflow-edge-wire"
-      });
-      this.elShadow = makeSvgElement("path", {
-        "class": "dataflow-edge-shadow"
-      });
-
-      // Color route
-      if (this.model.get("route") !== undefined) {
-        this.elEdge.setAttribute("class", "dataflow-edge-wire route"+this.model.get("route"));
-      }
-      // Change color on route change
-      var self = this;
-      this.model.on("change:route", function(){
-        self.elEdge.setAttribute("class", "dataflow-edge-wire route"+self.model.get("route"));
-        self.bringToTop();
-      });
-
-      this.el.appendChild(this.elShadow);
-      this.el.appendChild(this.elEdge);
-
-      // Click handler
-      this.el.addEventListener("click", function(event){
-        self.click(event);
-      });
-
-      // Listen for select
-      this.listenTo(this.model, "change:selected", this.selectedChange);
-
-    },
-    render: function(previewPosition){
-      var source = this.model.source;
-      var target = this.model.target;
-      var dataflowParent, graphPos;
-      if (source) {
-        this.positions.from = source.view.holePosition();
-      }
-      else {
-        // Preview 
-        // TODO: match zoom
-        dataflowParent = this.model.parentGraph.dataflow.$el.parent().position();
-        graph = this.model.parentGraph.view.$el;
-        this.positions.from = {
-          left: graph.scrollLeft() + previewPosition.left - 5 - dataflowParent.left,
-          top:  graph.scrollTop()  + previewPosition.top + 5 - dataflowParent.top
-        };
-      }
-      if (target) {
-        this.positions.to = target.view.holePosition();
-      } else {
-        // Preview
-        dataflowParent = this.model.parentGraph.dataflow.$el.parent().position();
-        graph = this.model.parentGraph.view.$el;
-        this.positions.to = {
-          left: graph.scrollLeft() + previewPosition.left + 15 - dataflowParent.left,
-          top:  graph.scrollTop()  + previewPosition.top + 5 - dataflowParent.top
-        };
-      }
-      // No half-pixels
-      // this.positions.from.left = Math.floor(this.positions.from.left);
-      // this.positions.from.top = Math.floor(this.positions.from.top);
-      // this.positions.to.left = Math.floor(this.positions.to.left);
-      // this.positions.to.top = Math.floor(this.positions.to.top);
- 
-      // Make and apply the path
-      var pathD = this.edgePath(this.positions);
-      this.elEdge.setAttribute("d", pathD);
-      this.elShadow.setAttribute("d", pathD);
-      // Reset bounding box
-      if (this.model.parentGraph && this.model.parentGraph.view){
-        this.model.parentGraph.view.sizeSVG();
-      }
-    },
-    fade: function(){
-      if (this.model.source.parentNode.get("selected") || this.model.target.parentNode.get("selected")) {
-        return;
-      }
-      addClass(this.el, "fade");
-    },
-    unfade: function(){
-      removeClass(this.el, "fade");
-    },
-    selectedChange: function () {
-      if (this.model.get("selected")){
-        this.highlight();
-      } else {
-        this.unhighlight();
-      }
-      this.model.parentGraph.trigger("selectionChanged");
-    },
-    highlight: function(){
-      addClass(this.el, "highlight");
-    },
-    unhighlight: function(){
-      removeClass(this.el, "highlight");
-    },
-    edgePath: function(positions){
-      var extend = 20;
-      var x = (positions.to.left-extend) - (positions.from.left+extend);
-      var halfX = Math.floor(x/2);
-      var halfX2 = x-halfX;
-      var y = positions.to.top - positions.from.top;
-      var halfY = Math.floor(y/2);
-      var halfY2 = y-halfY;
-
-      var control1 = "";
-      var control2 = "";
-
-      // Todo: check if this wire path is occupied, if so shift it over
-
-      if (Math.abs(y) > Math.abs(x)) {
-        // More vertical travel
-        if (y > 0) {
-          if (x > 0) {
-            control1 = " L " + (positions.from.left+extend+halfX) + " " + (positions.from.top+halfX);
-            control2 = " L " + (positions.to.left-extend-halfX2) + " " + (positions.to.top-halfX2);
-          } else if (x < 0) {
-            control1 = " L " + (positions.from.left+extend+halfX) + " " + (positions.from.top-halfX);
-            control2 = " L " + (positions.to.left-extend-halfX2) + " " + (positions.to.top+halfX2);
-          }
-        } else if (y < 0) {
-          if (x > 0) {
-            control1 = " L " + (positions.from.left+extend+halfX) + " " + (positions.from.top-halfX);
-            control2 = " L " + (positions.to.left-extend-halfX2) + " " + (positions.to.top+halfX2);
-          } else if (x < 0) {
-            control1 = " L " + (positions.from.left+extend+halfX) + " " + (positions.from.top+halfX);
-            control2 = " L " + (positions.to.left-extend-halfX2) + " " + (positions.to.top-halfX2);
-          }          
-        }
-      } else if (Math.abs(y) < Math.abs(x)) {
-        // More horizontal travel
-        if (x > 0) {
-          if (y > 0) {
-            control1 = " L " + (positions.from.left+extend+halfY) + " " + (positions.from.top+halfY);
-            control2 = " L " + (positions.to.left-extend-halfY2) + " " + (positions.to.top-halfY2);
-          } else if (y < 0) {
-            control1 = " L " + (positions.from.left+extend-halfY) + " " + (positions.from.top+halfY);
-            control2 = " L " + (positions.to.left-extend+halfY2) + " " + (positions.to.top-halfY2);
-          }
-        } else if (x < 0) {
-          if (y > 0) {
-            control1 = " L " + (positions.from.left+extend-halfY) + " " + (positions.from.top+halfY);
-            control2 = " L " + (positions.to.left-extend+halfY2) + " " + (positions.to.top-halfY2);
-          } else if (y < 0) {
-            control1 = " L " + (positions.from.left+extend+halfY) + " " + (positions.from.top+halfY);
-            control2 = " L " + (positions.to.left-extend-halfY2) + " " + (positions.to.top-halfY2);
-          }          
-        }
-      } 
-
-      return "M " + positions.from.left + " " + positions.from.top + 
-        " L " + (positions.from.left+extend) + " " + positions.from.top +
-        control1 + control2 +
-        " L " + (positions.to.left-extend) + " " + positions.to.top +
-        " L " + positions.to.left + " " + positions.to.top;
-    },
-    remove: function(){
-      var source = this.model.source;
-      var target = this.model.target;
-      // Remove listeners
-      if (source) {
-        source.parentNode.off(null, null, this);
-      }
-      if (target) {
-        target.parentNode.off(null, null, this);
-      }
-      // Check if port plug is still active
-      if (source) {
-        source.view.plugCheckActive();
-      }
-      if (target) {
-        target.view.plugCheckActive();
-      }
-      // Remove element
-      this.el.parentNode.removeChild(this.el);
-    },
-    click: function(event){
-      // Don't click graph
-      if (event) {
-        event.stopPropagation();
-      }
-      var selected, leaveUnpinned;
-      if (event && (event.ctrlKey || event.metaKey)) {
-        // Toggle
-        selected = this.model.get("selected");
-        selected = !selected;
-        leaveUnpinned = true;
-      } else {
-        // Deselect all and select this
-        selected = true;
-        this.model.parentGraph.nodes.invoke("set", {selected:false});
-        this.model.collection.invoke("set", {selected:false});
-      }
-      this.model.set({selected:selected});
-      if (selected) {
-        this.bringToTop();
-        this.model.trigger("select");
-        this.unfade();
-        this.showInspector(leaveUnpinned);
-      } else {
-        this.hideInspector();
-      }
-      // Fade all and highlight related
-      this.model.parentGraph.view.fade();
-    },
-    bringToTop: function(){
-      this.model.bringToTop();
-      var parent = this.el.parentNode;
-      if (parent) {
-        parent.appendChild(this.el);
-      }
-
-      // Port hole color
-      this.model.source.view.bringToTop(this.model);
-      this.model.target.view.bringToTop(this.model);
-    },
-    inspector: null,
-    getInspector: function () {
-      if (!this.inspector) {
-        var inspect = new Edge.InspectView({model:this.model});
-        var Card = Dataflow.prototype.module("card");
-        this.inspector = new Card.Model({
-          dataflow: this.model.parentGraph.dataflow,
-          card: inspect
-        });
-      }
-      return this.inspector;
-    },
-    showInspector: function(leaveUnpinned){
-      this.model.parentGraph.dataflow.addCard( this.getInspector(), leaveUnpinned );
-    },
-    hideInspector: function () {
-      this.model.parentGraph.dataflow.removeCard( this.getInspector() );
-    }
-
-  });
-
-}(Dataflow) );
-
-(function(Dataflow){
-
-  var Card = Dataflow.prototype.module("card");
-
-  Card.Model = Backbone.Model.extend({
-    defaults: {
-      pinned: false
-    },
-    initialize: function () {
-      this.dataflow = this.get("dataflow");
-    },
-    hide: function () {
-      this.dataflow.shownCards.remove( this );
-    }
-  });
-
-  Card.Collection = Backbone.Collection.extend({
-    model: Card.Model
-  });
-
-}(Dataflow));
-
-(function(Dataflow){
-
-  var Card = Dataflow.prototype.module("card");
-
-  var template = 
-    '<div class="dataflow-card-control">'+
-      '<button title="pin" class="dataflow-card-pin icon-pushpin"></button>'+
-      '<button title="close" class="dataflow-card-close icon-remove"></button>'+
-    '</div>';
-
-  Card.View = Backbone.View.extend({
-    tagName: "div",
-    className: "dataflow-card",
-    template: _.template(template),
-    events: {
-      "click .dataflow-card-pin": "togglePin",
-      "click .dataflow-card-close": "hide"
-    },
-    initialize: function () {
-      this.$el.html(this.template());
-      this.card = this.model.get("card");
-      this.$el.append(this.card.el);
-      this.listenTo(this.model, "change:pinned", this.pinnedChanged);
-      this.pinnedChanged();
-    },
-    animate: function (timestamp) {
-      if (typeof this.card.animate === "function") {
-        this.card.animate(timestamp);
-      }
-    },
-    togglePin: function () {
-      var pinned = !this.model.get("pinned");
-      this.model.set("pinned", pinned);
-      if (!pinned) {
-        this.hide();
-      }
-    },
-    pinnedChanged: function () {
-      if ( this.model.get("pinned") ) {
-        this.$(".dataflow-card-pin").addClass("active");
-      } else {
-        this.$(".dataflow-card-pin").removeClass("active");
-      }
-    },
-    hide: function () {
-      this.model.hide();
-    },
-    remove: function () {
-      this.$el.detach();
-    }
-  });
-
-  // requestAnimationFrame shim
-  if (!window.requestAnimationFrame) {
-    window.requestAnimationFrame = (function(){
-      return  window.requestAnimationFrame       ||
-              window.webkitRequestAnimationFrame ||
-              window.mozRequestAnimationFrame    ||
-              window.oRequestAnimationFrame      ||
-              window.msRequestAnimationFrame     ||
-              function( callback ){
-                window.setTimeout(callback, 1000 / 20);
-              };
-    })();
-  }
-
-  Card.CollectionView = Backbone.CollectionView.extend({
-    tagName: "div",
-    className: "dataflow-cards",
-    itemView: Card.View,
-    prepend: true,
-    initialize: function () {
-      // Super
-      Backbone.CollectionView.prototype.initialize.apply(this, arguments);
-      // Set up animation loop
-      var loop = function (timestamp) {
-        window.requestAnimationFrame(loop);
-        // Call all visible
-        this.collection.each(function(card){
-          if (card.view) {
-            card.view.animate(timestamp);
-          }
-        });
-      }.bind(this);
-      loop();
-    },
-    bringToTop: function (card) {
-      this.$el.prepend( card.view.el );
-    }
-  });
-
-}(Dataflow));
-
-(function (Dataflow) {
-  var MenuItem = Backbone.Model.extend({
-    defaults: {
-      label: '',
-      icon: '',
-      action: null
-    }
-  });
-
-  var Menu = Backbone.Collection.extend({
-    model: MenuItem
-  });
-
-  var Card = Dataflow.prototype.module('card');
-  var MenuCard = Dataflow.prototype.module('menucard');
-  MenuCard.Model = Card.Model.extend({
-    initialize: function () {
-      this.menu = new Menu();
-      Card.Model.prototype.initialize.call(this);
-    }
-  });
-}(Dataflow));
-
-(function (Dataflow) {
-  var Card = Dataflow.prototype.module('card');
-  var MenuCard = Dataflow.prototype.module('menucard');
-
-  var MenuItemView = Backbone.View.extend({
-    tagName: 'li',
-    template: '<button><i class="icon-<%- icon %>"></i><span class="name"><%- label %></span></button>',
-    events: {
-      'click': 'clicked'
-    },
-    render: function () {
-      this.$el.html(_.template(this.template, this.model.toJSON()));
-    },
-    clicked: function () {
-      if (!this.model.get('action')) {
-        return;
-      }
-      this.model.get('action')();
-    }
-  });
-
-  MenuCard.View = Card.View.extend({
-    initialize: function () {
-      this.model.set('card', new Backbone.CollectionView({
-        tagName: 'ul',
-        className: 'dataflow-menu',
-        collection: this.model.menu,
-        itemView: MenuItemView
-      }));
-      Card.View.prototype.initialize.call(this);
-    }
-  });
-}(Dataflow));
-
-( function(Dataflow) {
-
-  var Node = Dataflow.prototype.module("node");
-
-  var template = 
-    '<div class="dataflow-plugin-inspector-title">'+
-      '<h1 class="dataflow-node-inspector-label" title="click to edit"><%- label %></h1>'+
-      '<h2 class="dataflow-node-inspector-type"><%- type %></h2>'+
-    '</div>'+
-    // '<div class="dataflow-node-inspector-controls">'+
-    //   '<button class="dataflow-node-delete">delete</button>'+
-    // '</div>'+
-    '<div class="dataflow-node-inspector-inputs"></div>';
-
-  var makeEditable = function ($el, model, attribute) {
-    $el[0].contentEditable = true;
-    var initial = $el.text();
-    var apply = function(){
-      model.set(attribute, $el.text());
-    };
-    var revert = function(){
-      $el.text(initial);
-    };
-    $el
-      .focus(function(event){
-        initial = $el.text();
-      })
-      .blur(function(event){
-        apply();
-      })
-      .keydown(function(event){
-        if (event.which === 27) {
-          // ESC
-          revert();
-          $el.blur();
-        } else if (event.which === 13) {
-          // Enter
-          $el.blur();
-        }
-      });
-  };
-
-  Node.InspectView = Backbone.View.extend({
-    template: _.template(template),
-    className: "dataflow-node-inspector",
-    events: {
-    },
-    initialize: function(options) {
-      this.$el.html(this.template(this.model.toJSON()));
-      // Make input list
-      var $inputs = this.$el.children(".dataflow-node-inspector-inputs");
-      this.model.inputs.each(function(input){
-        if (input.view && input.view.$input) {
-          $inputs.append( input.view.$input );
-        }
-      }, this);
-
-      makeEditable(this.$(".dataflow-node-inspector-label"), this.model, "label");
-    },
-    render: function() {
-      return this;
-    },
-    removeModel: function(){
-      this.model.remove();
-    }
-  });
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Edge = Dataflow.prototype.module("edge");
-
-  var template = 
-    '<div class="dataflow-plugin-inspector-title">'+
-      '<h1>Edge</h1>'+
-      '<h2 class="dataflow-edge-inspector-id"><%= id %></h2>'+
-    '</div>'+
-    '<div class="dataflow-edge-inspector-route-choose"></div>'+
-    '<ul class="dataflow-edge-inspector-events"></ul>';
-
-  var logTemplate = '<li class="<%- type %>"><%- group %><%- data %></li>';
-  
-  Edge.InspectView = Backbone.View.extend({
-    tagName: "div",
-    className: "dataflow-edge-inspector",
-    positions: null,
-    template: _.template(template),
-    showLogs: 20,
-    initialize: function() {
-      var templateData = this.model.toJSON();
-      if (this.model.id) {
-        templateData.id = this.model.id.replace('->', '&#8594;');
-      }
-      this.$el.html( this.template(templateData) );
-
-      var $choose = this.$el.children(".dataflow-edge-inspector-route-choose");
-      this.$log = this.$el.children('.dataflow-edge-inspector-events');
-
-      var changeRoute = function(event){
-        var route = $(event.target).data("route");
-        this.model.set("route", route);
-      }.bind(this);
-      
-      // Make buttons
-      for (var i=0; i<12; i++) {
-        var button = $("<button>")
-          .data("route", i)
-          .addClass("route"+i)
-          .click(changeRoute);
-        if (i === this.model.get("route")){
-          button.addClass("active");
-        }
-        $choose.append(button);
-      }
-
-      this.listenTo(this.model, "change:route", this.render);
-      this.listenTo(this.model, "remove", this.remove);
-      this.listenTo(this.model.get('log'), 'add', function () { 
-        this.logDirty = true; 
-      }.bind(this));
-      this.renderLog();
-    },
-    render: function(){
-      var route = this.model.get("route");
-      var $choose = this.$el.children(".dataflow-edge-inspector-route-choose");
-      $choose.children(".active").removeClass("active");
-      $choose.children(".route"+route).addClass("active");
-      return this;
-    },
-    logDirty: false,
-    animate: function (timestamp) {
-      // Called from dataflow.shownCards collection (card-view.js)
-      if (this.logDirty) {
-        this.logDirty = false;
-        this.renderLog();
-      }
-    },
-    renderLog: function () {
-      var frag = document.createDocumentFragment();
-      var logs = this.model.get('log');
-      var logsToShow;
-      if (logs.length > this.showLogs) {
-        logsToShow = logs.rest(logs.length - this.showLogs);
-      } else {
-        logsToShow = logs.toArray();
-      }
-      //JANK warning, already taking 14ms with 20 log items
-      _.each(logsToShow, function (item) {
-        this.renderLogItem(item, frag);
-      }, this);
-      this.$log.html(frag);
-      this.$log[0].scrollTop = this.$log[0].scrollHeight;
-    },
-    renderLogItem: function (item, fragment) {
-      var html = $(_.template(logTemplate, item.toJSON()));
-      if (fragment && fragment.appendChild) {
-        fragment.appendChild(html[0]);
-      } else {
-        this.$log.append(html);
-        this.$log[0].scrollTop = this.$log[0].scrollHeight;
-      }
-    }
-  });
-
-}(Dataflow) );
-
-(function (Dataflow) {
-  var Menu = Dataflow.prototype.plugin('menu');
-  var MenuCard = Dataflow.prototype.module('menucard');
-
-  Menu.initialize = function (dataflow) {
-    Menu.card = new MenuCard.Model({
-      dataflow: dataflow,
-      pinned: true
-    });
-    Menu.card.view = new MenuCard.View({
-      model: Menu.card
-    });
-
-    Menu.addPlugin = function (info) {
-      Menu.card.menu.add({
-        id: info.id,
-        icon: info.icon,
-        label: info.name,
-        showLabel: false,
-        action: function () {
-          Menu.card.hide();
-          dataflow.showPlugin(info.id);
-        }
-      });
-    };
-
-    Menu.disablePlugin = function (name) {
-      if (!this.card.menu.get(name)) {
-        return;
-      }
-      this.card.menu.remove(name);
-
-      if (dataflow.plugins[name] && dataflow.plugins[name].card) {
-        // Hide any open cards from the plugin
-        dataflow.plugins[name].card.hide();
-      }
-    };
-  };
-}(Dataflow));
-
-( function(Dataflow) {
-
-  var Edit = Dataflow.prototype.plugin("edit");
-
-  Edit.initialize = function(dataflow){
-
-    var buttons = $(
-      '<div class="dataflow-plugin-edit">'+
-        '<button class="selectall">Select All (A)</button><br />'+
-        '<button class="cut">Cut (X)</button><br />'+
-        '<button class="copy">Copy (C)</button><br />'+
-        '<button class="paste">Paste (V)</button><br />'+
-      '</div>'
-    );
-
-    // dataflow.addPlugin({
-    //   id: "edit", 
-    //   name: "edit", 
-    //   menu: buttons, 
-    //   icon: "edit"
-    // });
-    
-    //
-    // A
-    //
-
-    function selectAll(){
-      dataflow.currentGraph.nodes.invoke("set", {selected:true});
-    }
-    buttons.children(".selectall").click(selectAll);
-    Edit.selectAll = selectAll;
-
-    //
-    // X
-    //
-    
-    Edit.removeSelected = function () {
-      var toRemove = dataflow.currentGraph.nodes.where({selected:true});      
-      _.each(toRemove, function(node){
-        node.remove();
-      });
-    };
-
-    function cut(){
-      // Copy selected
-      copy();
-      // Move back so paste in original place
-      _.each(copied.nodes, function(node){
-        node.x -= 50;
-        node.y -= 50;
-      });
-      // Remove selected
-      Edit.removeSelected();
-    }
-    buttons.children(".cut").click(cut);
-    Edit.cut = cut;
-    
-    
-
-    function removeEdge(){
-      var selected = dataflow.currentGraph.edges.where({selected:true});
-      selected.forEach(function(edge){
-        edge.remove();
-      });
-    }
-    Edit.removeEdge = removeEdge;
-
-    //
-    // C
-    //
-
-    var copied = {};
-    function copy(){
-      copied = {};
-      // nodes
-      copied.nodes = dataflow.currentGraph.nodes.where({selected:true});
-      copied.nodes = JSON.parse(JSON.stringify(copied.nodes));
-      // edges
-      copied.edges = [];
-      dataflow.currentGraph.edges.each(function(edge){
-        // Only copy the edges between nodes being copied
-        var connectedSource = _.any(copied.nodes, function(node){
-          return (edge.source.parentNode.id === node.id);
-        });
-        var connectedTarget = _.any(copied.nodes, function(node){
-          return (edge.target.parentNode.id === node.id);
-        });
-        if (connectedSource || connectedTarget){
-          copied.edges.push( JSON.parse(JSON.stringify(edge)) );
-        }
-      });
-    }
-    buttons.children(".copy").click(copy);
-    Edit.copy = copy;
-
-    //
-    // V
-    //
-
-    function paste(){
-      if (copied && copied.nodes && copied.nodes.length > 0) {
-        // Deselect all
-        dataflow.currentGraph.nodes.invoke("set", {selected:false});
-        // Add nodes
-        _.each(copied.nodes, function(node){
-          // Offset pasted
-          node.x += 50;
-          node.y += 50;
-          node.parentGraph = dataflow.currentGraph;
-          node.selected = true;
-          var oldId = node.id;
-          // Make unique id
-          while (dataflow.currentGraph.nodes.get(node.id)){
-            node.id++;
-          }
-          // Update copied edges with new node id
-          if (oldId !== node.id) {
-            _.each(copied.edges, function(edge){
-              if (edge.source.node === oldId) {
-                edge.source.node = node.id;
-              }
-              if (edge.target.node === oldId) {
-                edge.target.node = node.id;
-              }
-            });
-          }
-          var newNode = new dataflow.nodes[node.type].Model(node);
-          dataflow.currentGraph.nodes.add(newNode);
-          // Select new node
-          newNode.view.bringToTop();
-          newNode.view.highlight();
-        });
-        // Add edges
-        _.each(copied.edges, function(edge){
-          // Clone edge object (otherwise weirdness on multiple pastes)
-          edge = JSON.parse(JSON.stringify(edge));
-          // Add it
-          edge.parentGraph = dataflow.currentGraph;
-          edge.id = edge.source.node+":"+edge.source.port+"::"+edge.target.node+":"+edge.target.port;
-          var newEdge = new dataflow.modules.edge.Model(edge);
-          dataflow.currentGraph.edges.add(newEdge);
-        });
-      }
-      // Rerender edges
-      _.defer(function(){
-        dataflow.currentGraph.view.rerenderEdges();
-      });
-    }
-    buttons.children(".paste").click(paste);
-    Edit.paste = paste;
-
-
-
-
-
-
-    // Add context actions for actionbar
-
-    dataflow.addContext({
-      id: "cut",
-      icon: "cut",
-      label: "cut",
-      action: cut,
-      contexts: ["node", "nodes"]
-    });
-    dataflow.addContext({
-      id: "copy",
-      icon: "copy",
-      label: "copy",
-      action: copy,
-      contexts: ["node", "nodes"]
-    });
-    dataflow.addContext({
-      id: "paste",
-      icon: "paste",
-      label: "paste",
-      action: paste,
-      contexts: ["node", "nodes"]
-    });
-
-    dataflow.addContext({
-      id: "edgeRemove",
-      icon: "remove",
-      label: "remove edge",
-      action: removeEdge,
-      contexts: ["edge"]
-    });
-
-    dataflow.addContext({
-      id: "edgeRemove",
-      icon: "remove",
-      label: "remove edges",
-      action: removeEdge,
-      contexts: ["edges"]
-    });
-
-    Edit.onSearch = function (text, callback) {
-      if (!dataflow.currentGraph) {
-        return;
-      }
-      var results = [];
-      dataflow.currentGraph.nodes.each(function (node) {
-        if (node.get('label').toLowerCase().indexOf(text.toLowerCase()) === -1) {
-          return;
-        }
-        results.push({
-          source: 'edit',
-          icon: 'sign-blank',
-          label: node.get('label'),
-          description: node.type,
-          action: function () {
-            node.view.select();
-          }
-        });
-      });
-      callback(results);
-    };
-
-  };
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Elements = Dataflow.prototype.plugin("elements");
-
-  Elements.list = [
-    {type: "div",    attributes: ["id", "class", "style"], events: ["pointermove", "pointerover", "pointerout"]},
-    {type: "button", attributes: ["id", "class", "style"], events: ["pointerdown", "pointerup"]}
-  ];
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Library = Dataflow.prototype.plugin("library");
-
-  Library.initialize = function(dataflow){
-
-    var $container = $('<div class="dataflow-plugin-overflow">');
-    var $library = $('<ul class="dataflow-plugin-library" />');
-    $container.append($library);
-
-    Library.excluded = ["base", "base-resizable"];
-
-    var addNode = function(node, x, y) {
-      return function(){
-        // Deselect others
-        dataflow.currentGraph.view.$(".dataflow-node").removeClass("ui-selected");
-
-        // Current zoom
-        zoom = dataflow.currentGraph.get('zoom');
-
-        // Find vacant id
-        var id = 1;
-        while (dataflow.currentGraph.nodes.get(id)){
-          id++;
-        }
-        // Position
-        x = x===undefined ? 200 : x;
-        y = y===undefined ? 200 : y;
-        x = x/zoom - dataflow.currentGraph.get("panX");
-        y = y/zoom - dataflow.currentGraph.get("panY");
-
-        // Add node
-        var newNode = new node.Model({
-          id: id,
-          x: x,
-          y: y,
-          parentGraph: dataflow.currentGraph
-        });
-        dataflow.currentGraph.nodes.add(newNode);
-        // Select and bring to top
-        newNode.view.select();
-      };
-    };
-
-    var addElement = function (info) {
-
-    };
-
-    var itemTemplate = '<li><a class="button add"><i class="icon-plus"></i></a><span class="name"><%- name %></span><span class="description"><%-description %></span></li>';
-
-    var addLibraryItem = function(name, node) {
-      var $item = $(_.template(itemTemplate, {
-        name: name,
-        description: node.description
-      }));
-      var addButton = $('.button', $item)
-        .attr("title", "click or drag")
-        .draggable({
-          helper: function(){
-            var helper = $('<div class="dataflow-node helper"><div class="dataflow-node-title">'+name+'</div></div>');
-            dataflow.$el.append(helper);
-            return helper;
-          },
-          stop: function(event, ui) {
-            addNode(node, ui.position.left, ui.position.top).call();
-          }
-        })
-        .click(addNode(node));
-      $library.append($item);
-    };
-
-    var update = function(options){
-      options = options ? options : {};
-      Library.excluded = options.exclude ? options.exclude : Library.excluded;
-
-      $library.empty();
-      var sortedLibrary = _.sortBy(Object.keys(dataflow.nodes), function (name) {
-        return name;
-      });
-      _.each(sortedLibrary, function (name) {
-        if (Library.excluded.indexOf(name) !== -1) {
-          return;
-        }
-        addLibraryItem(name, dataflow.nodes[name]);
-      });
-    };
-    update();
-
-    dataflow.addPlugin({
-      id: "library", 
-      name: "", 
-      menu: $container, 
-      icon: "plus",
-      pinned: false
-    });
-
-    Library.update = update;
-
-    Library.onSearch = function (text, callback) {
-      var results = [];
-      _.each(dataflow.nodes, function (node, name) {
-        if (Library.excluded.indexOf(name) !== -1) {
-          return;
-        }
-        if (name.toLowerCase().indexOf(text.toLowerCase()) === -1) {
-          return;
-        }
-        results.push({
-          source: 'library',
-          icon: 'plus',
-          action: function () {
-            addNode(node).call();
-          },
-          label: name,
-          description: node.description
-        });
-      });
-      callback(results);
-    };
-
-  };
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  var Source = Dataflow.prototype.plugin("source");
-
-  // Whether the graph may be updated via the source form
-  Source.updateAllowed = true;
-
-  Source.initialize = function(dataflow){
-    var $form = $( 
-      '<form class="dataflow-plugin-view-source">'+
-        '<div style="">'+
-          '<textarea class="code" style="width:99%; height:400px;; margin:0; padding: 0;"></textarea><br/>'+
-        '</div>'+
-        '<input class="apply" type="submit" value="apply changes" style="position: absolute; right:5px; bottom:5px;" />'+
-      '</form>'
-    );
-    var $code = $form.find(".code");
-
-    $code.keydown(function(event){
-      // Don't select / copy / paste nodes in the graph
-      event.stopPropagation();
-    });
-
-    dataflow.addPlugin({
-      id: "source", 
-      name: "", 
-      menu: $form, 
-      icon: "code",
-      pinned: true
-    });
-
-    Source.show = function(source) {
-      var scrollBackTop = $code.prop("scrollTop");
-      $code.val( source );
-      $code.scrollTop( scrollBackTop );
-    };
-
-    var showGraph = function(graph){
-      if (dataflow.graph) {
-        Source.show( JSON.stringify(dataflow.graph.toJSON(), null, "  ") );
-      }
-    };
-
-    // Method for setting graph change listeners on or off
-    Source.listeners = function(boo){
-      if (boo) {
-        // On change update code view
-        dataflow.on("change", showGraph);
-      } else {
-        // Custom
-        dataflow.off("change", showGraph);
-      }
-    };
-    // By default we listen to graph changes
-    Source.listeners(true);
-
-    // Whether to allow updating the graph from the form
-    Source.allowUpdate = function (allowed) {
-      var $button = $form.find('.apply');
-      if (allowed) {
-        Source.updateAllowed = true;
-        $button.show();
-        $code.removeAttr('readonly');
-        return;
-      }
-      Source.updateAllowed = false;
-      $button.hide();
-      $code.attr('readonly', 'readonly');
-    };
-
-    // Apply source to test graph
-    $form.submit(function(){
-      Source.updateGraph($code, dataflow);
-      return false;
-    });
-    
-  };
-
-  // Method for updating the graph from the form. Override
-  // this for systems using another graph format (for example,
-  // NoFlo).
-  Source.updateGraph = function ($code, dataflow) {
-    if (!Source.updateAllowed) {
-      return;
-    }
-    var graph;
-    try {
-      graph = JSON.parse( $code.val() );
-    } catch(error) {
-      dataflow.log("Invalid JSON");
-      return false;
-    }
-    if (graph) {
-      var g = dataflow.loadGraph(graph);
-      g.trigger("change");
-    }
-  };
-
-}(Dataflow) );
-
-( function(Dataflow) {
- 
-  var Log = Dataflow.prototype.plugin("log");
-
-  Log.initialize = function(dataflow){
-
-    var $log = $(
-      '<div class="dataflow-plugin-log dataflow-plugin-overflow">'+
-        '<ol class="loglist"></ol>'+
-      '</div>'
-    );
-
-    dataflow.addPlugin({
-      id: "log", 
-      name: "", 
-      menu: $log, 
-      icon: "th-list",
-      pinned: true
-    });
-
-    // Log message and scroll
-    function log(message){
-      message = _.escape(message);
-      $log.children(".loglist").append("<li>" + message + "</li>");
-      $log.scrollTop( $log.prop("scrollHeight") );
-    }
-
-    Log.add = log;
-
-    var logged = function(message){
-      log("log: " + message);
-    };
-    var nodeAdded = function(graph, node){
-      log("node added: " + node.toString());
-    };
-    var nodeRemoved = function(graph, node){
-      log("node removed: " + node.toString());
-    };
-    var edgeAdded = function(graph, edge){
-      log("edge added: " + edge.toString());
-    };
-    var edgeRemoved = function(graph, edge){
-      log("edge removed: " + edge.toString());
-    };
-
-
-
-    Log.listeners = function(boo){
-      if (boo) {
-        // Log
-        dataflow.on("log", logged);
-
-        // Log graph changes
-        dataflow.on("node:add", nodeAdded);
-        dataflow.on("node:remove", nodeRemoved);
-        dataflow.on("edge:add", edgeAdded);
-        dataflow.on("edge:remove", edgeRemoved);
-      } else {
-        // Custom for other integration
-        dataflow.off("log", logged);
-        dataflow.off("node:add", nodeAdded);
-        dataflow.off("node:remove", nodeRemoved);
-        dataflow.off("edge:add", edgeAdded);
-        dataflow.off("edge:remove", edgeRemoved);
-      }
-    };
-    Log.listeners(true);
-
-  };
-
-}(Dataflow) );
-
-( function(Dataflow) {
- 
-  var Inspector = Dataflow.prototype.plugin("inspector");
-
-  Inspector.initialize = function(dataflow){
-
-    function showInspector(){
-      var selectedNodes = dataflow.currentGraph.nodes.where({selected:true});
-      selectedNodes.forEach(function(node){
-        var inspector = node.view.getInspector();
-        inspector.set("pinned", true);
-        dataflow.addCard( inspector );
-      });
-      var selectedEdges = dataflow.currentGraph.edges.where({selected:true});
-      selectedEdges.forEach(function(edge){
-        var inspector = edge.view.getInspector();
-        inspector.set("pinned", true);
-        dataflow.addCard( inspector );
-      });
-    }
-
-    dataflow.addContext({
-      id: "inspector",
-      icon: "info-sign",
-      label: "inspect",
-      action: showInspector,
-      contexts: ["one", "twoplus"]
-    });
-
-  };
-
-}(Dataflow) );
-
-( function(Dataflow) {
-
-  // Load after other plugins
-  // TODO: track which widget has focus if multiple in page
- 
-  var KeyBinding = Dataflow.prototype.plugin("keybinding");
-  var Edit = Dataflow.prototype.plugin("edit");
-
-  KeyBinding.initialize = function(dataflow){
-
-    function zoomIn() {
-      if (dataflow && dataflow.currentGraph && dataflow.currentGraph.view) {
-        dataflow.currentGraph.view.zoomIn();
-      }
-    }
-
-    function zoomOut() {
-      if (dataflow && dataflow.currentGraph && dataflow.currentGraph.view) {
-        dataflow.currentGraph.view.zoomOut();
-      }
-    }
-
-    function zoomCenter() {
-      if (dataflow && dataflow.currentGraph && dataflow.currentGraph.view) {
-        dataflow.currentGraph.view.zoomCenter();
-      }
-    }
-
-    function keyDown(event) {
-      if (event.ctrlKey || event.metaKey) {
-        switch (event.which) {
-          case 189: // -
-            event.preventDefault();
-            zoomIn();
-            break;
-          case 187: // =
-            event.preventDefault();
-            zoomOut();
-            break;
-          case 48:
-            event.preventDefault();
-            zoomCenter();
-            break;
-          case 65: // a
-            Edit.selectAll();
-            break;
-          case 88: // x
-            Edit.cut();
-            break;
-          case 67: // c
-            Edit.copy();
-            break;
-          case 86: // v
-            Edit.paste();
-            break;
-          case 90: // z
-            break;
-          default:
-            break;
-        }
-      }
-    }
-
-    KeyBinding.listeners = function(boo){
-      if (boo) {
-        $(document).on('keydown', keyDown);
-      } else {
-        $(document).off('keydown', keyDown);
-      }
-    };
-    KeyBinding.listeners(true);
-
-  };
-
-}(Dataflow) );
-
-( function(Dataflow) {
-  var Notification = Dataflow.prototype.plugin('notification');
-  var webNotifications = window.webkitNotifications ? true : false;
-
-  // Request permission to show notifications
-  //
-  // Note that this function has to be called from some user
-  // interaction, like a click event.
-  //
-  // For example:
-  //
-  //     $button.click(function () {
-  //       dataflow.plugins.notification.requestPermission();
-  //       // Other things the button should do
-  //     });
-  Notification.requestPermission = function () {
-    if (!webNotifications) {
-      return;
-    }
-
-    if (Notification.hasPermission) {
-      // We already have the permission
-      return;
-    }
-
-    window.webkitNotifications.requestPermission();
-  };
-
-  // Check if user has granted the permission to show Web Notifications
-  Notification.hasPermission = function () {
-    if (!webNotifications) {
-      return false;
-    }
-
-    if (window.webkitNotifications.checkPermission() !== 0) {
-      return false;
-    }
-
-    return true;
-  };
-
-  // Show a notification. If user has granted the permission to show
-  // Web Notifications, then that is what will be used. Otherwise,
-  // the notification will fall back to console.log
-  Notification.notify = function (icon, title, message) {
-    if (!Notification.hasPermission()) {
-      if (!console || !console.log) {
-        // TODO: alert?
-        return;
-      }
-      console.log(title + ': ' + message);
-      return;
-    }
-    var notification = window.webkitNotifications.createNotification(icon, title, message);
-    notification.show();
-  };
-
-}(Dataflow) );
-
-(function (Dataflow) {
-  var Search = Dataflow.prototype.plugin("search");
-
-  var SearchResult = Backbone.Model.extend({
-    defaults: {
-      source: '',
-      icon: '',
-      action: null,
-      label: '',
-      description: ''
-    }
-  });
-
-  var SearchResults = Backbone.Collection.extend({
-    model: SearchResult,
-    initialize: function (models, options) {
-      if (!options) {
-        options = {};
-      }
-      this.search = options.search;
-    }
-  });
-
-  var ResultView = Backbone.View.extend({
-    tagName: 'li',
-    template: '<i class="icon-<%- icon %>"></i><span class="name"><%- label %></span><span class="description"><%- description %></span>',
-    events: {
-      'click': 'clicked'
-    },
-    render: function () {
-      this.$el.html(_.template(this.template, this.model.toJSON()));
-    },
-    clicked: function () {
-      if (!this.model.get('action')) {
-        return;
-      }
-      this.model.get('action')();
-    }
-  });
-
-  Search.initialize = function (dataflow) {
-    var $search = $('<div class="dataflow-plugin-search"><input type="search" placeholder="Search" results="5" /><button><i class="icon-reorder"></i></button></div>');
-    var $input = $search.find('input');
-    var $button = $search.find('button');
-    dataflow.$el.prepend($search);
-
-    $input.on('keyup', function (event) {
-      if (!$input.val()) {
-        return;
-      }
-      Search.search($input.val(), dataflow);
-    });
-
-    $button.on('click', function () {
-      dataflow.showPlugin('menu');
-    });
-  };
-
-  Search.search = function (text, dataflow) {
-    var Card = Dataflow.prototype.module('card');
-    var results = new SearchResults([], {
-      search: text
-    });
-    var ResultsView = new Backbone.CollectionView({
-      tagName: 'ul',
-      className: 'dataflow-plugin-search-results',
-      collection: results
-    });
-    ResultsView.itemView = ResultView;
-    var ResultsCard = new Card.Model({
-      dataflow: dataflow,
-      card: ResultsView,
-      pinned: false
-    });
-    results.on('add', function () {
-      dataflow.addCard(ResultsCard);
-    });
-
-    Search.results = results;
-
-    _.each(dataflow.plugins, function (plugin, name) {
-      if (!plugin.onSearch) {
-        return;
-      }
-      Search.searchPlugin(results, text, plugin);
-    });
-  };
-
-  Search.searchPlugin = function (results, text, plugin) {
-    plugin.onSearch(text, function (pluginResults) {
-      if (text !== Search.results.search) {
-        // Search has changed, ignore results
-        return;
-      }
-
-      pluginResults.forEach(function (result) {
-        results.add(result);
-      });
-    });
-  };
-
-}(Dataflow));
-
-( function(Dataflow) {
- 
-  // Dependencies
-  var Node = Dataflow.prototype.module("node");
-  var Base = Dataflow.prototype.node("base");
-
-  Base.Model = Node.Model.extend({
-    defaults: function(){
-      var defaults = Node.Model.prototype.defaults.call(this);
-      defaults.type = "base";
-      return defaults;
-    },
-    initialize: function() {
-      Node.Model.prototype.initialize.call(this);
-    },
-    unload: function(){
-      // Stop any processes that need to be stopped
-    },
-    inputs:[],
-    outputs:[]
-  });
-
-  Base.View = Node.View.extend({
-  });
-
-}(Dataflow) );
-
-( function(Dataflow) {
- 
-  // Dependencies
-  var Base = Dataflow.prototype.node("base");
-  var BaseResizable = Dataflow.prototype.node("base-resizable");
-
-  BaseResizable.Model = Base.Model.extend({
-    defaults: function(){
-      var defaults = Base.Model.prototype.defaults.call(this);
-      defaults.type = "base-resizable";
-      defaults.w = 200;
-      defaults.h = 200;
-      return defaults;
-    },
-    initialize: function() {
-      Base.Model.prototype.initialize.call(this);
-    },
-    unload: function(){
-      // Stop any processes that need to be stopped
-    },
-    toJSON: function(){
-      var json = Base.Model.prototype.toJSON.call(this);
-      json.w = this.get("w");
-      json.h = this.get("h");
-      return json;
-    },
-    inputs:[],
-    outputs:[]
-  });
-
-  BaseResizable.View = Base.View.extend({
-    initialize: function(options) {
-      Base.View.prototype.initialize.call(this, options);
-      // Initial size
-      this.$el.css({
-        width: this.model.get("w"),
-        height: this.model.get("h")
-      });
-      // Make resizable
-      var self = this;
-      this.$el.resizable({
-        helper: "dataflow-node helper",
-        minHeight: 100,
-        minWidth: 120,
-        stop: function(event, ui) {
-          self.resizeStop(event, ui);
-        }
-      });
-      // The simplest way to extend the events hash
-      // this.addEvents({
-      //   'resizestop': 'resizeStop'
-      // });
-    },
-    resizeStop: function(event, ui) {
-      this.model.set({
-        "w": ui.size.width,
-        "h": ui.size.height
-      });
-    }
-  });
-
-}(Dataflow) );
-
-( function(Dataflow) {
- 
-  // Dependencies
-  var BaseResizable = Dataflow.prototype.node("base-resizable");
-  var DataflowSubgraph = Dataflow.prototype.node("dataflow-subgraph");
-
-  var Graph = Dataflow.prototype.module("graph");
-  var Input = Dataflow.prototype.module("input");
-  var Output = Dataflow.prototype.module("output");
-
-  DataflowSubgraph.Model = BaseResizable.Model.extend({
-    defaults: function(){
-      var defaults = BaseResizable.Model.prototype.defaults.call(this);
-      defaults.label = "subgraph";
-      defaults.type = "dataflow-subgraph";
-      defaults.graph = {
-        nodes:[
-          {id: "1", label: "in", type:"dataflow-input",  x:180, y: 15},
-          {id:"99", label:"out", type:"dataflow-output", x:975, y:500}
-        ]
-      };
-      return defaults;
-    },
-    initialize: function() {
-      BaseResizable.Model.prototype.initialize.call(this);
-
-      var graph = this.get("graph");
-      graph.parentNode = this;
-      graph.dataflow = this.parentGraph.dataflow;
-      this.graph = new Graph.Model(graph);
-
-      // Initialize i/o from subgraph
-      var inputs = this.graph.nodes.filter(function(node){
-        return (node.type === "dataflow-input");
-      });
-      _.each(inputs, this.addInput, this);
-      var outputs = this.graph.nodes.filter(function(node){
-        return (node.type === "dataflow-output");
-      });
-      _.each(outputs, this.addOutput, this);
-
-      // Listen for new i/o
-      this.graph.nodes.on("add", function(node){
-        if (node.type === "dataflow-input") {
-          this.addInput(node);
-        } else if (node.type === "dataflow-output") {
-          this.addOutput(node);
-        }
-      }, this);
-
-      // Listen for removing i/o
-      this.graph.nodes.on("remove", function(node){
-        if (node.type === "dataflow-input") {
-          this.removeInput(node);
-        } else if (node.type === "dataflow-output") {
-          this.removeOutput(node);
-        }
-      }, this);
-    },
-    addInput: function(input){
-      var newInput = new Input.Model({
-        id: input.id,
-        label: input.get("label"),
-        type: input.get("input-type"),
-        parentNode: this,
-        inputNode: input
-      });
-      this.inputs.add(newInput);
-    },
-    recieve: function (name, value) {
-      // Forward data to subgraph
-      var inputNode = this.inputs.get(name).get("inputNode");
-      if (inputNode) {
-        inputNode.send("data", value);
-      }
-    },
-    addOutput: function(output){
-      var newOutput = new Output.Model({
-        id: output.id,
-        label: output.get("label"),
-        type: output.get("output-type"),
-        parentNode: this,
-        outputNode: output
-      });
-      this.outputs.add(newOutput);
-      output.set("parentNode", this);
-    },
-    removeInput: function(node){
-      var input = this.inputs.get(node.id);
-      input.remove();
-      this.inputs.remove(input);
-    },
-    removeOutput: function(node){
-      var output = this.outputs.get(node.id);
-      output.remove();
-      this.outputs.remove(output);
-    },
-    toJSON: function(){
-      var json = BaseResizable.Model.prototype.toJSON.call(this);
-      json.graph = this.graph;
-      return json;
-    },
-    remove: function(){
-      BaseResizable.Model.prototype.remove.call(this);
-      this.graph.remove();
-    },
-    inputs:[
-    ],
-    outputs:[
-    ]
-  });
-
-  var innerTemplate = '<button class="show-subgraph">edit subgraph</button>';
-
-  DataflowSubgraph.View = BaseResizable.View.extend({
-    events: function(){
-      var events = BaseResizable.View.prototype.events.call(this);
-      events["click .show-subgraph"] = "showSubgraph";
-      return events;
-    },
-    innerTemplate: _.template(innerTemplate),
-    initialize: function(options) {
-      BaseResizable.View.prototype.initialize.call(this, options);
-      this.model.graph.view = new Graph.View({model:this.model.graph});
-
-      // Listen for label changes
-      this.model.inputs.each(this.addInput, this);
-      this.model.inputs.on("add", this.addInput, this);
-      this.model.outputs.each(this.addOutput, this);
-      this.model.outputs.on("add", this.addOutput, this);
-    },
-    addInput: function(input){
-      // Listen for label changes
-      if (!input.get('inputNode')) {
-        return;
-      }
-      input.get("inputNode").on("change:label", function(i){
-        input.view.$(".label").text(i.get("label"));
-      }, this);
-    },
-    addOutput: function(output){
-      // Listen for label changes
-      if (!output.get('outputNode')) {
-        return;
-      }
-      output.get("outputNode").on("change:label", function(o){
-        output.view.$(".label").text(o.get("label"));
-      }, this);
-    },
-    showSubgraph: function(){
-      this.model.graph.dataflow.showGraph(this.model.graph);
-    }
-  });
-
-}(Dataflow) );
-
-});
 require.register("component-indexof/index.js", function(exports, require, module){
 module.exports = function(arr, obj){
   if (arr.indexOf) return arr.indexOf(obj);
@@ -4280,7 +256,8 @@ function mixin(obj) {
  * @api public
  */
 
-Emitter.prototype.on = function(event, fn){
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
   this._callbacks = this._callbacks || {};
   (this._callbacks[event] = this._callbacks[event] || [])
     .push(fn);
@@ -4323,7 +300,8 @@ Emitter.prototype.once = function(event, fn){
 
 Emitter.prototype.off =
 Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners = function(event, fn){
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
   this._callbacks = this._callbacks || {};
 
   // all
@@ -5654,26 +1632,26 @@ module.exports = (function(){
             }
           }
           if (result1 !== null) {
-            if (/^[A-Z.]/.test(input.charAt(pos))) {
+            if (/^[A-Z.0-9_]/.test(input.charAt(pos))) {
               result3 = input.charAt(pos);
               pos++;
             } else {
               result3 = null;
               if (reportFailures === 0) {
-                matchFailed("[A-Z.]");
+                matchFailed("[A-Z.0-9_]");
               }
             }
             if (result3 !== null) {
               result2 = [];
               while (result3 !== null) {
                 result2.push(result3);
-                if (/^[A-Z.]/.test(input.charAt(pos))) {
+                if (/^[A-Z.0-9_]/.test(input.charAt(pos))) {
                   result3 = input.charAt(pos);
                   pos++;
                 } else {
                   result3 = null;
                   if (reportFailures === 0) {
-                    matchFailed("[A-Z.]");
+                    matchFailed("[A-Z.0-9_]");
                   }
                 }
               }
@@ -5691,26 +1669,26 @@ module.exports = (function(){
                 }
               }
               if (result3 !== null) {
-                if (/^[A-Z]/.test(input.charAt(pos))) {
+                if (/^[A-Z0-9_]/.test(input.charAt(pos))) {
                   result5 = input.charAt(pos);
                   pos++;
                 } else {
                   result5 = null;
                   if (reportFailures === 0) {
-                    matchFailed("[A-Z]");
+                    matchFailed("[A-Z0-9_]");
                   }
                 }
                 if (result5 !== null) {
                   result4 = [];
                   while (result5 !== null) {
                     result4.push(result5);
-                    if (/^[A-Z]/.test(input.charAt(pos))) {
+                    if (/^[A-Z0-9_]/.test(input.charAt(pos))) {
                       result5 = input.charAt(pos);
                       pos++;
                     } else {
                       result5 = null;
                       if (reportFailures === 0) {
-                        matchFailed("[A-Z]");
+                        matchFailed("[A-Z0-9_]");
                       }
                     }
                   }
@@ -6179,26 +2157,26 @@ module.exports = (function(){
         
         pos0 = pos;
         pos1 = pos;
-        if (/^[a-zA-Z]/.test(input.charAt(pos))) {
+        if (/^[a-zA-Z0-9_]/.test(input.charAt(pos))) {
           result1 = input.charAt(pos);
           pos++;
         } else {
           result1 = null;
           if (reportFailures === 0) {
-            matchFailed("[a-zA-Z]");
+            matchFailed("[a-zA-Z0-9_]");
           }
         }
         if (result1 !== null) {
           result0 = [];
           while (result1 !== null) {
             result0.push(result1);
-            if (/^[a-zA-Z]/.test(input.charAt(pos))) {
+            if (/^[a-zA-Z0-9_]/.test(input.charAt(pos))) {
               result1 = input.charAt(pos);
               pos++;
             } else {
               result1 = null;
               if (reportFailures === 0) {
-                matchFailed("[a-zA-Z]");
+                matchFailed("[a-zA-Z0-9_]");
               }
             }
           }
@@ -6243,26 +2221,26 @@ module.exports = (function(){
           }
         }
         if (result0 !== null) {
-          if (/^[a-zA-Z\/\-]/.test(input.charAt(pos))) {
+          if (/^[a-zA-Z\/\-0-9_]/.test(input.charAt(pos))) {
             result2 = input.charAt(pos);
             pos++;
           } else {
             result2 = null;
             if (reportFailures === 0) {
-              matchFailed("[a-zA-Z\\/\\-]");
+              matchFailed("[a-zA-Z\\/\\-0-9_]");
             }
           }
           if (result2 !== null) {
             result1 = [];
             while (result2 !== null) {
               result1.push(result2);
-              if (/^[a-zA-Z\/\-]/.test(input.charAt(pos))) {
+              if (/^[a-zA-Z\/\-0-9_]/.test(input.charAt(pos))) {
                 result2 = input.charAt(pos);
                 pos++;
               } else {
                 result2 = null;
                 if (reportFailures === 0) {
-                  matchFailed("[a-zA-Z\\/\\-]");
+                  matchFailed("[a-zA-Z\\/\\-0-9_]");
                 }
               }
             }
@@ -6377,26 +2355,26 @@ module.exports = (function(){
         
         pos0 = pos;
         pos1 = pos;
-        if (/^[A-Z.0-9]/.test(input.charAt(pos))) {
+        if (/^[A-Z.0-9_]/.test(input.charAt(pos))) {
           result1 = input.charAt(pos);
           pos++;
         } else {
           result1 = null;
           if (reportFailures === 0) {
-            matchFailed("[A-Z.0-9]");
+            matchFailed("[A-Z.0-9_]");
           }
         }
         if (result1 !== null) {
           result0 = [];
           while (result1 !== null) {
             result0.push(result1);
-            if (/^[A-Z.0-9]/.test(input.charAt(pos))) {
+            if (/^[A-Z.0-9_]/.test(input.charAt(pos))) {
               result1 = input.charAt(pos);
               pos++;
             } else {
               result1 = null;
               if (reportFailures === 0) {
-                matchFailed("[A-Z.0-9]");
+                matchFailed("[A-Z.0-9_]");
               }
             }
           }
@@ -6789,6 +2767,8 @@ Graph = (function(_super) {
 
   Graph.prototype.exports = [];
 
+  Graph.prototype.groups = [];
+
   function Graph(name) {
     this.name = name != null ? name : '';
     this.properties = {};
@@ -6796,13 +2776,57 @@ Graph = (function(_super) {
     this.edges = [];
     this.initializers = [];
     this.exports = [];
+    this.groups = [];
   }
 
-  Graph.prototype.addExport = function(privatePort, publicPort) {
+  Graph.prototype.addExport = function(privatePort, publicPort, metadata) {
     return this.exports.push({
       "private": privatePort.toLowerCase(),
-      "public": publicPort.toLowerCase()
+      "public": publicPort.toLowerCase(),
+      metadata: metadata
     });
+  };
+
+  Graph.prototype.removeExport = function(publicPort) {
+    var exported, _i, _len, _ref, _results;
+    _ref = this.exports;
+    _results = [];
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      exported = _ref[_i];
+      if (!exported) {
+        continue;
+      }
+      if (exported["public"] !== publicPort) {
+        continue;
+      }
+      _results.push(this.exports.splice(this.exports.indexOf(exported), 1));
+    }
+    return _results;
+  };
+
+  Graph.prototype.addGroup = function(group, nodes, metadata) {
+    return this.groups.push({
+      name: group,
+      nodes: nodes,
+      metadata: metadata
+    });
+  };
+
+  Graph.prototype.removeGroup = function(group) {
+    var _i, _len, _ref, _results;
+    _ref = this.groups;
+    _results = [];
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      group = _ref[_i];
+      if (!group) {
+        continue;
+      }
+      if (group.name !== group) {
+        continue;
+      }
+      _results.push(this.groups.splice(this.groups.indexOf(group), 1));
+    }
+    return _results;
   };
 
   Graph.prototype.addNode = function(id, component, metadata) {
@@ -6821,7 +2845,7 @@ Graph = (function(_super) {
   };
 
   Graph.prototype.removeNode = function(id) {
-    var edge, initializer, node, _i, _j, _len, _len1, _ref, _ref1;
+    var edge, exported, group, index, initializer, node, privateNode, privatePort, _i, _j, _k, _l, _len, _len1, _len2, _len3, _ref, _ref1, _ref2, _ref3, _ref4;
     node = this.getNode(id);
     _ref = this.edges;
     for (_i = 0, _len = _ref.length; _i < _len; _i++) {
@@ -6846,6 +2870,29 @@ Graph = (function(_super) {
         this.removeInitial(initializer.to.node, initializer.to.port);
       }
     }
+    _ref2 = this.exports;
+    for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+      exported = _ref2[_k];
+      if (!exported) {
+        continue;
+      }
+      _ref3 = exported["private"].split('.'), privateNode = _ref3[0], privatePort = _ref3[1];
+      if (privateNode === id.toLowerCase()) {
+        this.removeExport(exported["public"]);
+      }
+    }
+    _ref4 = this.groups;
+    for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
+      group = _ref4[_l];
+      if (!group) {
+        continue;
+      }
+      index = group.nodes.indexOf(id) === -1;
+      if (index === -1) {
+        continue;
+      }
+      group.nodes.splice(index, 1);
+    }
     if (-1 !== this.nodes.indexOf(node)) {
       this.nodes.splice(this.nodes.indexOf(node), 1);
     }
@@ -6868,7 +2915,7 @@ Graph = (function(_super) {
   };
 
   Graph.prototype.renameNode = function(oldId, newId) {
-    var edge, iip, node, _i, _j, _len, _len1, _ref, _ref1;
+    var edge, exported, group, iip, index, node, privateNode, privatePort, _i, _j, _k, _l, _len, _len1, _len2, _len3, _ref, _ref1, _ref2, _ref3, _ref4;
     node = this.getNode(oldId);
     if (!node) {
       return;
@@ -6896,6 +2943,30 @@ Graph = (function(_super) {
       if (iip.to.node === oldId) {
         iip.to.node = newId;
       }
+    }
+    _ref2 = this.exports;
+    for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+      exported = _ref2[_k];
+      if (!exported) {
+        continue;
+      }
+      _ref3 = exported["private"].split('.'), privateNode = _ref3[0], privatePort = _ref3[1];
+      if (privateNode !== oldId.toLowerCase()) {
+        continue;
+      }
+      exported["private"] = "" + (newId.toLowerCase()) + "." + privatePort;
+    }
+    _ref4 = this.groups;
+    for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
+      group = _ref4[_l];
+      if (!group) {
+        continue;
+      }
+      index = group.nodes.indexOf(oldId);
+      if (index === -1) {
+        continue;
+      }
+      group.nodes[index] = newId;
     }
     return this.emit('renameNode', oldId, newId);
   };
@@ -7000,7 +3071,7 @@ Graph = (function(_super) {
   };
 
   Graph.prototype.toDOT = function() {
-    var cleanID, cleanPort, dot, edge, id, initializer, node, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2;
+    var cleanID, cleanPort, data, dot, edge, id, initializer, node, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2;
     cleanID = function(id) {
       return id.replace(/\s*/g, "");
     };
@@ -7016,7 +3087,12 @@ Graph = (function(_super) {
     _ref1 = this.initializers;
     for (id = _j = 0, _len1 = _ref1.length; _j < _len1; id = ++_j) {
       initializer = _ref1[id];
-      dot += "    data" + id + " [label=\"'" + initializer.from.data + "'\" shape=plaintext]\n";
+      if (typeof initializer.from.data === 'function') {
+        data = 'Function';
+      } else {
+        data = initializer.from.data;
+      }
+      dot += "    data" + id + " [label=\"'" + data + "'\" shape=plaintext]\n";
       dot += "    data" + id + " -> " + (cleanID(initializer.to.node)) + "[headlabel=" + (cleanPort(initializer.to.port)) + " labelfontcolor=blue labelfontsize=8.0]\n";
     }
     _ref2 = this.edges;
@@ -7045,32 +3121,49 @@ Graph = (function(_super) {
   };
 
   Graph.prototype.toJSON = function() {
-    var connection, edge, exported, initializer, json, node, property, value, _i, _j, _k, _l, _len, _len1, _len2, _len3, _ref, _ref1, _ref2, _ref3, _ref4;
+    var connection, edge, exported, exportedData, group, groupData, initializer, json, node, property, value, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref, _ref1, _ref2, _ref3, _ref4, _ref5;
     json = {
       properties: {},
       exports: [],
+      groups: [],
       processes: {},
       connections: []
     };
+    if (this.name) {
+      json.properties.name = this.name;
+    }
     _ref = this.properties;
     for (property in _ref) {
       value = _ref[property];
       json.properties[property] = value;
     }
-    if (this.name) {
-      json.properties.name = this.name;
-    }
     _ref1 = this.exports;
     for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
       exported = _ref1[_i];
-      json.exports.push({
-        "private": exported["private"],
-        "public": exported["public"]
-      });
+      exportedData = {
+        "public": exported["public"],
+        "private": exported["private"]
+      };
+      if (exported.metadata) {
+        exportedData.metadata = exported.metadata;
+      }
+      json.exports.push(exportedData);
     }
-    _ref2 = this.nodes;
+    _ref2 = this.groups;
     for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
-      node = _ref2[_j];
+      group = _ref2[_j];
+      groupData = {
+        name: group.name,
+        nodes: group.nodes
+      };
+      if (group.metadata) {
+        groupData.metadata = group.metadata;
+      }
+      json.groups.push(groupData);
+    }
+    _ref3 = this.nodes;
+    for (_k = 0, _len2 = _ref3.length; _k < _len2; _k++) {
+      node = _ref3[_k];
       json.processes[node.id] = {
         component: node.component
       };
@@ -7078,9 +3171,9 @@ Graph = (function(_super) {
         json.processes[node.id].metadata = node.metadata;
       }
     }
-    _ref3 = this.edges;
-    for (_k = 0, _len2 = _ref3.length; _k < _len2; _k++) {
-      edge = _ref3[_k];
+    _ref4 = this.edges;
+    for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
+      edge = _ref4[_l];
       connection = {
         src: {
           process: edge.from.node,
@@ -7096,9 +3189,9 @@ Graph = (function(_super) {
       }
       json.connections.push(connection);
     }
-    _ref4 = this.initializers;
-    for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
-      initializer = _ref4[_l];
+    _ref5 = this.initializers;
+    for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
+      initializer = _ref5[_m];
       json.connections.push({
         data: initializer.from.data,
         tgt: {
@@ -7132,7 +3225,7 @@ exports.createGraph = function(name) {
 };
 
 exports.loadJSON = function(definition, success) {
-  var conn, def, exported, graph, id, metadata, property, value, _i, _j, _len, _len1, _ref, _ref1, _ref2, _ref3;
+  var conn, def, exported, graph, group, id, metadata, property, value, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2, _ref3, _ref4;
   if (!definition.properties) {
     definition.properties = {};
   }
@@ -7173,7 +3266,14 @@ exports.loadJSON = function(definition, success) {
     _ref3 = definition.exports;
     for (_j = 0, _len1 = _ref3.length; _j < _len1; _j++) {
       exported = _ref3[_j];
-      graph.addExport(exported["private"], exported["public"]);
+      graph.addExport(exported["private"], exported["public"], exported.metadata);
+    }
+  }
+  if (definition.groups) {
+    _ref4 = definition.groups;
+    for (_k = 0, _len2 = _ref4.length; _k < _len2; _k++) {
+      group = _ref4[_k];
+      graph.addGroup(group.name, group.nodes, group.metadata);
     }
   }
   return success(graph);
@@ -7432,6 +3532,13 @@ Port = (function(_super) {
     return this.socket !== null;
   };
 
+  Port.prototype.canAttach = function() {
+    if (this.isAttached()) {
+      return false;
+    }
+    return true;
+  };
+
   return Port;
 
 })(EventEmitter);
@@ -7606,12 +3713,19 @@ ArrayPort = (function(_super) {
 
   ArrayPort.prototype.isAttached = function(socketId) {
     if (socketId === void 0) {
+      if (this.sockets.length > 0) {
+        return true;
+      }
       return false;
     }
     if (this.sockets[socketId]) {
       return true;
     }
     return false;
+  };
+
+  ArrayPort.prototype.canAttach = function() {
+    return true;
   };
 
   return ArrayPort;
@@ -7640,7 +3754,9 @@ Component = (function(_super) {
     return _ref;
   }
 
-  Component.prototype.description = "";
+  Component.prototype.description = '';
+
+  Component.prototype.icon = null;
 
   Component.prototype.getDescription = function() {
     return this.description;
@@ -7652,6 +3768,15 @@ Component = (function(_super) {
 
   Component.prototype.isSubgraph = function() {
     return false;
+  };
+
+  Component.prototype.setIcon = function(icon) {
+    this.icon = icon;
+    return this.emit('icon', this.icon);
+  };
+
+  Component.prototype.getIcon = function() {
+    return this.icon;
   };
 
   Component.prototype.shutdown = function() {};
@@ -7880,9 +4005,11 @@ exports.LoggingComponent = (function(_super) {
 
 });
 require.register("noflo-noflo/src/lib/ComponentLoader.js", function(exports, require, module){
-var ComponentLoader, internalSocket;
+var ComponentLoader, internalSocket, nofloGraph;
 
 internalSocket = require('./InternalSocket');
+
+nofloGraph = require('./Graph');
 
 ComponentLoader = (function() {
   function ComponentLoader(baseDir) {
@@ -7890,6 +4017,7 @@ ComponentLoader = (function() {
     this.components = null;
     this.checked = [];
     this.revalidate = false;
+    this.libraryIcons = {};
   }
 
   ComponentLoader.prototype.getModulePrefix = function(name) {
@@ -7903,7 +4031,7 @@ ComponentLoader = (function() {
   };
 
   ComponentLoader.prototype.getModuleComponents = function(moduleName) {
-    var cPath, definition, dependency, e, name, prefix, _ref, _ref1, _results;
+    var cPath, definition, dependency, e, loader, name, prefix, _ref, _ref1, _results;
     if (this.checked.indexOf(moduleName) !== -1) {
       return;
     }
@@ -7924,8 +4052,15 @@ ComponentLoader = (function() {
       return;
     }
     prefix = this.getModulePrefix(definition.name);
+    if (definition.noflo.icon) {
+      this.libraryIcons[prefix] = definition.noflo.icon;
+    }
     if (moduleName[0] === '/') {
       moduleName = moduleName.substr(1);
+    }
+    if (definition.noflo.loader) {
+      loader = require("/" + moduleName + "/" + definition.noflo.loader);
+      loader(this);
     }
     if (definition.noflo.components) {
       _ref = definition.noflo.components;
@@ -7982,11 +4117,11 @@ ComponentLoader = (function() {
     if (this.isGraph(component)) {
       if (typeof process !== 'undefined' && process.execPath && process.execPath.indexOf('node') !== -1) {
         process.nextTick(function() {
-          return _this.loadGraph(name, callback);
+          return _this.loadGraph(name, component, callback);
         });
       } else {
         setTimeout(function() {
-          return _this.loadGraph(name, callback);
+          return _this.loadGraph(name, component, callback);
         }, 0);
       }
       return;
@@ -8001,28 +4136,57 @@ ComponentLoader = (function() {
     if (name === 'Graph') {
       instance.baseDir = this.baseDir;
     }
+    this.setIcon(name, instance);
     return callback(instance);
   };
 
   ComponentLoader.prototype.isGraph = function(cPath) {
+    if (typeof cPath === 'object' && cPath instanceof nofloGraph.Graph) {
+      return true;
+    }
     if (typeof cPath !== 'string') {
       return false;
     }
     return cPath.indexOf('.fbp') !== -1 || cPath.indexOf('.json') !== -1;
   };
 
-  ComponentLoader.prototype.loadGraph = function(name, callback) {
+  ComponentLoader.prototype.loadGraph = function(name, component, callback) {
     var graph, graphImplementation, graphSocket;
     graphImplementation = require(this.components['Graph']);
     graphSocket = internalSocket.createSocket();
     graph = graphImplementation.getComponent();
     graph.baseDir = this.baseDir;
     graph.inPorts.graph.attach(graphSocket);
-    graphSocket.send(this.components[name]);
+    graphSocket.send(component);
     graphSocket.disconnect();
     delete graph.inPorts.graph;
     delete graph.inPorts.start;
+    this.setIcon(name, graph);
     return callback(graph);
+  };
+
+  ComponentLoader.prototype.setIcon = function(name, instance) {
+    var componentName, library, _ref;
+    if (instance.getIcon()) {
+      return;
+    }
+    _ref = name.split('/'), library = _ref[0], componentName = _ref[1];
+    if (componentName && this.getLibraryIcon(library)) {
+      instance.setIcon(this.getLibraryIcon(library));
+      return;
+    }
+    if (instance.isSubgraph()) {
+      instance.setIcon('sitemap');
+      return;
+    }
+    instance.setIcon('blank');
+  };
+
+  ComponentLoader.prototype.getLibraryIcon = function(prefix) {
+    if (this.libraryIcons[prefix]) {
+      return this.libraryIcons[prefix];
+    }
+    return null;
   };
 
   ComponentLoader.prototype.registerComponent = function(packageId, name, cPath, callback) {
@@ -8731,7 +4895,7 @@ Graph = (function(_super) {
   Graph.prototype.isExported = function(port, nodeName, portName) {
     var exported, newPort, _i, _len, _ref;
     newPort = this.portName(nodeName, portName);
-    if (port.isAttached()) {
+    if (!port.canAttach()) {
       return false;
     }
     if (this.network.graph.exports.length === 0) {
@@ -8793,6 +4957,13 @@ Graph = (function(_super) {
     return true;
   };
 
+  Graph.prototype.shutdown = function() {
+    if (!this.network) {
+      return;
+    }
+    return this.network.stop();
+  };
+
   return Graph;
 
 })(noflo.Component);
@@ -8810,7 +4981,7 @@ require.register("noflo-noflo-strings/index.js", function(exports, require, modu
 
 });
 require.register("noflo-noflo-strings/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-strings","description":"String Utilities for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-strings","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*","component/underscore":"*"},"scripts":["components/CompileString.coffee","components/Filter.coffee","components/SendString.coffee","components/SplitStr.coffee","components/StringTemplate.coffee","components/Replace.coffee","components/Jsonify.coffee","components/ParseJson.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"CompileString":"components/CompileString.coffee","Filter":"components/Filter.coffee","SendString":"components/SendString.coffee","SplitStr":"components/SplitStr.coffee","StringTemplate":"components/StringTemplate.coffee","Replace":"components/Replace.coffee","Jsonify":"components/Jsonify.coffee","ParseJson":"components/ParseJson.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-strings","description":"String Utilities for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-strings","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*","component/underscore":"*"},"scripts":["components/CompileString.coffee","components/Filter.coffee","components/SendString.coffee","components/SplitStr.coffee","components/StringTemplate.coffee","components/Replace.coffee","components/Jsonify.coffee","components/ParseJson.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"font","components":{"CompileString":"components/CompileString.coffee","Filter":"components/Filter.coffee","SendString":"components/SendString.coffee","SplitStr":"components/SplitStr.coffee","StringTemplate":"components/StringTemplate.coffee","Replace":"components/Replace.coffee","Jsonify":"components/Jsonify.coffee","ParseJson":"components/ParseJson.coffee"}}}');
 });
 require.register("noflo-noflo-strings/components/CompileString.js", function(exports, require, module){
 var CompileString, noflo,
@@ -8953,7 +5124,11 @@ SendString = (function(_super) {
 
   function SendString() {
     var _this = this;
-    this.string = '';
+    this.data = {
+      string: null,
+      group: []
+    };
+    this.groups = [];
     this.inPorts = {
       string: new noflo.Port('string'),
       "in": new noflo.Port('bang')
@@ -8962,15 +5137,39 @@ SendString = (function(_super) {
       out: new noflo.Port('string')
     };
     this.inPorts.string.on('data', function(data) {
-      return _this.string = data;
+      return _this.data.string = data;
+    });
+    this.inPorts["in"].on('begingroup', function(group) {
+      return _this.groups.push(group);
     });
     this.inPorts["in"].on('data', function(data) {
-      return _this.outPorts.out.send(_this.string);
+      _this.data.group = _this.groups.slice(0);
+      return _this.sendString(_this.data);
+    });
+    this.inPorts["in"].on('endgroup', function(group) {
+      return _this.groups.pop();
     });
     this.inPorts["in"].on('disconnect', function() {
       return _this.outPorts.out.disconnect();
     });
   }
+
+  SendString.prototype.sendString = function(data) {
+    var group, _i, _j, _len, _len1, _ref, _ref1, _results;
+    _ref = data.group;
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      group = _ref[_i];
+      this.outPorts.out.beginGroup(group);
+    }
+    this.outPorts.out.send(data.string);
+    _ref1 = data.group;
+    _results = [];
+    for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+      group = _ref1[_j];
+      _results.push(this.outPorts.out.endGroup());
+    }
+    return _results;
+  };
 
   return SendString;
 
@@ -9277,7 +5476,7 @@ require.register("noflo-noflo-ajax/index.js", function(exports, require, module)
 
 });
 require.register("noflo-noflo-ajax/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-ajax","description":"AJAX components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ajax","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/Get.coffee","components/GetJsonP.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"Get":"components/Get.coffee","GetJsonP":"components/GetJsonP.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-ajax","description":"AJAX components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ajax","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/Get.coffee","components/GetJsonP.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"globe","components":{"Get":"components/Get.coffee","GetJsonP":"components/GetJsonP.coffee"}}}');
 });
 require.register("noflo-noflo-ajax/components/Get.js", function(exports, require, module){
 var Get, noflo,
@@ -9392,7 +5591,7 @@ require.register("noflo-noflo-localstorage/index.js", function(exports, require,
 
 });
 require.register("noflo-noflo-localstorage/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-localstorage","description":"LocalStorage components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-localstorage","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/GetItem.coffee","components/ListenRemoteChanges.coffee","components/RemoveItem.coffee","components/SetItem.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"GetItem":"components/GetItem.coffee","ListenRemoteChanges":"components/ListenRemoteChanges.coffee","RemoveItem":"components/RemoveItem.coffee","SetItem":"components/SetItem.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-localstorage","description":"LocalStorage components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-localstorage","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/GetItem.coffee","components/ListenRemoteChanges.coffee","components/ListAdd.coffee","components/ListGet.coffee","components/ListRemove.coffee","components/RemoveItem.coffee","components/SetItem.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"html5","components":{"GetItem":"components/GetItem.coffee","ListenRemoteChanges":"components/ListenRemoteChanges.coffee","ListAdd":"components/ListAdd.coffee","ListGet":"components/ListGet.coffee","ListRemove":"components/ListRemove.coffee","RemoveItem":"components/RemoveItem.coffee","SetItem":"components/SetItem.coffee"}}}');
 });
 require.register("noflo-noflo-localstorage/components/GetItem.js", function(exports, require, module){
 var GetItem, noflo,
@@ -9501,6 +5700,179 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-noflo-localstorage/components/ListAdd.js", function(exports, require, module){
+var ListAdd, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ListAdd = (function(_super) {
+  __extends(ListAdd, _super);
+
+  function ListAdd() {
+    var _this = this;
+    this.listKey = null;
+    this.key = null;
+    this.inPorts = {
+      list: new noflo.Port('string'),
+      key: new noflo.Port('string')
+    };
+    this.outPorts = {
+      key: new noflo.Port('string')
+    };
+    this.inPorts.list.on('data', function(listKey) {
+      _this.listKey = listKey;
+      return _this.add();
+    });
+    this.inPorts.key.on('data', function(key) {
+      _this.key = key;
+      return _this.add();
+    });
+  }
+
+  ListAdd.prototype.add = function() {
+    var items, list;
+    if (!(this.listKey && this.key)) {
+      return;
+    }
+    list = localStorage.getItem(this.listKey);
+    if (list) {
+      items = list.split(',');
+    } else {
+      items = [];
+    }
+    if (items.indexOf(this.key) === -1) {
+      items.push(this.key);
+      localStorage.setItem(this.listKey, items.join(','));
+    }
+    if (this.outPorts.key.isAttached()) {
+      this.outPorts.key.send(this.key);
+      this.outPorts.key.disconnect();
+    }
+    return this.key = null;
+  };
+
+  return ListAdd;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ListAdd;
+};
+
+});
+require.register("noflo-noflo-localstorage/components/ListGet.js", function(exports, require, module){
+var ListGet, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ListGet = (function(_super) {
+  __extends(ListGet, _super);
+
+  function ListGet() {
+    var _this = this;
+    this.inPorts = {
+      key: new noflo.Port('string')
+    };
+    this.outPorts = {
+      items: new noflo.Port('string'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.key.on('data', function(data) {
+      var val, vals, value, _i, _len;
+      value = localStorage.getItem(data);
+      if (!value) {
+        if (_this.outPorts.error.isAttached()) {
+          _this.outPorts.error.send(new Error("" + data + " not found"));
+          _this.outPorts.error.disconnect();
+        }
+        return;
+      }
+      vals = value.split(',');
+      _this.outPorts.items.beginGroup(data);
+      for (_i = 0, _len = vals.length; _i < _len; _i++) {
+        val = vals[_i];
+        _this.outPorts.items.send(val);
+      }
+      return _this.outPorts.items.endGroup();
+    });
+    this.inPorts.key.on('disconnect', function() {
+      return _this.outPorts.items.disconnect();
+    });
+  }
+
+  return ListGet;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ListGet;
+};
+
+});
+require.register("noflo-noflo-localstorage/components/ListRemove.js", function(exports, require, module){
+var ListRemove, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ListRemove = (function(_super) {
+  __extends(ListRemove, _super);
+
+  function ListRemove() {
+    var _this = this;
+    this.listKey = null;
+    this.key = null;
+    this.inPorts = {
+      list: new noflo.Port('string'),
+      key: new noflo.Port('string')
+    };
+    this.outPorts = {
+      key: new noflo.Port('string')
+    };
+    this.inPorts.list.on('data', function(listKey) {
+      _this.listKey = listKey;
+      return _this.remove();
+    });
+    this.inPorts.key.on('data', function(key) {
+      _this.key = key;
+      return _this.remove();
+    });
+  }
+
+  ListRemove.prototype.remove = function() {
+    var items, list;
+    if (!(this.listKey && this.key)) {
+      return;
+    }
+    list = localStorage.getItem(this.listKey);
+    if (list) {
+      items = list.split(',');
+      if (items.indexOf(this.key) !== -1) {
+        items.splice(items.indexOf(this.key), 1);
+        localStorage.setItem(this.listKey, items.join(','));
+      }
+    }
+    if (this.outPorts.key.isAttached()) {
+      this.outPorts.key.send(this.key);
+      this.outPorts.key.disconnect();
+    }
+    return this.key = null;
+  };
+
+  return ListRemove;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ListRemove;
+};
+
+});
 require.register("noflo-noflo-localstorage/components/RemoveItem.js", function(exports, require, module){
 var RemoveItem, noflo,
   __hasProp = {}.hasOwnProperty,
@@ -9559,6 +5931,9 @@ SetItem = (function(_super) {
       item: new noflo.Port('string')
     };
     this.inPorts.key.on('data', function(data) {
+      if (!data) {
+        return;
+      }
       _this.key = data;
       if (_this.value) {
         return _this.setItem();
@@ -9601,7 +5976,7 @@ require.register("noflo-noflo-interaction/index.js", function(exports, require, 
 
 });
 require.register("noflo-noflo-interaction/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-interaction","description":"User interaction components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-interaction","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/ListenDrag.coffee","components/ListenHash.coffee","components/ListenKeyboard.coffee","components/ListenMouse.coffee","components/ListenScroll.coffee","components/ListenSpeech.coffee","components/ListenTouch.coffee","components/SetHash.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"ListenDrag":"components/ListenDrag.coffee","ListenHash":"components/ListenHash.coffee","ListenKeyboard":"components/ListenKeyboard.coffee","ListenMouse":"components/ListenMouse.coffee","ListenScroll":"components/ListenScroll.coffee","ListenSpeech":"components/ListenSpeech.coffee","ListenTouch":"components/ListenTouch.coffee","SetHash":"components/SetHash.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-interaction","description":"User interaction components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-interaction","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/ListenDrag.coffee","components/ListenHash.coffee","components/ListenKeyboard.coffee","components/ListenMouse.coffee","components/ListenPointer.coffee","components/ListenScroll.coffee","components/ListenSpeech.coffee","components/ListenTouch.coffee","components/SetHash.coffee","components/ReadCoordinates.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"user","components":{"ListenDrag":"components/ListenDrag.coffee","ListenHash":"components/ListenHash.coffee","ListenKeyboard":"components/ListenKeyboard.coffee","ListenMouse":"components/ListenMouse.coffee","ListenPointer":"components/ListenPointer.coffee","ListenScroll":"components/ListenScroll.coffee","ListenSpeech":"components/ListenSpeech.coffee","ListenTouch":"components/ListenTouch.coffee","ReadCoordinates":"components/ReadCoordinates.coffee","SetHash":"components/SetHash.coffee"}}}');
 });
 require.register("noflo-noflo-interaction/components/ListenDrag.js", function(exports, require, module){
 var ListenDrag, noflo,
@@ -9766,6 +6141,8 @@ ListenKeyboard = (function(_super) {
 
   ListenKeyboard.prototype.description = 'Listen for key presses on a given DOM element';
 
+  ListenKeyboard.prototype.icon = 'keyboard-o';
+
   function ListenKeyboard() {
     this.keypress = __bind(this.keypress, this);
     var _this = this;
@@ -9886,6 +6263,180 @@ ListenMouse = (function(_super) {
 
 exports.getComponent = function() {
   return new ListenMouse;
+};
+
+});
+require.register("noflo-noflo-interaction/components/ListenPointer.js", function(exports, require, module){
+var ListenPointer, noflo,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ListenPointer = (function(_super) {
+  __extends(ListenPointer, _super);
+
+  ListenPointer.prototype.description = 'Listen to pointer events on a DOM element';
+
+  function ListenPointer() {
+    this.pointerLeave = __bind(this.pointerLeave, this);
+    this.pointerEnter = __bind(this.pointerEnter, this);
+    this.pointerOut = __bind(this.pointerOut, this);
+    this.pointerOver = __bind(this.pointerOver, this);
+    this.pointerMove = __bind(this.pointerMove, this);
+    this.pointerCancel = __bind(this.pointerCancel, this);
+    this.pointerUp = __bind(this.pointerUp, this);
+    this.pointerDown = __bind(this.pointerDown, this);
+    var _this = this;
+    this.action = 'none';
+    this.capture = false;
+    this.propagate = false;
+    this.elements = [];
+    this.inPorts = {
+      element: new noflo.Port('object'),
+      action: new noflo.Port('string'),
+      capture: new noflo.Port('boolean'),
+      propagate: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      down: new noflo.Port('object'),
+      up: new noflo.Port('object'),
+      cancel: new noflo.Port('object'),
+      move: new noflo.Port('object'),
+      over: new noflo.Port('object'),
+      out: new noflo.Port('object'),
+      enter: new noflo.Port('object'),
+      leave: new noflo.Port('object')
+    };
+    this.inPorts.element.on('data', function(element) {
+      return _this.subscribe(element);
+    });
+    this.inPorts.action.on('data', function(action) {
+      _this.action = action;
+    });
+    this.inPorts.capture.on('data', function(capture) {
+      _this.capture = capture;
+    });
+    this.inPorts.propagate.on('data', function(propagate) {
+      _this.propagate = propagate;
+    });
+  }
+
+  ListenPointer.prototype.subscribe = function(element) {
+    if (element.setAttribute) {
+      element.setAttribute('touch-action', this.action);
+    }
+    element.addEventListener('pointerdown', this.pointerDown, this.capture);
+    element.addEventListener('pointerup', this.pointerUp, this.capture);
+    element.addEventListener('pointercancel', this.pointerCancel, this.capture);
+    element.addEventListener('pointermove', this.pointerMove, this.capture);
+    element.addEventListener('pointerover', this.pointerOver, this.capture);
+    element.addEventListener('pointerout', this.pointerOut, this.capture);
+    element.addEventListener('pointerenter', this.pointerEnter, this.capture);
+    element.addEventListener('pointerleave', this.pointerLeave, this.capture);
+    return this.elements.push(element);
+  };
+
+  ListenPointer.prototype.unsubscribe = function(element) {
+    var name, port, _ref, _results;
+    if (element.removeAttribute) {
+      element.removeAttribute('touch-action');
+    }
+    element.removeEventListener('pointerdown', this.pointerDown, this.capture);
+    element.removeEventListener('pointerup', this.pointerUp, this.capture);
+    element.removeEventListener('pointercancel', this.pointerCancel, this.capture);
+    element.removeEventListener('pointermove', this.pointerMove, this.capture);
+    element.removeEventListener('pointerover', this.pointerOver, this.capture);
+    element.removeEventListener('pointerout', this.pointerOut, this.capture);
+    element.removeEventListener('pointerenter', this.pointerEnter, this.capture);
+    element.removeEventListener('pointerleave', this.pointerLeave, this.capture);
+    _ref = this.outPorts;
+    _results = [];
+    for (name in _ref) {
+      port = _ref[name];
+      if (!port.isAttached()) {
+        continue;
+      }
+      _results.push(port.disconnect());
+    }
+    return _results;
+  };
+
+  ListenPointer.prototype.shutdown = function() {
+    var element, _i, _len, _ref;
+    _ref = this.elements;
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      element = _ref[_i];
+      this.unsubscribe(element);
+    }
+    return this.elements = [];
+  };
+
+  ListenPointer.prototype.pointerDown = function(event) {
+    return this.handle(event, 'down');
+  };
+
+  ListenPointer.prototype.pointerUp = function(event) {
+    return this.handle(event, 'up');
+  };
+
+  ListenPointer.prototype.pointerCancel = function(event) {
+    return this.handle(event, 'cancel');
+  };
+
+  ListenPointer.prototype.pointerMove = function(event) {
+    return this.handle(event, 'move');
+  };
+
+  ListenPointer.prototype.pointerOver = function(event) {
+    return this.handle(event, 'over');
+  };
+
+  ListenPointer.prototype.pointerOut = function(event) {
+    return this.handle(event, 'out');
+  };
+
+  ListenPointer.prototype.pointerEnter = function(event) {
+    return this.handle(event, 'enter');
+  };
+
+  ListenPointer.prototype.pointerLeave = function(event) {
+    return this.handle(event, 'leave');
+  };
+
+  ListenPointer.prototype.handle = function(event, type) {
+    var name, port, _ref, _results;
+    event.preventDefault();
+    if (!this.propagate) {
+      event.stopPropagation();
+    }
+    if (!this.outPorts[type].isAttached()) {
+      return;
+    }
+    this.outPorts[type].beginGroup(event.pointerId);
+    this.outPorts[type].send(event);
+    this.outPorts[type].endGroup();
+    if (type === 'up' || type === 'cancel' || type === 'leave') {
+      _ref = this.outPorts;
+      _results = [];
+      for (name in _ref) {
+        port = _ref[name];
+        if (!port.isAttached()) {
+          continue;
+        }
+        _results.push(port.disconnect());
+      }
+      return _results;
+    }
+  };
+
+  return ListenPointer;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ListenPointer;
 };
 
 });
@@ -10222,6 +6773,99 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-noflo-interaction/components/ReadCoordinates.js", function(exports, require, module){
+var ReadCoordinates, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ReadCoordinates = (function(_super) {
+  __extends(ReadCoordinates, _super);
+
+  ReadCoordinates.prototype.description = 'Read the coordinates from a DOM event';
+
+  function ReadCoordinates() {
+    var _this = this;
+    this.inPorts = {
+      event: new noflo.Port('object')
+    };
+    this.outPorts = {
+      screen: new noflo.Port('object'),
+      client: new noflo.Port('object'),
+      page: new noflo.Port('object')
+    };
+    this.inPorts.event.on('begingroup', function(group) {
+      if (_this.outPorts.screen.isAttached()) {
+        _this.outPorts.screen.beginGroup(group);
+      }
+      if (_this.outPorts.client.isAttached()) {
+        _this.outPorts.client.beginGroup(group);
+      }
+      if (_this.outPorts.page.isAttached()) {
+        return _this.outPorts.page.beginGroup(group);
+      }
+    });
+    this.inPorts.event.on('data', function(data) {
+      return _this.read(data);
+    });
+    this.inPorts.event.on('endgroup', function() {
+      if (_this.outPorts.screen.isAttached()) {
+        _this.outPorts.screen.endGroup();
+      }
+      if (_this.outPorts.client.isAttached()) {
+        _this.outPorts.client.endGroup();
+      }
+      if (_this.outPorts.page.isAttached()) {
+        return _this.outPorts.page.endGroup();
+      }
+    });
+    this.inPorts.event.on('disconnect', function() {
+      if (_this.outPorts.screen.isAttached()) {
+        _this.outPorts.screen.disconnect();
+      }
+      if (_this.outPorts.client.isAttached()) {
+        _this.outPorts.client.disconnect();
+      }
+      if (_this.outPorts.page.isAttached()) {
+        return _this.outPorts.page.disconnect();
+      }
+    });
+  }
+
+  ReadCoordinates.prototype.read = function(event) {
+    if (!event) {
+      return;
+    }
+    if (this.outPorts.screen.isAttached() && event.screenX !== void 0) {
+      this.outPorts.screen.send({
+        x: event.screenX,
+        y: event.screenY
+      });
+    }
+    if (this.outPorts.client.isAttached() && event.clientX !== void 0) {
+      this.outPorts.client.send({
+        x: event.clientX,
+        y: event.clientY
+      });
+    }
+    if (this.outPorts.page.isAttached() && event.pageX !== void 0) {
+      return this.outPorts.page.send({
+        x: event.pageX,
+        y: event.pageY
+      });
+    }
+  };
+
+  return ReadCoordinates;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ReadCoordinates;
+};
+
+});
 require.register("noflo-noflo-objects/index.js", function(exports, require, module){
 /*
  * This file can be used for general library features of objects.
@@ -10232,7 +6876,7 @@ require.register("noflo-noflo-objects/index.js", function(exports, require, modu
 
 });
 require.register("noflo-noflo-objects/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-objects","description":"Object Utilities for NoFlo","version":"0.1.0","keywords":["noflo","objects","utilities"],"author":"Kenneth Kan <kenhkan@gmail.com>","repo":"noflo/objects","dependencies":{"noflo/noflo":"*","component/underscore":"*"},"scripts":["components/Extend.coffee","components/MergeObjects.coffee","components/SplitObject.coffee","components/ReplaceKey.coffee","components/Keys.coffee","components/Values.coffee","components/Join.coffee","components/ExtractProperty.coffee","components/InsertProperty.coffee","components/SliceArray.coffee","components/SplitArray.coffee","components/FilterPropertyValue.coffee","components/FlattenObject.coffee","components/MapProperty.coffee","components/RemoveProperty.coffee","components/MapPropertyValue.coffee","components/GetObjectKey.coffee","components/UniqueArray.coffee","components/SetProperty.coffee","components/SimplifyObject.coffee","components/DuplicateProperty.coffee","components/CreateObject.coffee","components/CreateDate.coffee","components/SetPropertyValue.coffee","components/CallMethod.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"Extend":"components/Extend.coffee","MergeObjects":"components/MergeObjects.coffee","SplitObject":"components/SplitObject.coffee","ReplaceKey":"components/ReplaceKey.coffee","Keys":"components/Keys.coffee","Values":"components/Values.coffee","Join":"components/Join.coffee","ExtractProperty":"components/ExtractProperty.coffee","InsertProperty":"components/InsertProperty.coffee","SliceArray":"components/SliceArray.coffee","SplitArray":"components/SplitArray.coffee","FilterPropertyValue":"components/FilterPropertyValue.coffee","FlattenObject":"components/FlattenObject.coffee","MapProperty":"components/MapProperty.coffee","RemoveProperty":"components/RemoveProperty.coffee","MapPropertyValue":"components/MapPropertyValue.coffee","GetObjectKey":"components/GetObjectKey.coffee","UniqueArray":"components/UniqueArray.coffee","SetProperty":"components/SetProperty.coffee","SimplifyObject":"components/SimplifyObject.coffee","DuplicateProperty":"components/DuplicateProperty.coffee","CreateObject":"components/CreateObject.coffee","CreateDate":"components/CreateDate.coffee","SetPropertyValue":"components/SetPropertyValue.coffee","CallMethod":"components/CallMethod.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-objects","description":"Object Utilities for NoFlo","version":"0.1.0","keywords":["noflo","objects","utilities"],"author":"Kenneth Kan <kenhkan@gmail.com>","repo":"noflo/objects","dependencies":{"noflo/noflo":"*","component/underscore":"*"},"scripts":["components/Extend.coffee","components/MergeObjects.coffee","components/SplitObject.coffee","components/ReplaceKey.coffee","components/Keys.coffee","components/Size.coffee","components/Values.coffee","components/Join.coffee","components/ExtractProperty.coffee","components/InsertProperty.coffee","components/SliceArray.coffee","components/SplitArray.coffee","components/FilterPropertyValue.coffee","components/FlattenObject.coffee","components/MapProperty.coffee","components/RemoveProperty.coffee","components/MapPropertyValue.coffee","components/GetObjectKey.coffee","components/UniqueArray.coffee","components/SetProperty.coffee","components/SimplifyObject.coffee","components/DuplicateProperty.coffee","components/CreateObject.coffee","components/CreateDate.coffee","components/SetPropertyValue.coffee","components/CallMethod.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"list","components":{"Extend":"components/Extend.coffee","MergeObjects":"components/MergeObjects.coffee","SplitObject":"components/SplitObject.coffee","ReplaceKey":"components/ReplaceKey.coffee","Keys":"components/Keys.coffee","Size":"components/Size.coffee","Values":"components/Values.coffee","Join":"components/Join.coffee","ExtractProperty":"components/ExtractProperty.coffee","InsertProperty":"components/InsertProperty.coffee","SliceArray":"components/SliceArray.coffee","SplitArray":"components/SplitArray.coffee","FilterPropertyValue":"components/FilterPropertyValue.coffee","FlattenObject":"components/FlattenObject.coffee","MapProperty":"components/MapProperty.coffee","RemoveProperty":"components/RemoveProperty.coffee","MapPropertyValue":"components/MapPropertyValue.coffee","GetObjectKey":"components/GetObjectKey.coffee","UniqueArray":"components/UniqueArray.coffee","SetProperty":"components/SetProperty.coffee","SimplifyObject":"components/SimplifyObject.coffee","DuplicateProperty":"components/DuplicateProperty.coffee","CreateObject":"components/CreateObject.coffee","CreateDate":"components/CreateDate.coffee","SetPropertyValue":"components/SetPropertyValue.coffee","CallMethod":"components/CallMethod.coffee"}}}');
 });
 require.register("noflo-noflo-objects/components/Extend.js", function(exports, require, module){
 var Extend, noflo, _,
@@ -10520,10 +7164,10 @@ Keys = (function(_super) {
   function Keys() {
     var _this = this;
     this.inPorts = {
-      "in": new noflo.Port
+      "in": new noflo.Port('object')
     };
     this.outPorts = {
-      out: new noflo.Port
+      out: new noflo.Port('all')
     };
     this.inPorts["in"].on("begingroup", function(group) {
       return _this.outPorts.out.beginGroup(group);
@@ -10552,6 +7196,51 @@ Keys = (function(_super) {
 
 exports.getComponent = function() {
   return new Keys;
+};
+
+});
+require.register("noflo-noflo-objects/components/Size.js", function(exports, require, module){
+var Size, noflo, _,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require("noflo");
+
+_ = require("underscore");
+
+Size = (function(_super) {
+  __extends(Size, _super);
+
+  Size.prototype.description = "gets the size of an object and sends that out as a number";
+
+  function Size() {
+    var _this = this;
+    this.inPorts = {
+      "in": new noflo.Port('object')
+    };
+    this.outPorts = {
+      out: new noflo.Port('integer')
+    };
+    this.inPorts["in"].on("begingroup", function(group) {
+      return _this.outPorts.out.beginGroup(group);
+    });
+    this.inPorts["in"].on("data", function(data) {
+      return _this.outPorts.out.send(_.size(data));
+    });
+    this.inPorts["in"].on("endgroup", function(group) {
+      return _this.outPorts.out.endGroup();
+    });
+    this.inPorts["in"].on("disconnect", function() {
+      return _this.outPorts.out.disconnect();
+    });
+  }
+
+  return Size;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Size;
 };
 
 });
@@ -10675,7 +7364,6 @@ ExtractProperty = (function(_super) {
 
   function ExtractProperty() {
     var _this = this;
-    this.key = null;
     this.inPorts = {
       "in": new noflo.Port,
       key: new noflo.Port
@@ -10683,15 +7371,25 @@ ExtractProperty = (function(_super) {
     this.outPorts = {
       out: new noflo.Port
     };
+    this.inPorts.key.on("connect", function() {
+      return _this.keys = [];
+    });
     this.inPorts.key.on("data", function(key) {
-      _this.key = key;
+      return _this.keys.push(key);
     });
     this.inPorts["in"].on("begingroup", function(group) {
       return _this.outPorts.out.beginGroup(group);
     });
     this.inPorts["in"].on("data", function(data) {
-      if ((_this.key != null) && _.isObject(data)) {
-        return _this.outPorts.out.send(data[_this.key]);
+      var key, value, _i, _len, _ref;
+      if ((_this.keys != null) && _.isObject(data)) {
+        value = data;
+        _ref = _this.keys;
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          key = _ref[_i];
+          value = value[key];
+        }
+        return _this.outPorts.out.send(value);
       }
     });
     this.inPorts["in"].on("endgroup", function(group) {
@@ -10913,17 +7611,20 @@ noflo = require('noflo');
 FilterPropertyValue = (function(_super) {
   __extends(FilterPropertyValue, _super);
 
+  FilterPropertyValue.prototype.icon = 'filter';
+
   function FilterPropertyValue() {
     var _this = this;
     this.accepts = {};
     this.regexps = {};
     this.inPorts = {
-      accept: new noflo.ArrayPort(),
-      regexp: new noflo.ArrayPort(),
-      "in": new noflo.Port()
+      accept: new noflo.ArrayPort('all'),
+      regexp: new noflo.ArrayPort('string'),
+      "in": new noflo.Port('object')
     };
     this.outPorts = {
-      out: new noflo.Port()
+      out: new noflo.Port('object'),
+      missed: new noflo.Port('object')
     };
     this.inPorts.accept.on('data', function(data) {
       return _this.prepareAccept(data);
@@ -11000,6 +7701,11 @@ FilterPropertyValue = (function(_super) {
       continue;
     }
     if (!match) {
+      if (!this.outPorts.missed.isAttached()) {
+        return;
+      }
+      this.outPorts.missed.send(object);
+      this.outPorts.missed.disconnect();
       return;
     }
     return this.outPorts.out.send(newData);
@@ -11220,6 +7926,8 @@ _ = require('underscore');
 RemoveProperty = (function(_super) {
   __extends(RemoveProperty, _super);
 
+  RemoveProperty.prototype.icon = 'ban';
+
   function RemoveProperty() {
     var _this = this;
     this.properties = [];
@@ -11390,6 +8098,8 @@ noflo = require('noflo');
 
 GetObjectKey = (function(_super) {
   __extends(GetObjectKey, _super);
+
+  GetObjectKey.prototype.icon = 'indent';
 
   function GetObjectKey() {
     var _this = this;
@@ -11813,11 +8523,13 @@ CreateObject = (function(_super) {
       return _this.outPorts.out.beginGroup(group);
     });
     this.inPorts.start.on("data", function() {
-      _this.outPorts.out.send({});
-      return _this.outPorts.out.disconnect();
+      return _this.outPorts.out.send({});
     });
     this.inPorts.start.on('endgroup', function() {
       return _this.outPorts.out.endGroup();
+    });
+    this.inPorts.start.on('disconnect', function() {
+      return _this.outPorts.out.disconnect();
     });
   }
 
@@ -11840,6 +8552,10 @@ noflo = require("noflo");
 CreateDate = (function(_super) {
   __extends(CreateDate, _super);
 
+  CreateDate.prototype.description = 'Create a new Date object from string';
+
+  CreateDate.prototype.icon = 'clock-o';
+
   function CreateDate() {
     var _this = this;
     this.inPorts = {
@@ -11848,6 +8564,9 @@ CreateDate = (function(_super) {
     this.outPorts = {
       out: new noflo.Port('object')
     };
+    this.inPorts["in"].on('begingroup', function(group) {
+      return _this.outPorts.out.beginGroup(group);
+    });
     this.inPorts["in"].on("data", function(data) {
       var date;
       if (data === "now" || data === null || data === true) {
@@ -11855,7 +8574,12 @@ CreateDate = (function(_super) {
       } else {
         date = new Date(data);
       }
-      _this.outPorts.out.send(date);
+      return _this.outPorts.out.send(date);
+    });
+    this.inPorts["in"].on('endgroup', function() {
+      return _this.outPorts.out.endGroup();
+    });
+    this.inPorts["in"].on('disconnect', function() {
       return _this.outPorts.out.disconnect();
     });
   }
@@ -11885,14 +8609,19 @@ SetPropertyValue = (function(_super) {
     this.value = null;
     this.data = [];
     this.groups = [];
+    this.keep = false;
     this.inPorts = {
       property: new noflo.Port(),
       value: new noflo.Port(),
-      "in": new noflo.Port()
+      "in": new noflo.Port(),
+      keep: new noflo.Port()
     };
     this.outPorts = {
       out: new noflo.Port()
     };
+    this.inPorts.keep.on('data', function(keep) {
+      return _this.keep = keep === 'true';
+    });
     this.inPorts.property.on('data', function(data) {
       _this.property = data;
       if (_this.value && _this.data.length) {
@@ -11928,7 +8657,9 @@ SetPropertyValue = (function(_super) {
       if (_this.property && _this.value) {
         _this.outPorts.out.disconnect();
       }
-      return _this.value = null;
+      if (!_this.keep) {
+        return _this.value = null;
+      }
     });
   }
 
@@ -11982,6 +8713,8 @@ CallMethod = (function(_super) {
 
   CallMethod.prototype.description = "call a method on an object";
 
+  CallMethod.prototype.icon = 'gear';
+
   function CallMethod() {
     var _this = this;
     this.method = null;
@@ -11995,6 +8728,9 @@ CallMethod = (function(_super) {
       out: new noflo.Port('all'),
       error: new noflo.Port('string')
     };
+    this.inPorts["in"].on('begingroup', function(group) {
+      return _this.outPorts.out.beginGroup(group);
+    });
     this.inPorts["in"].on("data", function(data) {
       var msg;
       if (!_this.method) {
@@ -12011,6 +8747,9 @@ CallMethod = (function(_super) {
       }
       _this.outPorts.out.send(data[_this.method].apply(data, _this.args));
       return _this.args = [];
+    });
+    this.inPorts["in"].on('endgroup', function() {
+      return _this.outPorts.out.endGroup();
     });
     this.inPorts["in"].on('disconnect', function() {
       return _this.outPorts.out.disconnect();
@@ -12045,7 +8784,7 @@ require.register("noflo-noflo-groups/index.js", function(exports, require, modul
 
 });
 require.register("noflo-noflo-groups/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-groups","description":"Group Utilities for NoFlo","keywords":["noflo","groups","utilities"],"author":"Kenneth Kan <kenhkan@gmail.com>","version":"0.1.0","repo":"kenhkan/groups","dependencies":{"noflo/noflo":"*"},"scripts":["components/ReadGroups.coffee","components/RemoveGroups.coffee","components/Regroup.coffee","components/Group.coffee","components/GroupZip.coffee","components/FilterByGroup.coffee","components/Objectify.coffee","components/ReadGroup.coffee","components/CollectGroups.coffee","components/FirstGroup.coffee","components/MapGroup.coffee","components/MergeGroups.coffee","components/GroupByObjectKey.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"ReadGroups":"components/ReadGroups.coffee","RemoveGroups":"components/RemoveGroups.coffee","Regroup":"components/Regroup.coffee","Group":"components/Group.coffee","GroupZip":"components/GroupZip.coffee","FilterByGroup":"components/FilterByGroup.coffee","Objectify":"components/Objectify.coffee","ReadGroup":"components/ReadGroup.coffee","CollectGroups":"components/CollectGroups.coffee","FirstGroup":"components/FirstGroup.coffee","MapGroup":"components/MapGroup.coffee","MergeGroups":"components/MergeGroups.coffee","GroupByObjectKey":"components/GroupByObjectKey.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-groups","description":"Group Utilities for NoFlo","keywords":["noflo","groups","utilities"],"author":"Kenneth Kan <kenhkan@gmail.com>","version":"0.1.0","repo":"kenhkan/groups","dependencies":{"component/underscore":"*","noflo/noflo":"*"},"scripts":["components/ReadGroups.coffee","components/RemoveGroups.coffee","components/Regroup.coffee","components/Group.coffee","components/GroupZip.coffee","components/FilterByGroup.coffee","components/Objectify.coffee","components/ReadGroup.coffee","components/SendByGroup.coffee","components/CollectGroups.coffee","components/CollectObject.coffee","components/FirstGroup.coffee","components/MapGroup.coffee","components/MergeGroups.coffee","components/GroupByObjectKey.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"tags","components":{"ReadGroups":"components/ReadGroups.coffee","RemoveGroups":"components/RemoveGroups.coffee","Regroup":"components/Regroup.coffee","Group":"components/Group.coffee","GroupZip":"components/GroupZip.coffee","FilterByGroup":"components/FilterByGroup.coffee","Objectify":"components/Objectify.coffee","ReadGroup":"components/ReadGroup.coffee","SendByGroup":"components/SendByGroup.coffee","CollectGroups":"components/CollectGroups.coffee","CollectObject":"components/CollectObject.coffee","FirstGroup":"components/FirstGroup.coffee","MapGroup":"components/MapGroup.coffee","MergeGroups":"components/MergeGroups.coffee","GroupByObjectKey":"components/GroupByObjectKey.coffee"}}}');
 });
 require.register("noflo-noflo-groups/components/ReadGroups.js", function(exports, require, module){
 var ReadGroups, noflo, _,
@@ -12086,7 +8825,9 @@ ReadGroups = (function(_super) {
       var beginGroup;
       beginGroup = function() {
         _this.groups.push(group);
-        return _this.outPorts.out.beginGroup(group);
+        if (_this.outPorts.out.isAttached()) {
+          return _this.outPorts.out.beginGroup(group);
+        }
       };
       if (_this.count >= _this.threshold) {
         return beginGroup(group);
@@ -12101,14 +8842,20 @@ ReadGroups = (function(_super) {
     this.inPorts["in"].on('endgroup', function(group) {
       if (group === _.last(_this.groups)) {
         _this.groups.pop();
-        return _this.outPorts.out.endGroup();
+        if (_this.outPorts.out.isAttached()) {
+          return _this.outPorts.out.endGroup();
+        }
       }
     });
     this.inPorts["in"].on('data', function(data) {
-      return _this.outPorts.out.send(data);
+      if (_this.outPorts.out.isAttached()) {
+        return _this.outPorts.out.send(data);
+      }
     });
     this.inPorts["in"].on('disconnect', function() {
-      _this.outPorts.out.disconnect();
+      if (_this.outPorts.out.isAttached()) {
+        _this.outPorts.out.disconnect();
+      }
       return _this.outPorts.group.disconnect();
     });
   }
@@ -12546,6 +9293,102 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-noflo-groups/components/SendByGroup.js", function(exports, require, module){
+var SendByGroup, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+SendByGroup = (function(_super) {
+  __extends(SendByGroup, _super);
+
+  SendByGroup.prototype.description = 'Send packet held in "data" when receiving\
+  matching set of groups in "in"';
+
+  SendByGroup.prototype.icon = 'share-square';
+
+  function SendByGroup() {
+    var _this = this;
+    this.data = {};
+    this.ungrouped = null;
+    this.dataGroups = [];
+    this.inGroups = [];
+    this.inPorts = {
+      "in": new noflo.Port('bang'),
+      data: new noflo.Port('all')
+    };
+    this.outPorts = {
+      out: new noflo.ArrayPort('all')
+    };
+    this.inPorts.data.on('begingroup', function(group) {
+      return _this.dataGroups.push(group);
+    });
+    this.inPorts.data.on('data', function(data) {
+      if (!_this.dataGroups.length) {
+        _this.ungrouped = data;
+        return;
+      }
+      return _this.data[_this.groupId(_this.dataGroups)] = data;
+    });
+    this.inPorts.data.on('endgroup', function() {
+      return _this.dataGroups.pop();
+    });
+    this.inPorts["in"].on('begingroup', function(group) {
+      return _this.inGroups.push(group);
+    });
+    this.inPorts["in"].on('data', function(data) {
+      var id;
+      if (!_this.inGroups.length) {
+        if (_this.ungrouped !== null) {
+          _this.send(_this.ungrouped);
+        }
+        return;
+      }
+      id = _this.groupId(_this.inGroups);
+      if (!_this.data[id]) {
+        return;
+      }
+      return _this.send(_this.data[id]);
+    });
+    this.inPorts["in"].on('endgroup', function() {
+      return _this.inGroups.pop();
+    });
+    this.inPorts["in"].on('disconnect', function() {
+      return _this.outPorts.out.disconnect();
+    });
+  }
+
+  SendByGroup.prototype.groupId = function(groups) {
+    return groups.join(':');
+  };
+
+  SendByGroup.prototype.send = function(data) {
+    var group, _i, _j, _len, _len1, _ref, _ref1, _results;
+    _ref = this.inGroups;
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      group = _ref[_i];
+      this.outPorts.out.beginGroup(group);
+    }
+    this.outPorts.out.send(data);
+    _ref1 = this.inGroups;
+    _results = [];
+    for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+      group = _ref1[_j];
+      _results.push(this.outPorts.out.endGroup());
+    }
+    return _results;
+  };
+
+  return SendByGroup;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new SendByGroup;
+};
+
+});
 require.register("noflo-noflo-groups/components/CollectGroups.js", function(exports, require, module){
 var CollectGroups, noflo,
   __hasProp = {}.hasOwnProperty,
@@ -12630,6 +9473,159 @@ CollectGroups = (function(_super) {
 
 exports.getComponent = function() {
   return new CollectGroups;
+};
+
+});
+require.register("noflo-noflo-groups/components/CollectObject.js", function(exports, require, module){
+var CollectObject, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+CollectObject = (function(_super) {
+  __extends(CollectObject, _super);
+
+  CollectObject.prototype.description = 'Collect packets to an object identified by keys organized\
+  by connection';
+
+  function CollectObject() {
+    var _this = this;
+    this.keys = [];
+    this.allpackets = [];
+    this.data = {};
+    this.groups = {};
+    this.inPorts = {
+      keys: new noflo.ArrayPort('string'),
+      allpackets: new noflo.ArrayPort('string'),
+      collect: new noflo.ArrayPort('all'),
+      release: new noflo.Port('bang'),
+      clear: new noflo.Port('bang')
+    };
+    this.outPorts = {
+      out: new noflo.Port('object')
+    };
+    this.inPorts.keys.on('data', function(key) {
+      var keys, _i, _len, _results;
+      keys = key.split(',');
+      if (keys.length > 1) {
+        _this.keys = [];
+      }
+      _results = [];
+      for (_i = 0, _len = keys.length; _i < _len; _i++) {
+        key = keys[_i];
+        _results.push(_this.keys.push(key));
+      }
+      return _results;
+    });
+    this.inPorts.allpackets.on('data', function(key) {
+      var allpackets, _i, _len, _results;
+      allpackets = key.split(',');
+      if (allpackets.length > 1) {
+        _this.keys = [];
+      }
+      _results = [];
+      for (_i = 0, _len = allpackets.length; _i < _len; _i++) {
+        key = allpackets[_i];
+        _results.push(_this.allpackets.push(key));
+      }
+      return _results;
+    });
+    this.inPorts.collect.once('connect', function() {
+      return _this.subscribeSockets();
+    });
+    this.inPorts.release.on('data', function() {
+      return _this.release();
+    });
+    this.inPorts.release.on('disconnect', function() {
+      return _this.outPorts.out.disconnect();
+    });
+    this.inPorts.clear.on('data', function() {
+      return _this.clear();
+    });
+  }
+
+  CollectObject.prototype.release = function() {
+    this.outPorts.out.send(this.data);
+    return this.data = this.clone(this.data);
+  };
+
+  CollectObject.prototype.subscribeSockets = function() {
+    var _this = this;
+    return this.inPorts.collect.sockets.forEach(function(socket, idx) {
+      return _this.subscribeSocket(socket, idx);
+    });
+  };
+
+  CollectObject.prototype.subscribeSocket = function(socket, id) {
+    var _this = this;
+    socket.on('begingroup', function(group) {
+      if (!_this.groups[id]) {
+        _this.groups[id] = [];
+      }
+      return _this.groups[id].push(group);
+    });
+    socket.on('data', function(data) {
+      var groupId;
+      if (!_this.keys[id]) {
+        return;
+      }
+      groupId = _this.groupId(_this.groups[id]);
+      if (!_this.data[groupId]) {
+        _this.data[groupId] = {};
+      }
+      if (_this.allpackets.indexOf(_this.keys[id]) !== -1) {
+        if (!_this.data[groupId][_this.keys[id]]) {
+          _this.data[groupId][_this.keys[id]] = [];
+        }
+        _this.data[groupId][_this.keys[id]].push(data);
+        return;
+      }
+      return _this.data[groupId][_this.keys[id]] = data;
+    });
+    return socket.on('endgroup', function() {
+      if (!_this.groups[id]) {
+        return;
+      }
+      return _this.groups[id].pop();
+    });
+  };
+
+  CollectObject.prototype.groupId = function(groups) {
+    if (!groups.length) {
+      return 'ungrouped';
+    }
+    return groups[0];
+  };
+
+  CollectObject.prototype.clone = function(data) {
+    var groupName, groupedData, name, newData, value;
+    newData = {};
+    for (groupName in data) {
+      groupedData = data[groupName];
+      newData[groupName] = {};
+      for (name in groupedData) {
+        value = groupedData[name];
+        if (!groupedData.hasOwnProperty(name)) {
+          continue;
+        }
+        newData[groupName][name] = value;
+      }
+    }
+    return newData;
+  };
+
+  CollectObject.prototype.clear = function() {
+    this.data = {};
+    return this.groups = {};
+  };
+
+  return CollectObject;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new CollectObject;
 };
 
 });
@@ -12976,7 +9972,7 @@ require.register("noflo-noflo-dom/index.js", function(exports, require, module){
 
 });
 require.register("noflo-noflo-dom/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-dom","description":"Document Object Model components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-dom","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/AddClass.coffee","components/AppendChild.coffee","components/CreateElement.coffee","components/CreateFragment.coffee","components/GetAttribute.coffee","components/GetElement.coffee","components/ReadHtml.coffee","components/WriteHtml.coffee","components/RemoveClass.coffee","components/RequestAnimationFrame.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"AddClass":"components/AddClass.coffee","AppendChild":"components/AppendChild.coffee","CreateElement":"components/CreateElement.coffee","CreateFragment":"components/CreateFragment.coffee","GetAttribute":"components/GetAttribute.coffee","GetElement":"components/GetElement.coffee","WriteHtml":"components/WriteHtml.coffee","ReadHtml":"components/ReadHtml.coffee","RemoveClass":"components/RemoveClass.coffee","RequestAnimationFrame":"components/RequestAnimationFrame.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-dom","description":"Document Object Model components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-dom","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/AddClass.coffee","components/AppendChild.coffee","components/CreateElement.coffee","components/CreateFragment.coffee","components/GetAttribute.coffee","components/GetElement.coffee","components/HasClass.coffee","components/ReadHtml.coffee","components/RemoveElement.coffee","components/SetAttribute.coffee","components/WriteHtml.coffee","components/RemoveClass.coffee","components/RequestAnimationFrame.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"html5","components":{"AddClass":"components/AddClass.coffee","AppendChild":"components/AppendChild.coffee","CreateElement":"components/CreateElement.coffee","CreateFragment":"components/CreateFragment.coffee","GetAttribute":"components/GetAttribute.coffee","GetElement":"components/GetElement.coffee","HasClass":"components/HasClass.coffee","WriteHtml":"components/WriteHtml.coffee","ReadHtml":"components/ReadHtml.coffee","RemoveElement":"components/RemoveElement.coffee","SetAttribute":"components/SetAttribute.coffee","RemoveClass":"components/RemoveClass.coffee","RequestAnimationFrame":"components/RequestAnimationFrame.coffee"}}}');
 });
 require.register("noflo-noflo-dom/components/AddClass.js", function(exports, require, module){
 var AddClass, noflo,
@@ -13095,19 +10091,49 @@ CreateElement = (function(_super) {
 
   function CreateElement() {
     var _this = this;
+    this.tagName = null;
+    this.container = null;
     this.inPorts = {
-      tagname: new noflo.Port('string')
+      tagname: new noflo.Port('string'),
+      container: new noflo.Port('object')
     };
     this.outPorts = {
       element: new noflo.Port('object')
     };
-    this.inPorts.tagname.on('data', function(data) {
-      return _this.outPorts.element.send(document.createElement(data));
+    this.inPorts.tagname.on('data', function(tagName) {
+      _this.tagName = tagName;
+      return _this.createElement();
     });
     this.inPorts.tagname.on('disconnect', function() {
+      if (!_this.inPorts.container.isAttached()) {
+        return _this.outPorts.element.disconnect();
+      }
+    });
+    this.inPorts.container.on('data', function(container) {
+      _this.container = container;
+      return _this.createElement();
+    });
+    this.inPorts.container.on('disconnect', function() {
       return _this.outPorts.element.disconnect();
     });
   }
+
+  CreateElement.prototype.createElement = function() {
+    var el;
+    if (!this.tagName) {
+      return;
+    }
+    if (this.inPorts.container.isAttached()) {
+      if (!this.container) {
+        return;
+      }
+    }
+    el = document.createElement(this.tagName);
+    if (this.container) {
+      this.container.appendChild(el);
+    }
+    return this.outPorts.element.send(el);
+  };
 
   return CreateElement;
 
@@ -13279,6 +10305,71 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-noflo-dom/components/HasClass.js", function(exports, require, module){
+var HasClass, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+HasClass = (function(_super) {
+  __extends(HasClass, _super);
+
+  HasClass.prototype.description = 'Check if an element has a given class';
+
+  function HasClass() {
+    var _this = this;
+    this.element = null;
+    this["class"] = null;
+    this.inPorts = {
+      element: new noflo.Port('object'),
+      "class": new noflo.Port('string')
+    };
+    this.outPorts = {
+      element: new noflo.Port('object'),
+      missed: new noflo.Port('object')
+    };
+    this.inPorts.element.on('data', function(data) {
+      _this.element = data;
+      if (_this["class"]) {
+        return _this.checkClass();
+      }
+    });
+    this.inPorts.element.on('disconnect', function() {
+      _this.outPorts.element.disconnect();
+      if (!_this.outPorts.missed.isAttached()) {
+        return;
+      }
+      return _this.outPorts.missed.disconnect();
+    });
+    this.inPorts["class"].on('data', function(data) {
+      _this["class"] = data;
+      if (_this.element) {
+        return _this.checkClass();
+      }
+    });
+  }
+
+  HasClass.prototype.checkClass = function() {
+    if (this.element.classList.contains(this["class"])) {
+      this.outPorts.element.send(this.element);
+      return;
+    }
+    if (!this.outPorts.missed.isAttached()) {
+      return;
+    }
+    return this.outPorts.missed.send(this.element);
+  };
+
+  return HasClass;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new HasClass;
+};
+
+});
 require.register("noflo-noflo-dom/components/ReadHtml.js", function(exports, require, module){
 var ReadHtml, noflo,
   __hasProp = {}.hasOwnProperty,
@@ -13314,6 +10405,117 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-noflo-dom/components/RemoveElement.js", function(exports, require, module){
+var RemoveElement, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+RemoveElement = (function(_super) {
+  __extends(RemoveElement, _super);
+
+  RemoveElement.prototype.description = 'Remove an element from DOM';
+
+  function RemoveElement() {
+    var _this = this;
+    this.inPorts = {
+      element: new noflo.Port('object')
+    };
+    this.inPorts.element.on('data', function(element) {
+      if (!element.parentNode) {
+        return;
+      }
+      return element.parentNode.removeChild(element);
+    });
+  }
+
+  return RemoveElement;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new RemoveElement;
+};
+
+});
+require.register("noflo-noflo-dom/components/SetAttribute.js", function(exports, require, module){
+var SetAttribute, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+SetAttribute = (function(_super) {
+  __extends(SetAttribute, _super);
+
+  function SetAttribute() {
+    var _this = this;
+    this.attribute = null;
+    this.value = null;
+    this.element = null;
+    this.inPorts = {
+      element: new noflo.Port('object'),
+      attribute: new noflo.Port('string'),
+      value: new noflo.Port('string')
+    };
+    this.outPorts = {
+      element: new noflo.Port('object')
+    };
+    this.inPorts.element.on('data', function(element) {
+      _this.element = element;
+      if (_this.attribute && _this.value) {
+        return _this.setAttribute();
+      }
+    });
+    this.inPorts.attribute.on('data', function(attribute) {
+      _this.attribute = attribute;
+      if (_this.element && _this.value) {
+        return _this.setAttribute();
+      }
+    });
+    this.inPorts.value.on('data', function(value) {
+      _this.value = _this.normalizeValue(value);
+      if (_this.attribute && _this.element) {
+        return _this.setAttribute();
+      }
+    });
+  }
+
+  SetAttribute.prototype.setAttribute = function() {
+    this.element.setAttribute(this.attribute, this.value);
+    this.value = null;
+    if (this.outPorts.element.isAttached()) {
+      this.outPorts.element.send(this.element);
+      return this.outPorts.element.disconnect();
+    }
+  };
+
+  SetAttribute.prototype.normalizeValue = function(value) {
+    var key, newVal, val;
+    if (typeof value === 'object') {
+      if (toString.call(value) !== '[object Array]') {
+        newVal = [];
+        for (key in value) {
+          val = value[key];
+          newVal.push(val);
+        }
+        value = newVal;
+      }
+      return value.join(' ');
+    }
+    return value;
+  };
+
+  return SetAttribute;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new SetAttribute;
+};
+
+});
 require.register("noflo-noflo-dom/components/WriteHtml.js", function(exports, require, module){
 var WriteHtml, noflo,
   __hasProp = {}.hasOwnProperty,
@@ -13345,7 +10547,7 @@ WriteHtml = (function(_super) {
     });
     this.inPorts.container.on('data', function(data) {
       _this.container = data;
-      if (_this.html) {
+      if (_this.html !== null) {
         return _this.writeHtml();
       }
     });
@@ -13435,6 +10637,8 @@ RequestAnimationFrame = (function(_super) {
 
   RequestAnimationFrame.prototype.description = 'Sends bangs that correspond with screen refresh rate.';
 
+  RequestAnimationFrame.prototype.icon = 'film';
+
   function RequestAnimationFrame() {
     var _this = this;
     this.running = false;
@@ -13459,6 +10663,10 @@ RequestAnimationFrame = (function(_super) {
       requestAnimationFrame(this.animate.bind(this));
       return this.outPorts.out.send(true);
     }
+  };
+
+  RequestAnimationFrame.prototype.shutdown = function() {
+    return this.running = false;
   };
 
   return RequestAnimationFrame;
@@ -13497,6 +10705,8 @@ Callback = (function(_super) {
   Callback.prototype.description = 'This component calls a given callback function for each\
   IP it receives.  The Callback component is typically used to connect\
   NoFlo with external Node.js code.';
+
+  Callback.prototype.icon = 'sign-out';
 
   function Callback() {
     var _this = this;
@@ -13552,13 +10762,17 @@ noflo = require('noflo');
 DisconnectAfterPacket = (function(_super) {
   __extends(DisconnectAfterPacket, _super);
 
+  DisconnectAfterPacket.prototype.description = 'Forwards any packets, but also sends a disconnect after each of them';
+
+  DisconnectAfterPacket.prototype.icon = 'pause';
+
   function DisconnectAfterPacket() {
     var _this = this;
     this.inPorts = {
-      "in": new noflo.Port()
+      "in": new noflo.Port('all')
     };
     this.outPorts = {
-      out: new noflo.Port()
+      out: new noflo.Port('all')
     };
     this.inPorts["in"].on('begingroup', function(group) {
       return _this.outPorts.out.beginGroup(group);
@@ -13594,9 +10808,11 @@ Drop = (function(_super) {
   Drop.prototype.description = 'This component drops every packet it receives with no\
   action';
 
+  Drop.prototype.icon = 'trash-o';
+
   function Drop() {
     this.inPorts = {
-      "in": new noflo.Port
+      "in": new noflo.ArrayPort('all')
     };
     this.outPorts = {};
   }
@@ -13620,18 +10836,22 @@ noflo = require('noflo');
 Group = (function(_super) {
   __extends(Group, _super);
 
+  Group.prototype.description = 'Adds a set of groups around the packets received at each connection';
+
+  Group.prototype.icon = 'tags';
+
   function Group() {
     var _this = this;
     this.groups = [];
     this.newGroups = [];
     this.threshold = null;
     this.inPorts = {
-      "in": new noflo.ArrayPort,
-      group: new noflo.ArrayPort,
-      threshold: new noflo.Port
+      "in": new noflo.ArrayPort('all'),
+      group: new noflo.ArrayPort('string'),
+      threshold: new noflo.Port('integer')
     };
     this.outPorts = {
-      out: new noflo.Port
+      out: new noflo.Port('all')
     };
     this.inPorts["in"].on('connect', function() {
       var group, _i, _len, _ref, _results;
@@ -13700,6 +10920,8 @@ Kick = (function(_super) {
   the output port. Mostly usable for debugging, but can also be useful\
   for starting up networks.';
 
+  Kick.prototype.icon = 'share';
+
   function Kick() {
     var _this = this;
     this.data = {
@@ -13708,11 +10930,11 @@ Kick = (function(_super) {
     };
     this.groups = [];
     this.inPorts = {
-      "in": new noflo.Port(),
-      data: new noflo.Port()
+      "in": new noflo.Port('bang'),
+      data: new noflo.Port('all')
     };
     this.outPorts = {
-      out: new noflo.ArrayPort()
+      out: new noflo.ArrayPort('all')
     };
     this.inPorts["in"].on('begingroup', function(group) {
       return _this.groups.push(group);
@@ -13770,13 +10992,15 @@ Merge = (function(_super) {
   Merge.prototype.description = 'This component receives data on multiple input ports and\
     sends the same data out to the connected output port';
 
+  Merge.prototype.icon = 'compress';
+
   function Merge() {
     var _this = this;
     this.inPorts = {
-      "in": new noflo.ArrayPort()
+      "in": new noflo.ArrayPort('all')
     };
     this.outPorts = {
-      out: new noflo.Port()
+      out: new noflo.Port('all')
     };
     this.inPorts["in"].on('connect', function() {
       return _this.outPorts.out.connect();
@@ -13835,19 +11059,17 @@ Output = (function(_super) {
   Output.prototype.description = 'This component receives input on a single inport, and\
     sends the data items directly to console.log';
 
+  Output.prototype.icon = 'bug';
+
   function Output() {
     var _this = this;
-    this.options = {
-      showHidden: false,
-      depth: 2,
-      colors: false
-    };
+    this.options = null;
     this.inPorts = {
-      "in": new noflo.ArrayPort,
-      options: new noflo.Port
+      "in": new noflo.ArrayPort('all'),
+      options: new noflo.Port('object')
     };
     this.outPorts = {
-      out: new noflo.Port
+      out: new noflo.Port('all')
     };
     this.inPorts["in"].on('data', function(data) {
       _this.log(data);
@@ -13870,6 +11092,9 @@ Output = (function(_super) {
     if (typeof options !== 'object') {
       throw new Error('Options is not an object');
     }
+    if (this.options == null) {
+      this.options = {};
+    }
     _results = [];
     for (key in options) {
       if (!__hasProp.call(options, key)) continue;
@@ -13880,7 +11105,11 @@ Output = (function(_super) {
   };
 
   Output.prototype.log = function(data) {
-    return console.log(util.inspect(data, this.options.showHidden, this.options.depth, this.options.colors));
+    if (this.options != null) {
+      return console.log(util.inspect(data, this.options.showHidden, this.options.depth, this.options.colors));
+    } else {
+      return console.log(data);
+    }
   };
 
   return Output;
@@ -13901,6 +11130,10 @@ noflo = require('noflo');
 
 Repeat = (function(_super) {
   __extends(Repeat, _super);
+
+  Repeat.prototype.description = 'Forwards packets and metadata in the same way it receives them';
+
+  Repeat.prototype.icon = 'forward';
 
   function Repeat() {
     var _this = this;
@@ -13937,35 +11170,27 @@ exports.getComponent = function() {
 
 });
 require.register("noflo-noflo-core/components/RepeatAsync.js", function(exports, require, module){
-var RepeatAsync, noflo, util,
+var RepeatAsync, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
-
-if (!noflo.isBrowser()) {
-  util = require('util');
-} else {
-  util = {
-    inspect: function(data) {
-      return data;
-    }
-  };
-}
 
 RepeatAsync = (function(_super) {
   __extends(RepeatAsync, _super);
 
   RepeatAsync.prototype.description = "Like 'Repeat', except repeat on next tick";
 
+  RepeatAsync.prototype.icon = 'step-forward';
+
   function RepeatAsync() {
     var _this = this;
     this.groups = [];
     this.inPorts = {
-      "in": new noflo.Port()
+      "in": new noflo.Port('all')
     };
     this.outPorts = {
-      out: new noflo.Port()
+      out: new noflo.Port('all')
     };
     this.inPorts["in"].on('begingroup', function(group) {
       return _this.groups.push(group);
@@ -14015,6 +11240,8 @@ Split = (function(_super) {
   Split.prototype.description = 'This component receives data on a single input port and\
     sends the same data out to all connected output ports';
 
+  Split.prototype.icon = 'expand';
+
   function Split() {
     var _this = this;
     this.inPorts = {
@@ -14060,6 +11287,8 @@ RunInterval = (function(_super) {
   __extends(RunInterval, _super);
 
   RunInterval.prototype.description = 'Send a packet at the given interval';
+
+  RunInterval.prototype.icon = 'clock-o';
 
   function RunInterval() {
     var _this = this;
@@ -14131,6 +11360,8 @@ MakeFunction = (function(_super) {
   be the variable from the in port. For example, to make a ^2 function\
   input "return x*x;" to the function port.';
 
+  MakeFunction.prototype.icon = 'code';
+
   function MakeFunction() {
     var _this = this;
     this.f = null;
@@ -14194,823 +11425,585 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-noflo-polymer/index.js", function(exports, require, module){
+/*
+ * This file can be used for general library features of noflo-polymer.
+ *
+ * The library features can be made available as CommonJS modules that the
+ * components in this project utilize.
+ */
+
+});
+require.register("noflo-noflo-polymer/component.json", function(exports, require, module){
+module.exports = JSON.parse('{"name":"noflo-polymer","description":"Polymer wrapper component for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-polymer","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["lib/ComponentLoader.coffee","lib/PolymerComponent.coffee","index.js"],"files":["noflo-polymer/noflo-polymer.html"],"json":["component.json"],"noflo":{"loader":"lib/ComponentLoader"}}');
+});
+require.register("noflo-noflo-polymer/lib/ComponentLoader.js", function(exports, require, module){
+var PolymerComponent, registerComponent;
+
+PolymerComponent = require('./PolymerComponent');
+
+registerComponent = function(loader, binding) {
+  var bound, inPorts, name, outPorts;
+  name = binding.getAttribute('name');
+  inPorts = binding.getAttribute('inports').split(' ');
+  outPorts = binding.getAttribute('outports').split(' ');
+  bound = PolymerComponent(name, inPorts, outPorts);
+  return loader.registerComponent('polymer', name, bound);
+};
+
+module.exports = function(loader) {
+  var binding, bindings, _i, _len, _results;
+  bindings = document.querySelectorAll('noflo-polymer');
+  _results = [];
+  for (_i = 0, _len = bindings.length; _i < _len; _i++) {
+    binding = bindings[_i];
+    _results.push(registerComponent(loader, binding));
+  }
+  return _results;
+};
+
+});
+require.register("noflo-noflo-polymer/lib/PolymerComponent.js", function(exports, require, module){
+var noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+module.exports = function(name, inports, outports) {
+  var PolymerComponent;
+  PolymerComponent = (function(_super) {
+    __extends(PolymerComponent, _super);
+
+    function PolymerComponent() {
+      var _this = this;
+      this.element = null;
+      this.eventHandlers = {};
+      this.inPorts = {
+        element: new noflo.Port('object')
+      };
+      inports.forEach(function(inport) {
+        _this.inPorts[inport] = new noflo.ArrayPort('all');
+        _this.inPorts[inport].on('connect', function() {
+          var connected, socket, _i, _len, _ref;
+          if (toString.call(_this.element[inport]) === '[object Array]') {
+            connected = 0;
+            _ref = _this.inPorts[inport].sockets;
+            for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+              socket = _ref[_i];
+              if (socket.isConnected()) {
+                connected++;
+              }
+            }
+            if (connected !== 1) {
+              return;
+            }
+            return _this.element[inport].splice(0, _this.element[inport].length);
+          }
+        });
+        return _this.inPorts[inport].on('data', function(data) {
+          if (typeof _this.element[inport] === 'function') {
+            _this.element[inport](data);
+            return;
+          }
+          if (toString.call(_this.element[inport]) === '[object Array]') {
+            if (toString.call(data) === '[object Array]') {
+              _this.element[inport] = data;
+              return;
+            }
+            return _this.element[inport].push(data);
+          } else {
+            return _this.element[inport] = data;
+          }
+        });
+      });
+      this.outPorts = {
+        element: new noflo.Port('object')
+      };
+      outports.forEach(function(outport) {
+        _this.outPorts[outport] = new noflo.ArrayPort('all');
+        return _this.eventHandlers[outport] = function(event) {
+          if (!_this.outPorts[outport].isAttached()) {
+            return;
+          }
+          return _this.outPorts[outport].send(event.detail);
+        };
+      });
+      this.inPorts.element.on('data', function(element) {
+        _this.element = element;
+        outports.forEach(function(outport) {
+          if (outport === 'element') {
+            return;
+          }
+          return _this.element.addEventListener(outport, _this.eventHandlers[outport], false);
+        });
+        if (_this.outPorts.element.isAttached()) {
+          _this.outPorts.element.send(_this.element);
+          return _this.outPorts.element.disconnect();
+        }
+      });
+    }
+
+    PolymerComponent.prototype.shutdown = function() {
+      var _this = this;
+      outports.forEach(function(outport) {
+        if (name === 'element') {
+          return;
+        }
+        _this.element.removeEventListener(outport, _this.eventHandlers[outport], false);
+        return _this.outPorts[outport].disconnect();
+      });
+      return this.element = null;
+    };
+
+    return PolymerComponent;
+
+  })(noflo.Component);
+  return PolymerComponent;
+};
+
+});
+require.register("noflo-noflo-runtime-base/src/Base.js", function(exports, require, module){
+var BaseTransport, protocols;
+
+protocols = {
+  Graph: require('./protocol/Graph'),
+  Network: require('./protocol/Network'),
+  Component: require('./protocol/Component')
+};
+
+BaseTransport = (function() {
+  function BaseTransport(options) {
+    this.options = options;
+    if (!this.options) {
+      this.options = {};
+    }
+    this.graph = new protocols.Graph(this);
+    this.network = new protocols.Network(this);
+    this.component = new protocols.Component(this);
+  }
+
+  BaseTransport.prototype.send = function(protocol, topic, payload, context) {};
+
+  BaseTransport.prototype.receive = function(protocol, topic, payload, context) {
+    switch (protocol) {
+      case 'graph':
+        return this.graph.receive(topic, payload, context);
+      case 'network':
+        return this.network.receive(topic, payload, context);
+      case 'component':
+        return this.component.receive(topic, payload, context);
+    }
+  };
+
+  return BaseTransport;
+
+})();
+
+module.exports = BaseTransport;
+
+});
+require.register("noflo-noflo-runtime-base/src/protocol/Graph.js", function(exports, require, module){
+var GraphProtocol, noflo;
+
+noflo = require('noflo');
+
+GraphProtocol = (function() {
+  function GraphProtocol(transport) {
+    this.transport = transport;
+    this.graph = null;
+  }
+
+  GraphProtocol.prototype.send = function(topic, payload, context) {
+    return this.transport.send('graph', topic, payload, context);
+  };
+
+  GraphProtocol.prototype.receive = function(topic, payload, context) {
+    switch (topic) {
+      case 'clear':
+        return this.graph = this.initGraph(payload, context);
+      case 'addnode':
+        return this.addNode(this.graph, payload, context);
+      case 'removenode':
+        return this.removeNode(this.graph, payload, context);
+      case 'renamenode':
+        return this.renameNode(this.graph, payload, context);
+      case 'addedge':
+        return this.addEdge(this.graph, payload, context);
+      case 'removeedge':
+        return this.removeEdge(this.graph, payload, context);
+      case 'addinitial':
+        return this.addInitial(this.graph, payload, context);
+      case 'removeinitial':
+        return this.removeInitial(this.graph, payload, context);
+    }
+  };
+
+  GraphProtocol.prototype.initGraph = function(payload, context) {
+    var graph;
+    if (!payload.baseDir) {
+      this.send('error', new Error('No graph baseDir provided'), context);
+      return;
+    }
+    if (!payload.name) {
+      payload.name = 'NoFlo runtime';
+    }
+    graph = new noflo.Graph(payload.name);
+    graph.baseDir = payload.baseDir;
+    if (this.transport.options.baseDir) {
+      graph.baseDir = this.transport.options.baseDir;
+    }
+    this.subscribeGraph(graph, context);
+    return graph;
+  };
+
+  GraphProtocol.prototype.subscribeGraph = function(graph, context) {
+    var _this = this;
+    graph.on('addNode', function(node) {
+      return _this.send('addnode', node, context);
+    });
+    graph.on('removeNode', function(node) {
+      return _this.send('removenode', node, context);
+    });
+    graph.on('renameNode', function(oldId, newId) {
+      return _this.send('renamenode', {
+        from: oldId,
+        to: newId
+      }, context);
+    });
+    graph.on('addEdge', function(edge) {
+      return _this.send('addedge', edge, context);
+    });
+    graph.on('removeEdge', function(edge) {
+      return _this.send('removeedge', edge, context);
+    });
+    graph.on('addInitial', function(iip) {
+      return _this.send('addinitial', iip, context);
+    });
+    return graph.on('removeInitial', function(iip) {
+      return _this.send('removeinitial', iip, context);
+    });
+  };
+
+  GraphProtocol.prototype.addNode = function(graph, node, context) {
+    if (!(node.id || node.component)) {
+      this.send('error', new Error('No ID or component supplied'), context);
+    }
+    return graph.addNode(node.id, node.component, node.metadata);
+  };
+
+  GraphProtocol.prototype.removeNode = function(graph, payload) {
+    if (!payload.id) {
+      this.send('error', new Error('No ID supplied'), context);
+    }
+    return graph.removeNode(payload.id);
+  };
+
+  GraphProtocol.prototype.renameNode = function(graph, payload, context) {
+    if (!(payload.from || payload.to)) {
+      this.send('error', new Error('No from or to supplied'), context);
+    }
+    return graph.renameNode(payload.from, payload.to);
+  };
+
+  GraphProtocol.prototype.addEdge = function(graph, edge, context) {
+    if (!(edge.from || edge.to)) {
+      this.send('error', new Error('No from or to supplied'), context);
+    }
+    return graph.addEdge(edge.from.node, edge.from.port, edge.to.node, edge.to.port, edge.metadata);
+  };
+
+  GraphProtocol.prototype.removeEdge = function(graph, edge, context) {
+    if (!(edge.from || edge.to)) {
+      this.send('error', new Error('No from or to supplied'), context);
+    }
+    return graph.removeEdge(edge.from.node, edge.from.port, edge.to.node, edge.to.port);
+  };
+
+  GraphProtocol.prototype.addInitial = function(graph, payload, context) {
+    if (!(payload.from || payload.to)) {
+      this.send('error', new Error('No from or to supplied'), context);
+    }
+    return graph.addInitial(payload.from.data, payload.to.node, payload.to.port, payload.metadata);
+  };
+
+  GraphProtocol.prototype.removeInitial = function(graph, payload, context) {
+    if (!payload.to) {
+      this.send('error', new Error('No to supplied'), context);
+    }
+    return graph.removeInitial(payload.to.node, payload.to.port);
+  };
+
+  return GraphProtocol;
+
+})();
+
+module.exports = GraphProtocol;
+
+});
+require.register("noflo-noflo-runtime-base/src/protocol/Network.js", function(exports, require, module){
+var NetworkProtocol, noflo, prepareSocketEvent;
+
+noflo = require('noflo');
+
+prepareSocketEvent = function(event) {
+  var payload;
+  payload = {
+    id: event.id
+  };
+  if (event.socket.from) {
+    payload.from = {
+      node: event.socket.from.process.id,
+      port: event.socket.from.port
+    };
+  }
+  if (event.socket.to) {
+    payload.to = {
+      node: event.socket.to.process.id,
+      port: event.socket.to.port
+    };
+  }
+  if (event.group) {
+    payload.group = event.group;
+  }
+  if (event.data) {
+    if (event.data.toJSON) {
+      payload.data = event.data.toJSON();
+    }
+    if (event.data.toString) {
+      payload.data = event.data.toString();
+    } else {
+      payload.data = event.data;
+    }
+  }
+  if (event.subgraph) {
+    payload.subgraph = event.subgraph;
+  }
+  return payload;
+};
+
+NetworkProtocol = (function() {
+  function NetworkProtocol(transport) {
+    this.transport = transport;
+    this.network = null;
+  }
+
+  NetworkProtocol.prototype.send = function(topic, payload, context) {
+    return this.transport.send('network', topic, payload, context);
+  };
+
+  NetworkProtocol.prototype.receive = function(topic, payload, context) {
+    switch (topic) {
+      case 'start':
+        return this.initNetwork(this.transport.graph.graph, context);
+      case 'stop':
+        return this.stopNetwork(this.network, context);
+    }
+  };
+
+  NetworkProtocol.prototype.initNetwork = function(graph, context) {
+    var _this = this;
+    if (!graph) {
+      this.send('error', new Error('No graph defined'), context);
+      return;
+    }
+    return noflo.createNetwork(graph, function(network) {
+      _this.subscribeNetwork(network, context);
+      _this.network = network;
+      return network.connect(function() {
+        network.sendInitials();
+        return graph.on('addInitial', function() {
+          return network.sendInitials();
+        });
+      });
+    }, true);
+  };
+
+  NetworkProtocol.prototype.subscribeNetwork = function(network, context) {
+    var _this = this;
+    network.on('start', function(event) {
+      return _this.send('started', event.start, context);
+    });
+    network.on('connect', function(event) {
+      return _this.send('connect', prepareSocketEvent(event), context);
+    });
+    network.on('begingroup', function(event) {
+      return _this.send('begingroup', prepareSocketEvent(event), context);
+    });
+    network.on('data', function(event) {
+      return _this.send('data', prepareSocketEvent(event), context);
+    });
+    network.on('endgroup', function(event) {
+      return _this.send('endgroup', prepareSocketEvent(event), context);
+    });
+    network.on('disconnect', function(event) {
+      return _this.send('disconnect', prepareSocketEvent(event), context);
+    });
+    return network.on('end', function(event) {
+      return _this.send('stopped', event.uptime, context);
+    });
+  };
+
+  NetworkProtocol.prototype.stopNetwork = function(network, context) {
+    if (!network) {
+      return;
+    }
+    return network.stop();
+  };
+
+  return NetworkProtocol;
+
+})();
+
+module.exports = NetworkProtocol;
+
+});
+require.register("noflo-noflo-runtime-base/src/protocol/Component.js", function(exports, require, module){
+var ComponentProtocol, noflo;
+
+noflo = require('noflo');
+
+ComponentProtocol = (function() {
+  function ComponentProtocol(transport) {
+    this.transport = transport;
+  }
+
+  ComponentProtocol.prototype.send = function(topic, payload, context) {
+    return this.transport.send('component', topic, payload, context);
+  };
+
+  ComponentProtocol.prototype.receive = function(topic, payload, context) {
+    switch (topic) {
+      case 'list':
+        return this.listComponents(payload, context);
+    }
+  };
+
+  ComponentProtocol.prototype.listComponents = function(baseDir, context) {
+    var loader,
+      _this = this;
+    if (this.transport.options.baseDir) {
+      baseDir = this.transport.options.baseDir;
+    }
+    loader = new noflo.ComponentLoader(baseDir);
+    return loader.listComponents(function(components) {
+      return Object.keys(components).forEach(function(component) {
+        return loader.load(component, function(instance) {
+          if (!instance.isReady()) {
+            instance.once('ready', function() {
+              return _this.sendComponent(component, instance, context);
+            });
+            return;
+          }
+          return _this.sendComponent(component, instance, context);
+        });
+      });
+    });
+  };
+
+  ComponentProtocol.prototype.sendComponent = function(component, instance, context) {
+    var icon, inPorts, outPorts, port, portName, _ref, _ref1;
+    inPorts = [];
+    outPorts = [];
+    _ref = instance.inPorts;
+    for (portName in _ref) {
+      port = _ref[portName];
+      inPorts.push({
+        id: portName,
+        type: port.type,
+        array: port instanceof noflo.ArrayPort
+      });
+    }
+    _ref1 = instance.outPorts;
+    for (portName in _ref1) {
+      port = _ref1[portName];
+      outPorts.push({
+        id: portName,
+        type: port.type,
+        array: port instanceof noflo.ArrayPort
+      });
+    }
+    icon = instance.getIcon ? instance.getIcon() : 'blank';
+    return this.send('component', {
+      name: component,
+      description: instance.description,
+      icon: icon,
+      inPorts: inPorts,
+      outPorts: outPorts
+    }, context);
+  };
+
+  return ComponentProtocol;
+
+})();
+
+module.exports = ComponentProtocol;
+
+});
+require.register("noflo-noflo-runtime-iframe/index.js", function(exports, require, module){
+/*
+ * This file can be used for general library features of noflo-runtime-iframe.
+ *
+ * The library features can be made available as CommonJS modules that the
+ * components in this project utilize.
+ */
+
+});
+require.register("noflo-noflo-runtime-iframe/component.json", function(exports, require, module){
+module.exports = JSON.parse('{"name":"noflo-runtime-iframe","description":"NoFlo runtime for execution inside an iframe","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-runtime-iframe","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*","noflo/noflo-runtime-base":"*","noflo/noflo-core":"*"},"scripts":["index.js"],"json":["component.json"],"files":["runtime/component.js","html/component.html","runtime/network.js","html/network.html"]}');
+});
 require.register("noflo-ui/index.js", function(exports, require, module){
 
 });
-require.register("noflo-ui/graphs/EditGraph.json", function(exports, require, module){
-module.exports = JSON.parse('{"processes":{"DataflowElement":{"component":"ui/WriteTemplate"},"LoadDataflowElement":{"component":"core/Kick"},"DataflowData":{"component":"objects/CreateObject"},"LoadDataflow":{"component":"ui/Dataflow"},"DomReady":{"component":"core/Split"},"OpenGraph":{"component":"core/Merge"},"Determine":{"component":"ui/DetermineRuntime"},"LoadRuntime":{"component":"ui/LoadRuntime"},"Drop":{"component":"core/Drop"},"Listen":{"component":"ui/ListenGraph"},"SplitChanged":{"component":"core/Split"}},"connections":[{"data":"#dataflow-template","tgt":{"process":"DataflowElement","port":"template"}},{"data":".dataflow","tgt":{"process":"LoadDataflowElement","port":"data"}},{"src":{"process":"DataflowData","port":"out"},"tgt":{"process":"DataflowElement","port":"data"}},{"src":{"process":"LoadDataflowElement","port":"out"},"tgt":{"process":"LoadDataflow","port":"container"}},{"src":{"process":"DomReady","port":"out"},"tgt":{"process":"LoadDataflowElement","port":"in"}},{"src":{"process":"DataflowElement","port":"out"},"tgt":{"process":"DomReady","port":"in"}},{"src":{"process":"OpenGraph","port":"out"},"tgt":{"process":"Determine","port":"graph"}},{"src":{"process":"Determine","port":"runtime"},"tgt":{"process":"LoadRuntime","port":"runtime"}},{"src":{"process":"Determine","port":"graph"},"tgt":{"process":"LoadRuntime","port":"graph"}},{"src":{"process":"LoadRuntime","port":"runtime"},"tgt":{"process":"LoadDataflow","port":"runtime"}},{"src":{"process":"LoadRuntime","port":"graph"},"tgt":{"process":"LoadDataflow","port":"graph"}},{"src":{"process":"LoadDataflow","port":"dataflow"},"tgt":{"process":"Drop","port":"in"}},{"src":{"process":"LoadDataflow","port":"graph"},"tgt":{"process":"Listen","port":"graph"}},{"src":{"process":"Listen","port":"changed"},"tgt":{"process":"SplitChanged","port":"in"}}],"exports":[{"private":"dataflowelement.target","public":"container"},{"private":"dataflowdata.start","public":"writetemplate"},{"private":"domready.out","public":"domready"},{"private":"opengraph.in","public":"graph"},{"private":"splitchanged.out","public":"changed"}]}');
-});
-require.register("noflo-ui/graphs/WriteTemplate.json", function(exports, require, module){
-module.exports = JSON.parse('{"properties":{"environment":{"runtime":"html"},"name":"Hello"},"exports":[{"private":"gettemplate.selector","public":"template"},{"private":"gettarget.selector","public":"target"},{"private":"executetemplate.in","public":"data"},{"private":"writetemplate.container","public":"out"}],"processes":{"GetTemplate":{"component":"dom/GetElement","metadata":{"x":200,"y":200}},"ReadTemplate":{"component":"dom/ReadHtml","metadata":{"x":455,"y":200}},"ExecuteTemplate":{"component":"strings/StringTemplate","metadata":{"x":718,"y":198}},"WriteTemplate":{"component":"dom/WriteHtml","metadata":{"x":998,"y":196}},"GetTarget":{"component":"dom/GetElement","metadata":{"x":199,"y":349}}},"connections":[{"src":{"process":"GetTemplate","port":"element"},"tgt":{"process":"ReadTemplate","port":"container"},"metadata":{"route":0}},{"src":{"process":"ReadTemplate","port":"html"},"tgt":{"process":"ExecuteTemplate","port":"template"},"metadata":{"route":0}},{"src":{"process":"ExecuteTemplate","port":"out"},"tgt":{"process":"WriteTemplate","port":"html"},"metadata":{"route":0}},{"src":{"process":"GetTarget","port":"element"},"tgt":{"process":"WriteTemplate","port":"container"},"metadata":{"route":0}}]}');
-});
-require.register("noflo-ui/graphs/EditGraph.json", function(exports, require, module){
-module.exports = JSON.parse('{"processes":{"DataflowElement":{"component":"ui/WriteTemplate"},"LoadDataflowElement":{"component":"core/Kick"},"DataflowData":{"component":"objects/CreateObject"},"LoadDataflow":{"component":"ui/Dataflow"},"DomReady":{"component":"core/Split"},"OpenGraph":{"component":"core/Merge"},"Determine":{"component":"ui/DetermineRuntime"},"LoadRuntime":{"component":"ui/LoadRuntime"},"Drop":{"component":"core/Drop"},"Listen":{"component":"ui/ListenGraph"},"SplitChanged":{"component":"core/Split"}},"connections":[{"data":"#dataflow-template","tgt":{"process":"DataflowElement","port":"template"}},{"data":".dataflow","tgt":{"process":"LoadDataflowElement","port":"data"}},{"src":{"process":"DataflowData","port":"out"},"tgt":{"process":"DataflowElement","port":"data"}},{"src":{"process":"LoadDataflowElement","port":"out"},"tgt":{"process":"LoadDataflow","port":"container"}},{"src":{"process":"DomReady","port":"out"},"tgt":{"process":"LoadDataflowElement","port":"in"}},{"src":{"process":"DataflowElement","port":"out"},"tgt":{"process":"DomReady","port":"in"}},{"src":{"process":"OpenGraph","port":"out"},"tgt":{"process":"Determine","port":"graph"}},{"src":{"process":"Determine","port":"runtime"},"tgt":{"process":"LoadRuntime","port":"runtime"}},{"src":{"process":"Determine","port":"graph"},"tgt":{"process":"LoadRuntime","port":"graph"}},{"src":{"process":"LoadRuntime","port":"runtime"},"tgt":{"process":"LoadDataflow","port":"runtime"}},{"src":{"process":"LoadRuntime","port":"graph"},"tgt":{"process":"LoadDataflow","port":"graph"}},{"src":{"process":"LoadDataflow","port":"dataflow"},"tgt":{"process":"Drop","port":"in"}},{"src":{"process":"LoadDataflow","port":"graph"},"tgt":{"process":"Listen","port":"graph"}},{"src":{"process":"Listen","port":"changed"},"tgt":{"process":"SplitChanged","port":"in"}}],"exports":[{"private":"dataflowelement.target","public":"container"},{"private":"dataflowdata.start","public":"writetemplate"},{"private":"domready.out","public":"domready"},{"private":"opengraph.in","public":"graph"},{"private":"splitchanged.out","public":"changed"}]}');
-});
-require.register("noflo-ui/graphs/WriteTemplate.json", function(exports, require, module){
-module.exports = JSON.parse('{"properties":{"environment":{"runtime":"html"},"name":"Hello"},"exports":[{"private":"gettemplate.selector","public":"template"},{"private":"gettarget.selector","public":"target"},{"private":"executetemplate.in","public":"data"},{"private":"writetemplate.container","public":"out"}],"processes":{"GetTemplate":{"component":"dom/GetElement","metadata":{"x":200,"y":200}},"ReadTemplate":{"component":"dom/ReadHtml","metadata":{"x":455,"y":200}},"ExecuteTemplate":{"component":"strings/StringTemplate","metadata":{"x":718,"y":198}},"WriteTemplate":{"component":"dom/WriteHtml","metadata":{"x":998,"y":196}},"GetTarget":{"component":"dom/GetElement","metadata":{"x":199,"y":349}}},"connections":[{"src":{"process":"GetTemplate","port":"element"},"tgt":{"process":"ReadTemplate","port":"container"},"metadata":{"route":0}},{"src":{"process":"ReadTemplate","port":"html"},"tgt":{"process":"ExecuteTemplate","port":"template"},"metadata":{"route":0}},{"src":{"process":"ExecuteTemplate","port":"out"},"tgt":{"process":"WriteTemplate","port":"html"},"metadata":{"route":0}},{"src":{"process":"GetTarget","port":"element"},"tgt":{"process":"WriteTemplate","port":"container"},"metadata":{"route":0}}]}');
-});
 require.register("noflo-ui/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-ui","description":"NoFlo Development Environment","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","version":"0.1.0","keywords":["fbp","noflo","graph","visual","dataflow"],"dependencies":{"meemoo/dataflow":"*","component/emitter":"*","noflo/noflo":"*","noflo/noflo-strings":"*","noflo/noflo-ajax":"*","noflo/noflo-localstorage":"*","noflo/noflo-interaction":"*","noflo/noflo-objects":"*","noflo/noflo-groups":"*","noflo/noflo-dom":"*","noflo/noflo-core":"*"},"noflo":{"components":{"CreateGraph":"components/CreateGraph.coffee","LoadGraph":"components/LoadGraph.coffee","LoadRuntime":"components/LoadRuntime.coffee","ListenGraph":"components/ListenGraph.coffee","DetermineRuntime":"components/DetermineRuntime.coffee","Dataflow":"components/Dataflow.coffee","Router":"components/Router.coffee"},"graphs":{"EditGraph":"graphs/EditGraph.json","WriteTemplate":"graphs/WriteTemplate.json"}},"main":"index.js","scripts":["index.js","src/plugins/nofloLibrary.coffee","src/plugins/nofloGraph.coffee","src/plugins/nofloSettings.coffee","src/plugins/preview.coffee","src/runtimes/base.coffee","src/runtimes/iframe.coffee","src/runtimes/websocket.coffee","components/CreateGraph.coffee","components/LoadGraph.coffee","components/LoadRuntime.coffee","components/ListenGraph.coffee","components/DetermineRuntime.coffee","components/Dataflow.coffee","components/Router.coffee","graphs/EditGraph.json","graphs/WriteTemplate.json"],"json":["graphs/EditGraph.json","graphs/WriteTemplate.json","component.json"],"files":["css/noflo-ui.css","preview/iframe.html","preview/package.json","preview/component.json","index.html","favicon.ico"]}');
+module.exports = JSON.parse('{"name":"noflo-ui","description":"NoFlo Development Environment","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","version":"0.1.0","keywords":["fbp","noflo","graph","visual","dataflow"],"dependencies":{"component/emitter":"*","noflo/noflo":"*","noflo/noflo-strings":"*","noflo/noflo-ajax":"*","noflo/noflo-localstorage":"*","noflo/noflo-interaction":"*","noflo/noflo-objects":"*","noflo/noflo-groups":"*","noflo/noflo-dom":"*","noflo/noflo-core":"*","noflo/noflo-polymer":"*","noflo/noflo-runtime-iframe":"*"},"noflo":{"components":{"AppendTo":"components/AppendTo.coffee","ConnectRuntime":"components/ConnectRuntime.coffee","CreateGraph":"components/CreateGraph.coffee","GenerateId":"components/GenerateId.coffee","LoadGraphEditor":"components/LoadGraphEditor.coffee","LoadRuntime":"components/LoadRuntime.coffee","DetermineRuntime":"components/DetermineRuntime.coffee","Router":"components/Router.coffee"}},"main":"index.js","scripts":["index.js","src/plugins/source.coffee","src/runtimes/base.coffee","src/runtimes/iframe.coffee","src/runtimes/websocket.coffee","components/AppendTo.coffee","components/ConnectRuntime.coffee","components/CreateGraph.coffee","components/GenerateId.coffee","components/LoadGraphEditor.coffee","components/LoadRuntime.coffee","components/DetermineRuntime.coffee","components/Router.coffee"],"json":["component.json"],"files":["css/noflo-ui.css","preview/iframe.html","preview/package.json","preview/component.json","index.html","favicon.ico","noflo.png","examples.json"]}');
 });
-require.register("noflo-ui/src/plugins/nofloLibrary.js", function(exports, require, module){
-var Dataflow, NoFloLibraryPlugin, plugin,
+require.register("noflo-ui/src/plugins/source.js", function(exports, require, module){
+var GraphSource,
   __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
-Dataflow = require('/meemoo-dataflow').Dataflow;
+GraphSource = (function() {
+  GraphSource.prototype.getMenuButtons = function() {
+    return [
+      {
+        id: 'view-source',
+        label: 'view source',
+        icon: 'code',
+        action: this.showCard
+      }
+    ];
+  };
 
-NoFloLibraryPlugin = (function() {
-  function NoFloLibraryPlugin() {
-    this.updateInstancePorts = __bind(this.updateInstancePorts, this);
-    this.dataflow = null;
+  function GraphSource() {
+    this.showCard = __bind(this.showCard, this);
+    this.graph = null;
   }
 
-  NoFloLibraryPlugin.prototype.initialize = function(dataflow) {
-    this.dataflow = dataflow;
-    this.runtime = null;
-    this.components = {};
-    this.types = {};
-    return this.instances = {};
+  GraphSource.prototype.showCard = function(container) {
+    var card;
+    if (container.querySelector('#viewSource')) {
+      return;
+    }
+    card = document.createElement('the-card');
+    card.setAttribute('id', 'viewSource');
+    card.innerHTML = "<h1>Graph source</h1>\n<textarea></textarea>";
+    card.getElementsByTagName('textarea')[0].value = JSON.stringify(this.graph.toJSON(), null, 4);
+    return container.appendChild(card);
   };
 
-  NoFloLibraryPlugin.prototype.registerGraph = function(graph, runtime) {
-    var _this = this;
-    this.prepareComponents(graph);
-    this.runtime = runtime;
-    runtime.on('component', function(message) {
-      if (runtime !== _this.runtime) {
-        return;
-      }
-      return _this.registerComponent(message.payload);
-    });
-    return runtime.on('connected', function() {
-      if (runtime !== _this.runtime) {
-        return;
-      }
-      return runtime.sendComponent('list', graph.baseDir);
-    });
+  GraphSource.prototype.register = function(instance) {
+    return this.graph = instance;
   };
 
-  NoFloLibraryPlugin.prototype.excludeUnavailable = function() {
-    var component, exclude, name, _ref;
-    exclude = [];
-    _ref = this.dataflow.nodes;
-    for (name in _ref) {
-      component = _ref[name];
-      if (!this.components[name]) {
-        exclude.push(name);
-      }
-    }
-    return exclude;
+  GraphSource.prototype.unregister = function(instance) {
+    return this.graph = null;
   };
 
-  NoFloLibraryPlugin.prototype.prepareComponents = function(graph) {
-    var component, components, name, _results,
-      _this = this;
-    components = {};
-    graph.nodes.forEach(function(node) {
-      components[node.component] = {
-        name: node.component,
-        description: '',
-        inPorts: [],
-        outPorts: []
-      };
-      graph.edges.forEach(function(edge) {
-        if (edge.from.node === node.id) {
-          components[node.component].outPorts.push({
-            id: edge.from.port,
-            type: 'all'
-          });
-        }
-        if (edge.to.node === node.id) {
-          return components[node.component].inPorts.push({
-            id: edge.to.port,
-            type: 'all'
-          });
-        }
-      });
-      return graph.initializers.forEach(function(iip) {
-        if (iip.to.node === node.id) {
-          return components[node.component].inPorts.push({
-            id: iip.to.port,
-            type: 'all'
-          });
-        }
-      });
-    });
-    _results = [];
-    for (name in components) {
-      component = components[name];
-      _results.push(this.registerComponent(component));
-    }
-    return _results;
-  };
-
-  NoFloLibraryPlugin.prototype.registerComponent = function(definition) {
-    var BaseType, type;
-    this.components[definition.name] = definition;
-    if (!this.types[definition.name]) {
-      BaseType = this.dataflow.node('base');
-      this.types[definition.name] = this.dataflow.node(definition.name);
-      this.types[definition.name].Model = BaseType.Model.extend({
-        defaults: function() {
-          var defaults;
-          defaults = BaseType.Model.prototype.defaults.call(this);
-          defaults.type = definition.name;
-          return defaults;
-        },
-        inputs: definition.inPorts,
-        outputs: definition.outPorts
-      });
-      if (definition.description) {
-        this.types[definition.name].description = definition.description;
-      }
-      return this.libraryUpdater();
-    } else {
-      type = this.types[definition.name].Model;
-      type.prototype.inputs = definition.inPorts;
-      type.prototype.outputs = definition.outPorts;
-      if (this.instances[definition.name]) {
-        this.instances[definition.name].forEach(this.updateInstancePorts);
-      }
-      if (definition.description) {
-        return this.types[definition.name].description = definition.description;
-      }
-    }
-  };
-
-  NoFloLibraryPlugin.prototype.updateInstancePorts = function(instance) {
-    var instancePort, port, _i, _j, _len, _len1, _ref, _ref1, _results;
-    _ref = this.components[instance.type].inPorts;
-    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-      port = _ref[_i];
-      instancePort = instance.inputs.get(port.id);
-      if (instancePort) {
-        instancePort.set(port);
-      } else {
-        instance.inputs.add({
-          label: port.id,
-          parentNode: instance,
-          id: port.id,
-          type: port.type
-        });
-      }
-    }
-    _ref1 = this.components[instance.type].outPorts;
-    _results = [];
-    for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-      port = _ref1[_j];
-      instancePort = instance.outputs.get(port.id);
-      if (instancePort) {
-        _results.push(instancePort.set(port));
-      } else {
-        _results.push(instance.outputs.add({
-          label: port.id,
-          parentNode: instance,
-          id: port.id,
-          type: port.type
-        }));
-      }
-    }
-    return _results;
-  };
-
-  NoFloLibraryPlugin.prototype.getInstance = function(name, attributes) {
-    var instance, type;
-    if (!this.types[name]) {
-      return null;
-    }
-    type = this.types[name];
-    instance = new type.Model(attributes);
-    if (!this.instances[name]) {
-      this.instances[name] = [];
-    }
-    this.instances[name].push(instance);
-    return instance;
-  };
-
-  NoFloLibraryPlugin.prototype.libraryUpdater = _.debounce(function() {
-    return this.dataflow.plugins.library.update({
-      exclude: this.excludeUnavailable()
-    });
-  }, 100);
-
-  return NoFloLibraryPlugin;
+  return GraphSource;
 
 })();
 
-plugin = Dataflow.prototype.plugin('nofloLibrary');
-
-Dataflow.prototype.plugins.nofloLibrary = new NoFloLibraryPlugin;
-
-});
-require.register("noflo-ui/src/plugins/nofloGraph.js", function(exports, require, module){
-var Dataflow, Graph, NoFloGraphPlugin, plugin;
-
-Dataflow = require('/meemoo-dataflow').Dataflow;
-
-Graph = Dataflow.prototype.module('graph');
-
-NoFloGraphPlugin = (function() {
-  function NoFloGraphPlugin() {
-    this.dataflow = null;
-  }
-
-  NoFloGraphPlugin.prototype.initialize = function(dataflow) {
-    this.dataflow = dataflow;
-    this.dataflow.plugins.source.listeners(false);
-    this.dataflow.plugins.source.allowUpdate(false);
-    return this.runtime = null;
-  };
-
-  NoFloGraphPlugin.prototype.registerGraph = function(graph, runtime) {
-    var callback, dfGraph,
-      _this = this;
-    dfGraph = this.dataflow.loadGraph({});
-    this.runtime = runtime;
-    callback = callback ? callback : function() {};
-    this.prepareGraph(graph, dfGraph, runtime);
-    return runtime.on('connected', function() {
-      var edge, iip, node, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2, _results;
-      if (runtime !== _this.runtime) {
-        return;
-      }
-      runtime.sendGraph('clear', {
-        baseDir: graph.baseDir
-      });
-      _ref = graph.nodes;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        node = _ref[_i];
-        _this.addNodeRuntime(node, runtime);
-      }
-      _ref1 = graph.edges;
-      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-        edge = _ref1[_j];
-        _this.addEdgeRuntime(edge, runtime);
-      }
-      _ref2 = graph.initializers;
-      _results = [];
-      for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
-        iip = _ref2[_k];
-        _results.push(_this.addInitialRuntime(iip, runtime));
-      }
-      return _results;
-    });
-  };
-
-  NoFloGraphPlugin.prototype.registerSubgraph = function(graph, runtime) {
-    var callback, dfGraph;
-    dfGraph = new Graph.Model({
-      dataflow: this.dataflow
-    });
-    callback = callback ? callback : function() {};
-    return this.prepareGraph(graph, dfGraph, runtime);
-  };
-
-  NoFloGraphPlugin.prototype.prepareGraph = function(nofloGraph, dataflowGraph, runtime) {
-    var edge, iip, node, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2, _results;
-    dataflowGraph.nofloGraph = nofloGraph;
-    nofloGraph.dataflowGraph = dataflowGraph;
-    this.subscribeDataflowEvents(dataflowGraph);
-    this.subscribeNoFloEvents(nofloGraph, runtime);
-    _ref = nofloGraph.nodes;
-    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-      node = _ref[_i];
-      this.addNodeDataflow(node, dataflowGraph);
-    }
-    _ref1 = nofloGraph.edges;
-    for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-      edge = _ref1[_j];
-      if (!nofloGraph.getNode(edge.from.node)) {
-        continue;
-      }
-      if (!nofloGraph.getNode(edge.to.node)) {
-        continue;
-      }
-      this.addEdgeDataflow(edge, dataflowGraph);
-    }
-    _ref2 = nofloGraph.initializers;
-    _results = [];
-    for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
-      iip = _ref2[_k];
-      if (!nofloGraph.getNode(iip.to.node)) {
-        continue;
-      }
-      _results.push(this.addInitialDataflow(iip, dataflowGraph));
-    }
-    return _results;
-  };
-
-  NoFloGraphPlugin.prototype.subscribeDataflowEvents = function(graph) {
-    var _this = this;
-    graph.on('change', function(dfGraph) {
-      var json;
-      json = JSON.stringify(graph.nofloGraph.toJSON(), null, 2);
-      return _this.dataflow.plugins.source.show(json);
-    });
-    this.dataflow.on('node:add', function(dfGraph, node) {
-      if (dfGraph !== graph) {
-        return;
-      }
-      return _this.subscribeDataflowNode(node, graph);
-    });
-    this.dataflow.on('edge:add', function(dfGraph, edge) {
-      if (dfGraph !== graph) {
-        return;
-      }
-      return _this.subscribeDataflowEdge(edge, graph);
-    });
-    this.dataflow.on("node:remove", function(dfGraph, node) {
-      if (dfGraph !== graph) {
-        return;
-      }
-      if (node.nofloNode) {
-        return graph.nofloGraph.removeNode(node.nofloNode.id);
-      }
-    });
-    return this.dataflow.on("edge:remove", function(dfGraph, edge) {
-      if (dfGraph !== graph) {
-        return;
-      }
-      if (edge.nofloEdge) {
-        edge = edge.nofloEdge;
-        return graph.nofloGraph.removeEdge(edge.from.node, edge.from.port, edge.to.node, edge.to.port);
-      }
-    });
-  };
-
-  NoFloGraphPlugin.prototype.subscribeDataflowNode = function(node, graph) {
-    var id, label, nofloNode, randomString;
-    randomString = function(num) {
-      if (num == null) {
-        num = 60466176;
-      }
-      num = Math.floor(Math.random() * num);
-      return num.toString(36);
-    };
-    if (node.nofloNode == null) {
-      id = node.type + '_' + randomString();
-      while (graph.nofloGraph.getNode(id) != null) {
-        id = node.type + '_' + randomString();
-      }
-      node.set("nofloId", id);
-      label = node.get("label");
-      if (label == null) {
-        label = node.type;
-      }
-      nofloNode = graph.nofloGraph.addNode(id, node.type, {
-        x: node.get('x'),
-        y: node.get('y'),
-        label: label
-      });
-      node.nofloNode = nofloNode;
-      nofloNode.dataflowNode = node;
-    }
-    node.on('change:label', function(node, newName) {
-      var newId, oldName;
-      node.nofloNode.metadata.label = newName;
-      oldName = node.nofloNode.id;
-      newId = newName + '_' + randomString();
-      while (graph.nofloGraph.getNode(newId) != null) {
-        newId = newName + '_' + randomString();
-      }
-      return graph.nofloGraph.renameNode(oldName, newId);
-    });
-    node.on('change:x change:y', function() {
-      node.nofloNode.metadata.x = node.get('x');
-      node.nofloNode.metadata.y = node.get('y');
-      return graph.nofloGraph.emit('changed');
-    });
-    node.on('change:state', function(port, value) {
-      var iip, metadata, _i, _len, _ref;
-      metadata = {};
-      _ref = graph.nofloGraph.initializers;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        iip = _ref[_i];
-        if (!iip) {
-          continue;
-        }
-        if (iip.to.node === node.nofloNode.id && iip.to.port === port) {
-          if (iip.from.data === value) {
-            return;
-          }
-          metadata = iip.metadata;
-          graph.nofloGraph.removeInitial(node.nofloNode.id, port);
-        }
-      }
-      return graph.nofloGraph.addInitial(value, node.nofloNode.id, port, metadata);
-    });
-    return node.on('bang', function(port) {
-      var iip, metadata, _i, _len, _ref;
-      metadata = {};
-      _ref = graph.nofloGraph.initializers;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        iip = _ref[_i];
-        if (!iip) {
-          continue;
-        }
-        if (iip.to.node === node.nofloNode.id && iip.to.port === port) {
-          metadata = iip.metadata;
-          graph.nofloGraph.removeInitial(node.nofloNode.id, port);
-        }
-      }
-      graph.nofloGraph.addInitial(true, node.nofloNode.id, port, metadata);
-      return graph.nofloGraph.removeInitial(node.nofloNode.id, port);
-    });
-  };
-
-  NoFloGraphPlugin.prototype.subscribeDataflowEdge = function(edge, graph) {
-    var nofloEdge;
-    if (!edge.nofloEdge) {
-      nofloEdge = graph.nofloGraph.addEdge(edge.source.parentNode.nofloNode.id, edge.source.id, edge.target.parentNode.nofloNode.id, edge.target.id, {
-        route: edge.get('route')
-      });
-      edge.nofloEdge = nofloEdge;
-      nofloEdge.dataflowEdge = edge;
-    }
-    return edge.on('change:route', function() {
-      edge.nofloEdge.metadata.route = edge.get('route');
-      return graph.nofloGraph.emit('changed');
-    });
-  };
-
-  NoFloGraphPlugin.prototype.subscribeNoFloEvents = function(graph, runtime) {
-    var _this = this;
-    graph.on('addNode', function(nfNode) {
-      return setTimeout(function() {
-        _this.addNodeDataflow(nfNode, graph.dataflowGraph);
-        return _this.addNodeRuntime(nfNode, runtime);
-      }, 0);
-    });
-    graph.on('removeNode', function(nfNode) {
-      if (nfNode.dataflowNode != null) {
-        nfNode.dataflowNode.remove();
-      }
-      return runtime.sendGraph('removenode', {
-        id: nfNode.id
-      });
-    });
-    graph.on('addEdge', function(nfEdge) {
-      return setTimeout(function() {
-        _this.addEdgeDataflow(nfEdge, graph.dataflowGraph);
-        return _this.addEdgeRuntime(nfEdge, runtime);
-      }, 0);
-    });
-    graph.on('removeEdge', function(nfEdge) {
-      if ((nfEdge.from.node != null) && (nfEdge.to.node != null)) {
-        if (nfEdge.dataflowEdge != null) {
-          nfEdge.dataflowEdge.remove();
-        }
-      }
-      return runtime.sendGraph('removeedge', {
-        from: nfEdge.from,
-        to: nfEdge.to
-      });
-    });
-    graph.on('addInitial', function(iip) {
-      _this.addInitialDataflow(iip, graph.dataflowGraph);
-      _this.addInitialRuntime(iip, runtime);
-      return _this.dataflow.plugins.log.add("IIP added to " + iip.to.node + " " + (iip.to.port.toUpperCase()));
-    });
-    graph.on('removeInitial', function(iip) {
-      _this.dataflow.plugins.log.add("IIP removed from " + iip.to.node + " " + (iip.to.port.toUpperCase()));
-      return runtime.sendGraph('removeinitial', {
-        from: iip.from,
-        to: iip.to
-      });
-    });
-    return runtime.on('network', function(_arg) {
-      var command, edge, eventEdge, payload, _i, _len, _ref;
-      command = _arg.command, payload = _arg.payload;
-      if (runtime !== _this.runtime) {
-        return;
-      }
-      if (command === 'error') {
-        _this.dataflow.plugins.notification.notify('noflo.png', 'Error', payload.message);
-        return;
-      }
-      if (!(payload.to || payload.from)) {
-        return;
-      }
-      eventEdge = null;
-      _ref = graph.edges;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        edge = _ref[_i];
-        if (edge.to.node === payload.to.node && edge.to.port === payload.to.port) {
-          if (!payload.from) {
-            eventEdge = edge;
-            continue;
-          }
-          if (edge.from.node === payload.from.node && edge.from.port === payload.from.port) {
-            eventEdge = edge;
-          }
-        }
-      }
-      if (!eventEdge) {
-        return;
-      }
-      return eventEdge.dataflowEdge.get('log').add({
-        type: command,
-        group: payload.group,
-        data: payload.data
-      });
-    });
-  };
-
-  NoFloGraphPlugin.prototype.addNodeDataflow = function(nfNode, dfGraph) {
-    var dfNode;
-    if (!nfNode) {
-      return;
-    }
-    if (nfNode.dataflowNode) {
-      return;
-    }
-    dfNode = this.dataflow.plugins.nofloLibrary.getInstance(nfNode.component, {
-      id: nfNode.id,
-      label: (nfNode.metadata.label != null ? nfNode.metadata.label : nfNode.id),
-      x: (nfNode.metadata.x != null ? nfNode.metadata.x : 500),
-      y: (nfNode.metadata.y != null ? nfNode.metadata.y : 300),
-      parentGraph: dfGraph
-    });
-    nfNode.dataflowNode = dfNode;
-    dfNode.nofloNode = nfNode;
-    return dfGraph.nodes.add(dfNode);
-  };
-
-  NoFloGraphPlugin.prototype.addNodeRuntime = function(node, runtime) {
-    return runtime.sendGraph('addnode', {
-      id: node.id,
-      component: node.component,
-      metadata: node.metadata
-    });
-  };
-
-  NoFloGraphPlugin.prototype.addEdgeDataflow = function(nfEdge, dfGraph) {
-    var Edge, dfEdge, edgeToId;
-    if (!nfEdge) {
-      return;
-    }
-    if (nfEdge.dataflowEdge) {
-      return;
-    }
-    edgeToId = function(edge) {
-      var destination, source;
-      if (edge.dataflowEdge) {
-        return edge.dataflowEdge.id;
-      }
-      source = "" + edge.from.node + " " + (edge.from.port.toUpperCase());
-      destination = "" + (edge.to.port.toUpperCase()) + " " + edge.to.node;
-      return "" + source + " -> " + destination;
-    };
-    Edge = this.dataflow.module('edge');
-    if (!nfEdge.metadata) {
-      nfEdge.metadata = {};
-    }
-    dfEdge = new Edge.Model({
-      id: edgeToId(nfEdge),
-      parentGraph: dfGraph,
-      source: nfEdge.from,
-      target: nfEdge.to,
-      route: (nfEdge.metadata.route != null ? nfEdge.metadata.route : 0)
-    });
-    dfEdge.nofloEdge = nfEdge;
-    nfEdge.dataflowEdge = dfEdge;
-    return dfGraph.edges.add(dfEdge);
-  };
-
-  NoFloGraphPlugin.prototype.addEdgeRuntime = function(edge, runtime) {
-    return runtime.sendGraph('addedge', {
-      from: edge.from,
-      to: edge.to
-    });
-  };
-
-  NoFloGraphPlugin.prototype.addInitialDataflow = function(iip, graph) {
-    var node, port;
-    if (!iip) {
-      return;
-    }
-    node = graph.nodes.get(iip.to.node);
-    if (node) {
-      port = node.inputs.get(iip.to.port);
-      if (port) {
-        return node.setState(iip.to.port, iip.from.data);
-      }
-    }
-  };
-
-  NoFloGraphPlugin.prototype.addInitialRuntime = function(iip, runtime) {
-    return runtime.sendGraph('addinitial', {
-      from: iip.from,
-      to: iip.to
-    });
-  };
-
-  return NoFloGraphPlugin;
-
-})();
-
-plugin = Dataflow.prototype.plugin('nofloGraph');
-
-Dataflow.prototype.plugins.nofloGraph = new NoFloGraphPlugin;
-
-});
-require.register("noflo-ui/src/plugins/nofloSettings.js", function(exports, require, module){
-var Dataflow, NoFloSettingsPlugin, plugin;
-
-Dataflow = require('/meemoo-dataflow').Dataflow;
-
-NoFloSettingsPlugin = (function() {
-  function NoFloSettingsPlugin() {
-    this.dataflow = null;
-  }
-
-  NoFloSettingsPlugin.prototype.initialize = function(dataflow) {
-    this.runtime = null;
-    this.$settings = $("<div class=\"noflo-ui-settings\"></div>");
-    dataflow.disablePlugin('log');
-    return dataflow.addPlugin({
-      id: 'settings',
-      name: '',
-      menu: this.$settings,
-      icon: 'cog',
-      pinned: false
-    });
-  };
-
-  NoFloSettingsPlugin.prototype.registerGraph = function(graph, runtime) {
-    this.$settings.html();
-    if (!graph.properties.environment.runtime) {
-      return;
-    }
-    switch (graph.properties.environment.runtime) {
-      case 'websocket':
-        return this.renderServerForm(graph);
-      default:
-        return this.renderClientForm(graph);
-    }
-  };
-
-  NoFloSettingsPlugin.prototype.renderServerForm = function(graph) {
-    var $form, $update, $wsUrl;
-    $form = $("<form>      <label>        WebSocket URL        <input class='wsUrl' type='url'>      </label>      <div class='toolbar'>        <button class='update'>Update</button>      </div>     </form>");
-    $wsUrl = $form.find('.wsUrl');
-    $update = $form.find('.update');
-    $wsUrl.val(graph.properties.environment.wsUrl);
-    $update.click(function(event) {
-      event.preventDefault();
-      graph.properties.environment.wsUrl = $wsUrl.val();
-      return graph.emit('changed');
-    });
-    return this.$settings.append($form);
-  };
-
-  NoFloSettingsPlugin.prototype.renderClientForm = function(graph) {
-    var $content, $form, $height, $src, $update, $width;
-    $form = $("<form>      <label>        Preview iframe        <input class='src' type='text'>      </label>      <label>        HTML contents        <textarea class='content'></textarea>      </label>      <label>        Preview width        <input class='width' type='number'>      </label>      <label>        Preview height        <input class='height' type='number'>      </label>      <div class='toolbar'>        <button class='update'>Update</button>      </div>     </form>");
-    $src = $form.find('.src');
-    $content = $form.find('.content');
-    $width = $form.find('.width');
-    $height = $form.find('.height');
-    $update = $form.find('.update');
-    $src.val(graph.properties.environment.src);
-    $content.val(graph.properties.environment.content);
-    $width.val(graph.properties.environment.width);
-    $height.val(graph.properties.environment.height);
-    $update.click(function(event) {
-      event.preventDefault();
-      graph.properties.environment.src = $src.val();
-      graph.properties.environment.content = $content.val();
-      graph.properties.environment.height = $height.val();
-      graph.properties.environment.width = $width.val();
-      return graph.emit('changed');
-    });
-    return this.$settings.append($form);
-  };
-
-  return NoFloSettingsPlugin;
-
-})();
-
-plugin = Dataflow.prototype.plugin('nofloSettings');
-
-Dataflow.prototype.plugins.nofloSettings = new NoFloSettingsPlugin;
-
-});
-require.register("noflo-ui/src/plugins/preview.js", function(exports, require, module){
-var Dataflow, NoFloPreview, plugin,
-  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
-
-Dataflow = require('/meemoo-dataflow').Dataflow;
-
-NoFloPreview = (function() {
-  function NoFloPreview() {
-    this.onShow = __bind(this.onShow, this);
-  }
-
-  NoFloPreview.prototype.initialize = function(dataflow) {
-    var _this = this;
-    this.runtime = null;
-    this.$connector = $("<div class=\"noflo-ui-preview\">      <h2><i></i> <span>WebSocket</span></h2>      <div class=\"toolbar\">        <button class=\"start btn\"><i class=\"icon-play\"></i></button>        <button class=\"stop btn\"><i class=\"icon-stop\"></i></button>        <button class=\"connect btn\"><i class=\"icon-refresh\"></i></button>        <span class=\"status\"></span>        <span class=\"uptime\"></span>      </div>      <div class=\"preview\"></div>    </div>");
-    this.$status = this.$connector.find('.status');
-    this.$preview = this.$connector.find('.preview');
-    this.$startButton = this.$connector.find('.start');
-    this.$stopButton = this.$connector.find('.stop');
-    this.$connButton = this.$connector.find('.connect');
-    dataflow.addPlugin({
-      id: 'preview',
-      name: '',
-      menu: this.$connector,
-      icon: 'eye-open',
-      pinned: true
-    });
-    this.$startButton.hide();
-    this.$stopButton.hide();
-    this.$connButton.hide();
-    this.$startButton.click(function() {
-      dataflow.plugins.notification.requestPermission();
-      return _this.runtime.start();
-    });
-    this.$stopButton.click(function() {
-      return _this.runtime.stop();
-    });
-    return this.dataflow = dataflow;
-  };
-
-  NoFloPreview.prototype.onShow = function() {
-    return this.$preview.append(this.runtime.getElement());
-  };
-
-  NoFloPreview.prototype.setPreview = function(preview, runtime) {
-    this.setRuntime(runtime);
-    return this.preparePreview(preview, runtime);
-  };
-
-  NoFloPreview.prototype.setRuntime = function(runtime) {
-    var _this = this;
-    this.runtime = runtime;
-    switch (runtime.getType()) {
-      case 'iframe':
-        this.$connector.find('h2 i').addClass('icon-globe');
-        break;
-      default:
-        this.$connector.find('h2 i').addClass('icon-cloud');
-    }
-    return runtime.on('status', function(status) {
-      if (runtime !== _this.runtime) {
-        return;
-      }
-      _this.$status.removeClass('online');
-      _this.$status.removeClass('offline');
-      _this.$status.removeClass('pending');
-      _this.$status.addClass(status.state);
-      _this.$status.html(status.label);
-      if (status.label === 'running') {
-        _this.$startButton.hide();
-        _this.$stopButton.show();
-      }
-      if (status.label === 'stopped') {
-        _this.$stopButton.hide();
-        return _this.$startButton.show();
-      }
-    });
-  };
-
-  NoFloPreview.prototype.preparePreview = function(preview, runtime) {
-    var _this = this;
-    runtime.connect(preview);
-    this.$connButton.click(function() {
-      if (runtime !== _this.runtime) {
-        return;
-      }
-      return _this.preparePreview(preview, runtime);
-    });
-    runtime.once('connected', function() {
-      if (runtime !== _this.runtime) {
-        return;
-      }
-      _this.$connector.find('h2 span').html(_this.runtime.getAddress());
-      _this.$connButton.hide();
-      _this.$startButton.show();
-      return _this.dataflow.showPlugin('preview');
-    });
-    return runtime.once('disconnected', function() {
-      if (runtime !== _this.runtime) {
-        return;
-      }
-      _this.dataflow.plugins.notification.notify('noflo.png', 'Error', 'Connection to NoFlo runtime was lost');
-      _this.$connButton.show();
-      _this.$startButton.hide();
-      return _this.$stopButton.hide();
-    });
-  };
-
-  return NoFloPreview;
-
-})();
-
-plugin = Dataflow.prototype.plugin('preview');
-
-Dataflow.prototype.plugins['preview'] = new NoFloPreview;
+module.exports = GraphSource;
 
 });
 require.register("noflo-ui/src/runtimes/base.js", function(exports, require, module){
@@ -15069,13 +12062,13 @@ BaseRuntime = (function(_super) {
   BaseRuntime.prototype.recvNetwork = function(command, payload) {
     switch (command) {
       case 'started':
-        return this.emit('status', {
-          state: 'online',
+        return this.emit('execution', {
+          running: true,
           label: 'running'
         });
       case 'stopped':
-        return this.emit('status', {
-          state: 'online',
+        return this.emit('execution', {
+          running: false,
           label: 'stopped'
         });
       default:
@@ -15139,7 +12132,7 @@ IframeRuntime = (function(_super) {
     var _this = this;
     this.iframe.addEventListener('load', this.onLoaded, false);
     this.emit('status', {
-      state: 'pending',
+      online: false,
       label: 'connecting'
     });
     preview = this.normalizePreview(preview);
@@ -15178,14 +12171,14 @@ IframeRuntime = (function(_super) {
     this.iframe.removeEventListener('load', this.onLoaded, false);
     window.removeEventListener('message', this.onMessage, false);
     return this.emit('status', {
-      state: 'offline',
+      online: false,
       label: 'disconnected'
     });
   };
 
   IframeRuntime.prototype.onLoaded = function() {
     this.emit('status', {
-      state: 'online',
+      online: true,
       label: 'connected'
     });
     return this.emit('connected');
@@ -15251,6 +12244,22 @@ WebSocketRuntime = (function(_super) {
     return 'websocket';
   };
 
+  WebSocketRuntime.prototype.getElement = function() {
+    var console;
+    console = document.createElement('pre');
+    this.on('network', function(message) {
+      if (message.command !== 'output') {
+        return;
+      }
+      console.innerHTML = "" + console.innerHTML + message.payload.message + "\n";
+      return console.scrollTop = console.scrollHeight;
+    });
+    this.on('disconnected', function() {
+      return console.innerHTML = '';
+    });
+    return console;
+  };
+
   WebSocketRuntime.prototype.connect = function(preview) {
     var _this = this;
     if (this.connection || this.connecting) {
@@ -15262,7 +12271,7 @@ WebSocketRuntime = (function(_super) {
     this.connection.addEventListener('open', function() {
       _this.connecting = false;
       _this.emit('status', {
-        state: 'online',
+        online: true,
         label: 'connected'
       });
       _this.emit('connected');
@@ -15273,7 +12282,7 @@ WebSocketRuntime = (function(_super) {
     this.connection.addEventListener('close', function() {
       _this.connection = null;
       _this.emit('status', {
-        state: 'offline',
+        online: false,
         label: 'disconnected'
       });
       return _this.emit('disconnected');
@@ -15308,11 +12317,13 @@ WebSocketRuntime = (function(_super) {
   };
 
   WebSocketRuntime.prototype.normalizePreview = function(preview) {
+    var hostname;
     if (!preview) {
       preview = {};
     }
     if (!preview.wsUrl) {
-      preview.wsUrl = "ws://" + location.hostname + ":3569";
+      hostname = location.hostname ? location.hostname : "localhost";
+      preview.wsUrl = "ws://" + hostname + ":3569";
     }
     return preview;
   };
@@ -15352,6 +12363,296 @@ WebSocketRuntime = (function(_super) {
 module.exports = WebSocketRuntime;
 
 });
+require.register("noflo-ui/components/AppendTo.js", function(exports, require, module){
+var AppendTo, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+AppendTo = (function(_super) {
+  __extends(AppendTo, _super);
+
+  function AppendTo() {
+    var _this = this;
+    this.arr = null;
+    this.val = null;
+    this.inPorts = {
+      append: new noflo.Port('all'),
+      to: new noflo.Port('array')
+    };
+    this.outPorts = {
+      out: new noflo.Port('array')
+    };
+    this.inPorts.append.on('data', function(val) {
+      _this.val = val;
+      return _this.appendTo();
+    });
+    this.inPorts.to.on('data', function(arr) {
+      _this.arr = arr;
+      return _this.appendTo();
+    });
+  }
+
+  AppendTo.prototype.appendTo = function() {
+    if (!(this.arr && this.val)) {
+      return;
+    }
+    this.arr.push(this.val);
+    this.val = null;
+    if (!this.outPorts.out.isAttached()) {
+      return;
+    }
+    this.outPorts.out.send(this.arr);
+    return this.outPorts.out.disconnect();
+  };
+
+  return AppendTo;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new AppendTo;
+};
+
+});
+require.register("noflo-ui/components/ConnectRuntime.js", function(exports, require, module){
+var ConnectRuntime, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ConnectRuntime = (function(_super) {
+  __extends(ConnectRuntime, _super);
+
+  function ConnectRuntime() {
+    var _this = this;
+    this.editor = null;
+    this.runtime = null;
+    this.connected = false;
+    this.inPorts = {
+      editor: new noflo.Port('object'),
+      runtime: new noflo.Port('object')
+    };
+    this.outPorts = {
+      editor: new noflo.Port('object')
+    };
+    this.inPorts.editor.on('data', function(editor) {
+      _this.editor = editor;
+      _this.connect(_this.editor, _this.runtime);
+      if (_this.outPorts.editor.isAttached()) {
+        _this.outPorts.editor.send(_this.editor);
+        return _this.outPorts.editor.disconnect();
+      }
+    });
+    this.inPorts.runtime.on('data', function(runtime) {
+      _this.runtime = runtime;
+      return _this.connect(_this.editor, _this.runtime);
+    });
+  }
+
+  ConnectRuntime.prototype.sendGraph = function(runtime, editor) {
+    var definition, edge, graph, name, _i, _len, _ref, _ref1, _results;
+    runtime.sendGraph('clear', {
+      baseDir: 'noflo-ui-preview'
+    });
+    graph = editor.toJSON();
+    _ref = graph.processes;
+    for (name in _ref) {
+      definition = _ref[name];
+      runtime.sendGraph('addnode', {
+        id: name,
+        component: definition.component,
+        metadata: definition.metadata
+      });
+    }
+    _ref1 = graph.connections;
+    _results = [];
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      edge = _ref1[_i];
+      if (edge.src) {
+        runtime.sendGraph('addedge', {
+          from: {
+            node: edge.src.process,
+            port: edge.src.port
+          },
+          to: {
+            node: edge.tgt.process,
+            port: edge.tgt.port
+          }
+        });
+        continue;
+      }
+      _results.push(runtime.sendGraph('addinitial', {
+        from: {
+          data: edge.data
+        },
+        to: {
+          node: edge.tgt.process,
+          port: edge.tgt.port
+        }
+      }));
+    }
+    return _results;
+  };
+
+  ConnectRuntime.prototype.convertNode = function(node) {
+    return node.toJSON();
+  };
+
+  ConnectRuntime.prototype.convertEdge = function(edge) {
+    var data, edgeData;
+    data = edge.toJSON();
+    return edgeData = {
+      from: {
+        node: data.src.process,
+        port: data.src.port
+      },
+      to: {
+        node: data.tgt.process,
+        port: data.tgt.port
+      }
+    };
+  };
+
+  ConnectRuntime.prototype.convertInitial = function(iip) {
+    var data, iipData;
+    data = iip.toJSON();
+    return iipData = {
+      from: {
+        data: data.data
+      },
+      to: {
+        node: data.tgt.process,
+        port: data.tgt.port
+      }
+    };
+  };
+
+  ConnectRuntime.prototype.convertBang = function(bang) {
+    var iipData;
+    return iipData = {
+      from: {
+        data: true
+      },
+      to: {
+        node: bang.process,
+        port: bang.port
+      }
+    };
+  };
+
+  ConnectRuntime.prototype.subscribeEditor = function(editor, runtime) {
+    var _this = this;
+    editor.addEventListener('addnode', function(node) {
+      if (!_this.connected) {
+        return;
+      }
+      return runtime.sendGraph('addnode', _this.convertNode(node.detail));
+    }, false);
+    editor.addEventListener('removenode', function(node) {
+      if (!_this.connected) {
+        return;
+      }
+      return runtime.sendGraph('removenode', _this.convertNode(node.detail));
+    }, false);
+    editor.addEventListener('addedge', function(edge) {
+      if (!_this.connected) {
+        return;
+      }
+      return runtime.sendGraph('addedge', _this.convertEdge(edge.detail));
+    }, false);
+    editor.addEventListener('removeedge', function(edge) {
+      if (!_this.connected) {
+        return;
+      }
+      return runtime.sendGraph('removeedge', _this.convertEdge(edge.detail));
+    }, false);
+    editor.addEventListener('addinitial', function(iip) {
+      if (!_this.connected) {
+        return;
+      }
+      return runtime.sendGraph('addinitial', _this.convertInitial(iip.detail));
+    }, false);
+    editor.addEventListener('removeinitial', function(iip) {
+      if (!_this.connected) {
+        return;
+      }
+      return runtime.sendGraph('removeinitial', _this.convertInitial(iip.detail));
+    }, false);
+    editor.addEventListener('iip', function(iip) {
+      if (!_this.connected) {
+        return;
+      }
+      runtime.sendGraph('removeinitial', _this.convertInitial(iip.detail));
+      return runtime.sendGraph('addinitial', _this.convertInitial(iip.detail));
+    }, false);
+    return editor.addEventListener('bang', function(bang) {
+      if (!_this.connected) {
+        return;
+      }
+      runtime.sendGraph('removeinitial', _this.convertBang(bang.detail));
+      return runtime.sendGraph('addinitial', _this.convertBang(bang.detail));
+    }, false);
+  };
+
+  ConnectRuntime.prototype.connect = function(editor, runtime) {
+    var _this = this;
+    if (!(editor && runtime)) {
+      return;
+    }
+    runtime.on('connected', function() {
+      _this.connected = true;
+      runtime.sendComponent('list', 'noflo-ui-preview');
+      return _this.sendGraph(runtime, editor);
+    });
+    runtime.on('disconnected', function() {
+      return _this.connected = false;
+    });
+    this.subscribeEditor(editor, runtime);
+    runtime.on('component', function(message) {
+      var definition, port, _i, _j, _len, _len1, _ref, _ref1;
+      definition = {
+        name: message.payload.name,
+        description: message.payload.description,
+        icon: message.payload.icon,
+        inports: [],
+        outports: []
+      };
+      _ref = message.payload.inPorts;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        port = _ref[_i];
+        definition.inports.push({
+          name: port.id,
+          type: port.type,
+          array: port.array
+        });
+      }
+      _ref1 = message.payload.outPorts;
+      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+        port = _ref1[_j];
+        definition.outports.push({
+          name: port.id,
+          type: port.type,
+          array: port.array
+        });
+      }
+      return editor.registerComponent(definition);
+    });
+    runtime.setParentElement(editor.parentNode);
+    return runtime.connect(editor.graph.properties.environment);
+  };
+
+  return ConnectRuntime;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ConnectRuntime;
+};
+
+});
 require.register("noflo-ui/components/CreateGraph.js", function(exports, require, module){
 var CreateGraph, noflo,
   __hasProp = {}.hasOwnProperty,
@@ -15364,25 +12665,22 @@ CreateGraph = (function(_super) {
 
   function CreateGraph() {
     var _this = this;
-    this.baseDir = '';
     this.inPorts = {
-      name: new noflo.Port('string'),
-      basedir: new noflo.Port('string')
+      details: new noflo.Port('string')
     };
     this.outPorts = {
       out: new noflo.Port('object')
     };
-    this.inPorts.name.on('data', function(name) {
+    this.inPorts.details.on('data', function(details) {
       var graph;
-      graph = new noflo.Graph(name);
-      graph.baseDir = _this.baseDir;
+      graph = new noflo.Graph(details.name);
+      graph.properties.environment = {
+        runtime: details.type
+      };
       return _this.outPorts.out.send(graph);
     });
-    this.inPorts.name.on('disconnect', function() {
+    this.inPorts.details.on('disconnect', function() {
       return _this.outPorts.out.disconnect();
-    });
-    this.inPorts.basedir.on('data', function(baseDir) {
-      _this.baseDir = baseDir;
     });
   }
 
@@ -15395,48 +12693,116 @@ exports.getComponent = function() {
 };
 
 });
-require.register("noflo-ui/components/LoadGraph.js", function(exports, require, module){
-var LoadGraph, noflo,
+require.register("noflo-ui/components/GenerateId.js", function(exports, require, module){
+var GenerateId, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-LoadGraph = (function(_super) {
-  __extends(LoadGraph, _super);
+GenerateId = (function(_super) {
+  __extends(GenerateId, _super);
 
-  function LoadGraph() {
+  function GenerateId() {
     var _this = this;
-    this.basedir = '';
     this.inPorts = {
-      "in": new noflo.Port('object'),
-      basedir: new noflo.Port('string')
+      start: new noflo.Port('bang')
     };
     this.outPorts = {
-      out: new noflo.Port('object')
+      out: new noflo.Port('string')
     };
-    this.inPorts.basedir.on('data', function(basedir) {
-      _this.basedir = basedir;
+    this.inPorts.start.on('data', function() {
+      _this.outPorts.out.send(_this.randomString());
+      return _this.outPorts.out.disconnect();
     });
-    LoadGraph.__super__.constructor.call(this);
   }
 
-  LoadGraph.prototype.doAsync = function(graphDefinition, done) {
-    var _this = this;
-    return noflo.graph.loadJSON(graphDefinition, function(graph) {
-      graph.baseDir = _this.basedir;
-      _this.outPorts.out.send(graph);
-      _this.outPorts.out.disconnect();
-      return done();
-    });
+  GenerateId.prototype.randomString = function(num) {
+    if (num == null) {
+      num = 60466176;
+    }
+    num = Math.floor(Math.random() * num);
+    return num.toString(36);
   };
 
-  return LoadGraph;
+  return GenerateId;
 
-})(noflo.AsyncComponent);
+})(noflo.Component);
 
 exports.getComponent = function() {
-  return new LoadGraph;
+  return new GenerateId;
+};
+
+});
+require.register("noflo-ui/components/LoadGraphEditor.js", function(exports, require, module){
+var LoadGraphEditor, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+LoadGraphEditor = (function(_super) {
+  __extends(LoadGraphEditor, _super);
+
+  function LoadGraphEditor() {
+    var _this = this;
+    this.graph = null;
+    this.container = null;
+    this.inPorts = {
+      graph: new noflo.Port('object'),
+      container: new noflo.Port('object')
+    };
+    this.outPorts = {
+      graph: new noflo.Port('object'),
+      editor: new noflo.ArrayPort('object')
+    };
+    this.inPorts.graph.on('data', function(graph) {
+      _this.graph = graph;
+      return _this.loadEditor();
+    });
+    this.inPorts.container.on('data', function(container) {
+      _this.container = container;
+      return _this.loadEditor();
+    });
+  }
+
+  LoadGraphEditor.prototype.loadEditor = function() {
+    var editor,
+      _this = this;
+    if (!(this.graph && this.container)) {
+      return;
+    }
+    this.container.innerHTML = '';
+    editor = document.createElement('the-graph-editor');
+    this.setSize(editor);
+    this.container.appendChild(editor);
+    editor.graph = this.graph;
+    window.addEventListener('resize', function() {
+      return _this.setSize(editor);
+    });
+    if (this.outPorts.editor.isAttached()) {
+      this.outPorts.editor.send(editor);
+      this.outPorts.editor.disconnect();
+    }
+    if (this.outPorts.graph.isAttached()) {
+      this.outPorts.graph.send(this.graph);
+      this.outPorts.graph.disconnect();
+    }
+    this.graph = null;
+    return this.runtime = null;
+  };
+
+  LoadGraphEditor.prototype.setSize = function(editor) {
+    editor.width = window.innerWidth;
+    return editor.height = window.innerHeight;
+  };
+
+  return LoadGraphEditor;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new LoadGraphEditor;
 };
 
 });
@@ -15479,10 +12845,14 @@ LoadRuntime = (function(_super) {
     }
     Runtime = require("../src/runtimes/" + this.runtime);
     runtime = new Runtime(this.graph);
-    this.outPorts.runtime.send(runtime);
-    this.outPorts.runtime.disconnect();
-    this.outPorts.graph.send(this.graph);
-    this.outPorts.graph.disconnect();
+    if (this.outPorts.runtime.isAttached()) {
+      this.outPorts.runtime.send(runtime);
+      this.outPorts.runtime.disconnect();
+    }
+    if (this.outPorts.graph.isAttached()) {
+      this.outPorts.graph.send(this.graph);
+      this.outPorts.graph.disconnect();
+    }
     this.graph = null;
     return this.runtime = null;
   };
@@ -15493,71 +12863,6 @@ LoadRuntime = (function(_super) {
 
 exports.getComponent = function() {
   return new LoadRuntime;
-};
-
-});
-require.register("noflo-ui/components/ListenGraph.js", function(exports, require, module){
-var ListenGraph, noflo,
-  __hasProp = {}.hasOwnProperty,
-  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-noflo = require('noflo');
-
-ListenGraph = (function(_super) {
-  __extends(ListenGraph, _super);
-
-  function ListenGraph() {
-    var _this = this;
-    this.inPorts = {
-      graph: new noflo.Port('object')
-    };
-    this.outPorts = {
-      changed: new noflo.Port('object')
-    };
-    this.inPorts.graph.on('data', function(graph) {
-      return _this.subscribeGraph(graph);
-    });
-  }
-
-  ListenGraph.prototype.subscribeGraph = function(graph) {
-    var _this = this;
-    graph.on('addNode', function() {
-      return _this.sendGraph(graph);
-    });
-    graph.on('removeNode', function() {
-      return _this.sendGraph(graph);
-    });
-    graph.on('renameNode', function() {
-      return _this.sendGraph(graph);
-    });
-    graph.on('addEdge', function() {
-      return _this.sendGraph(graph);
-    });
-    graph.on('removeEdge', function() {
-      return _this.sendGraph(graph);
-    });
-    graph.on('addInitial', function() {
-      return _this.sendGraph(graph);
-    });
-    graph.on('removeInitial', function() {
-      return _this.sendGraph(graph);
-    });
-    return graph.on('changed', function() {
-      return _this.sendGraph(graph);
-    });
-  };
-
-  ListenGraph.prototype.sendGraph = function(graph) {
-    this.outPorts.changed.send(graph);
-    return this.outPorts.changed.disconnect();
-  };
-
-  return ListenGraph;
-
-})(noflo.Component);
-
-exports.getComponent = function() {
-  return new ListenGraph;
 };
 
 });
@@ -15581,25 +12886,14 @@ DetermineRuntime = (function(_super) {
       graph: new noflo.Port('object')
     };
     this.inPorts.graph.on('data', function(data) {
-      var graph;
-      graph = _this.normalizeGraph(data);
-      _this.outPorts.runtime.send(_this.determineRuntime(graph));
-      return _this.outPorts.graph.send(graph);
+      _this.outPorts.runtime.send(_this.determineRuntime(data));
+      return _this.outPorts.graph.send(data);
     });
     this.inPorts.graph.on('disconnect', function() {
       _this.outPorts.runtime.disconnect();
       return _this.outPorts.graph.disconnect();
     });
   }
-
-  DetermineRuntime.prototype.normalizeGraph = function(graph) {
-    if (!graph.properties.environment) {
-      graph.properties.environment = {
-        runtime: 'html'
-      };
-    }
-    return graph;
-  };
 
   DetermineRuntime.prototype.determineRuntime = function(graph) {
     switch (graph.properties.environment.runtime) {
@@ -15621,95 +12915,6 @@ exports.getComponent = function() {
 };
 
 });
-require.register("noflo-ui/components/Dataflow.js", function(exports, require, module){
-var Dataflow, DataflowComponent, noflo,
-  __hasProp = {}.hasOwnProperty,
-  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-noflo = require('noflo');
-
-Dataflow = require('/meemoo-dataflow').Dataflow;
-
-require('../src/plugins/nofloLibrary');
-
-require('../src/plugins/nofloGraph');
-
-require('../src/plugins/nofloSettings');
-
-require('../src/plugins/preview');
-
-DataflowComponent = (function(_super) {
-  __extends(DataflowComponent, _super);
-
-  function DataflowComponent() {
-    var _this = this;
-    this.graph = null;
-    this.container = null;
-    this.runtime = null;
-    this.inPorts = {
-      graph: new noflo.Port('object'),
-      container: new noflo.Port('object'),
-      runtime: new noflo.Port('object')
-    };
-    this.outPorts = {
-      dataflow: new noflo.Port('object'),
-      runtime: new noflo.Port('object'),
-      graph: new noflo.Port('object'),
-      error: new noflo.Port('object')
-    };
-    this.inPorts.graph.on('data', function(graph) {
-      _this.graph = graph;
-      return _this.loadDataflow();
-    });
-    this.inPorts.container.on('data', function(container) {
-      _this.container = container;
-      return _this.loadDataflow();
-    });
-    this.inPorts.runtime.on('data', function(runtime) {
-      _this.runtime = runtime;
-      return _this.loadDataflow();
-    });
-  }
-
-  DataflowComponent.prototype.loadDataflow = function() {
-    var dataflow, env;
-    if (!(this.graph && this.container && this.runtime)) {
-      return;
-    }
-    dataflow = new Dataflow({
-      appendTo: this.container
-    });
-    this.runtime.setParentElement(dataflow.el);
-    env = this.graph.properties.environment;
-    dataflow.plugins.preview.setPreview(env, this.runtime);
-    dataflow.plugins.nofloLibrary.registerGraph(this.graph, this.runtime);
-    dataflow.plugins.nofloGraph.registerGraph(this.graph, this.runtime);
-    dataflow.plugins.nofloSettings.registerGraph(this.graph, this.runtime);
-    if (this.outPorts.dataflow.isAttached()) {
-      this.outPorts.dataflow.send(dataflow);
-      this.outPorts.dataflow.disconnect();
-    }
-    if (this.outPorts.runtime.isAttached()) {
-      this.outPorts.runtime.send(this.runtime);
-      this.outPorts.runtime.disconnect();
-    }
-    if (this.outPorts.graph.isAttached()) {
-      this.outPorts.graph.send(this.graph);
-      this.outPorts.graph.disconnect();
-    }
-    this.graph = null;
-    return this.runtime = null;
-  };
-
-  return DataflowComponent;
-
-})(noflo.Component);
-
-exports.getComponent = function() {
-  return new DataflowComponent;
-};
-
-});
 require.register("noflo-ui/components/Router.js", function(exports, require, module){
 var Router, noflo,
   __hasProp = {}.hasOwnProperty,
@@ -15726,21 +12931,37 @@ Router = (function(_super) {
       url: new noflo.Port('string')
     };
     this.outPorts = {
+      route: new noflo.Port('bang'),
       main: new noflo.Port('string'),
-      "new": new noflo.Port('string'),
+      project: new noflo.Port('string'),
       graph: new noflo.Port('string'),
       example: new noflo.Port('string'),
-      missed: new noflo.Port('string')
+      missed: new noflo.Port('string'),
+      clear: new noflo.Port('boolean')
     };
     this.inPorts.url.on('data', function(url) {
+      var part, parts, remainder, _i, _len;
+      if (_this.outPorts.route.isAttached()) {
+        _this.outPorts.route.send(true);
+        _this.outPorts.route.disconnect();
+      }
       if (url === '') {
+        _this.outPorts.clear.send(true);
+        _this.outPorts.clear.disconnect();
         _this.outPorts.main.send(url);
         _this.outPorts.main.disconnect();
         return;
       }
-      if (url === 'new') {
-        _this.outPorts["new"].send(url);
-        _this.outPorts["new"].disconnect();
+      if (url.substr(0, 8) === 'project/') {
+        remainder = url.substr(8);
+        parts = remainder.split('/');
+        _this.outPorts.project.send(parts.shift());
+        _this.outPorts.project.disconnect();
+        for (_i = 0, _len = parts.length; _i < _len; _i++) {
+          part = parts[_i];
+          _this.outPorts.graph.send(part);
+        }
+        _this.outPorts.graph.disconnect();
         return;
       }
       if (url.substr(0, 6) === 'graph/') {
@@ -15781,10 +13002,7 @@ exports.getComponent = function() {
 
 
 
-require.alias("meemoo-dataflow/build/dataflow.build.js", "noflo-ui/deps/dataflow/build/dataflow.build.js");
-require.alias("meemoo-dataflow/build/dataflow.build.js", "noflo-ui/deps/dataflow/index.js");
-require.alias("meemoo-dataflow/build/dataflow.build.js", "dataflow/index.js");
-require.alias("meemoo-dataflow/build/dataflow.build.js", "meemoo-dataflow/index.js");
+
 require.alias("component-emitter/index.js", "noflo-ui/deps/emitter/index.js");
 require.alias("component-emitter/index.js", "emitter/index.js");
 require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
@@ -15878,6 +13096,9 @@ require.alias("noflo-noflo-localstorage/index.js", "noflo-ui/deps/noflo-localsto
 require.alias("noflo-noflo-localstorage/component.json", "noflo-ui/deps/noflo-localstorage/component.json");
 require.alias("noflo-noflo-localstorage/components/GetItem.js", "noflo-ui/deps/noflo-localstorage/components/GetItem.js");
 require.alias("noflo-noflo-localstorage/components/ListenRemoteChanges.js", "noflo-ui/deps/noflo-localstorage/components/ListenRemoteChanges.js");
+require.alias("noflo-noflo-localstorage/components/ListAdd.js", "noflo-ui/deps/noflo-localstorage/components/ListAdd.js");
+require.alias("noflo-noflo-localstorage/components/ListGet.js", "noflo-ui/deps/noflo-localstorage/components/ListGet.js");
+require.alias("noflo-noflo-localstorage/components/ListRemove.js", "noflo-ui/deps/noflo-localstorage/components/ListRemove.js");
 require.alias("noflo-noflo-localstorage/components/RemoveItem.js", "noflo-ui/deps/noflo-localstorage/components/RemoveItem.js");
 require.alias("noflo-noflo-localstorage/components/SetItem.js", "noflo-ui/deps/noflo-localstorage/components/SetItem.js");
 require.alias("noflo-noflo-localstorage/index.js", "noflo-localstorage/index.js");
@@ -15909,10 +13130,12 @@ require.alias("noflo-noflo-interaction/components/ListenDrag.js", "noflo-ui/deps
 require.alias("noflo-noflo-interaction/components/ListenHash.js", "noflo-ui/deps/noflo-interaction/components/ListenHash.js");
 require.alias("noflo-noflo-interaction/components/ListenKeyboard.js", "noflo-ui/deps/noflo-interaction/components/ListenKeyboard.js");
 require.alias("noflo-noflo-interaction/components/ListenMouse.js", "noflo-ui/deps/noflo-interaction/components/ListenMouse.js");
+require.alias("noflo-noflo-interaction/components/ListenPointer.js", "noflo-ui/deps/noflo-interaction/components/ListenPointer.js");
 require.alias("noflo-noflo-interaction/components/ListenScroll.js", "noflo-ui/deps/noflo-interaction/components/ListenScroll.js");
 require.alias("noflo-noflo-interaction/components/ListenSpeech.js", "noflo-ui/deps/noflo-interaction/components/ListenSpeech.js");
 require.alias("noflo-noflo-interaction/components/ListenTouch.js", "noflo-ui/deps/noflo-interaction/components/ListenTouch.js");
 require.alias("noflo-noflo-interaction/components/SetHash.js", "noflo-ui/deps/noflo-interaction/components/SetHash.js");
+require.alias("noflo-noflo-interaction/components/ReadCoordinates.js", "noflo-ui/deps/noflo-interaction/components/ReadCoordinates.js");
 require.alias("noflo-noflo-interaction/index.js", "noflo-interaction/index.js");
 require.alias("noflo-noflo/component.json", "noflo-noflo-interaction/deps/noflo/component.json");
 require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-interaction/deps/noflo/src/lib/Graph.js");
@@ -15943,6 +13166,7 @@ require.alias("noflo-noflo-objects/components/MergeObjects.js", "noflo-ui/deps/n
 require.alias("noflo-noflo-objects/components/SplitObject.js", "noflo-ui/deps/noflo-objects/components/SplitObject.js");
 require.alias("noflo-noflo-objects/components/ReplaceKey.js", "noflo-ui/deps/noflo-objects/components/ReplaceKey.js");
 require.alias("noflo-noflo-objects/components/Keys.js", "noflo-ui/deps/noflo-objects/components/Keys.js");
+require.alias("noflo-noflo-objects/components/Size.js", "noflo-ui/deps/noflo-objects/components/Size.js");
 require.alias("noflo-noflo-objects/components/Values.js", "noflo-ui/deps/noflo-objects/components/Values.js");
 require.alias("noflo-noflo-objects/components/Join.js", "noflo-ui/deps/noflo-objects/components/Join.js");
 require.alias("noflo-noflo-objects/components/ExtractProperty.js", "noflo-ui/deps/noflo-objects/components/ExtractProperty.js");
@@ -15998,12 +13222,16 @@ require.alias("noflo-noflo-groups/components/GroupZip.js", "noflo-ui/deps/noflo-
 require.alias("noflo-noflo-groups/components/FilterByGroup.js", "noflo-ui/deps/noflo-groups/components/FilterByGroup.js");
 require.alias("noflo-noflo-groups/components/Objectify.js", "noflo-ui/deps/noflo-groups/components/Objectify.js");
 require.alias("noflo-noflo-groups/components/ReadGroup.js", "noflo-ui/deps/noflo-groups/components/ReadGroup.js");
+require.alias("noflo-noflo-groups/components/SendByGroup.js", "noflo-ui/deps/noflo-groups/components/SendByGroup.js");
 require.alias("noflo-noflo-groups/components/CollectGroups.js", "noflo-ui/deps/noflo-groups/components/CollectGroups.js");
+require.alias("noflo-noflo-groups/components/CollectObject.js", "noflo-ui/deps/noflo-groups/components/CollectObject.js");
 require.alias("noflo-noflo-groups/components/FirstGroup.js", "noflo-ui/deps/noflo-groups/components/FirstGroup.js");
 require.alias("noflo-noflo-groups/components/MapGroup.js", "noflo-ui/deps/noflo-groups/components/MapGroup.js");
 require.alias("noflo-noflo-groups/components/MergeGroups.js", "noflo-ui/deps/noflo-groups/components/MergeGroups.js");
 require.alias("noflo-noflo-groups/components/GroupByObjectKey.js", "noflo-ui/deps/noflo-groups/components/GroupByObjectKey.js");
 require.alias("noflo-noflo-groups/index.js", "noflo-groups/index.js");
+require.alias("component-underscore/index.js", "noflo-noflo-groups/deps/underscore/index.js");
+
 require.alias("noflo-noflo/component.json", "noflo-noflo-groups/deps/noflo/component.json");
 require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-groups/deps/noflo/src/lib/Graph.js");
 require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-groups/deps/noflo/src/lib/InternalSocket.js");
@@ -16034,7 +13262,10 @@ require.alias("noflo-noflo-dom/components/CreateElement.js", "noflo-ui/deps/nofl
 require.alias("noflo-noflo-dom/components/CreateFragment.js", "noflo-ui/deps/noflo-dom/components/CreateFragment.js");
 require.alias("noflo-noflo-dom/components/GetAttribute.js", "noflo-ui/deps/noflo-dom/components/GetAttribute.js");
 require.alias("noflo-noflo-dom/components/GetElement.js", "noflo-ui/deps/noflo-dom/components/GetElement.js");
+require.alias("noflo-noflo-dom/components/HasClass.js", "noflo-ui/deps/noflo-dom/components/HasClass.js");
 require.alias("noflo-noflo-dom/components/ReadHtml.js", "noflo-ui/deps/noflo-dom/components/ReadHtml.js");
+require.alias("noflo-noflo-dom/components/RemoveElement.js", "noflo-ui/deps/noflo-dom/components/RemoveElement.js");
+require.alias("noflo-noflo-dom/components/SetAttribute.js", "noflo-ui/deps/noflo-dom/components/SetAttribute.js");
 require.alias("noflo-noflo-dom/components/WriteHtml.js", "noflo-ui/deps/noflo-dom/components/WriteHtml.js");
 require.alias("noflo-noflo-dom/components/RemoveClass.js", "noflo-ui/deps/noflo-dom/components/RemoveClass.js");
 require.alias("noflo-noflo-dom/components/RequestAnimationFrame.js", "noflo-ui/deps/noflo-dom/components/RequestAnimationFrame.js");
@@ -16076,6 +13307,124 @@ require.alias("noflo-noflo-core/components/Split.js", "noflo-ui/deps/noflo-core/
 require.alias("noflo-noflo-core/components/RunInterval.js", "noflo-ui/deps/noflo-core/components/RunInterval.js");
 require.alias("noflo-noflo-core/components/MakeFunction.js", "noflo-ui/deps/noflo-core/components/MakeFunction.js");
 require.alias("noflo-noflo-core/index.js", "noflo-core/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-core/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-core/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-core/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-core/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-core/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-core/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-core/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-core/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-core/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-core/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-core/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-core/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-core/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("component-underscore/index.js", "noflo-noflo-core/deps/underscore/index.js");
+
+require.alias("noflo-noflo-polymer/index.js", "noflo-ui/deps/noflo-polymer/index.js");
+require.alias("noflo-noflo-polymer/component.json", "noflo-ui/deps/noflo-polymer/component.json");
+require.alias("noflo-noflo-polymer/lib/ComponentLoader.js", "noflo-ui/deps/noflo-polymer/lib/ComponentLoader.js");
+require.alias("noflo-noflo-polymer/lib/PolymerComponent.js", "noflo-ui/deps/noflo-polymer/lib/PolymerComponent.js");
+require.alias("noflo-noflo-polymer/index.js", "noflo-polymer/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-polymer/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-polymer/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-polymer/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-polymer/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-polymer/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-polymer/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-polymer/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-polymer/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-polymer/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-polymer/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-polymer/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-polymer/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-polymer/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("noflo-noflo-runtime-iframe/index.js", "noflo-ui/deps/noflo-runtime-iframe/index.js");
+require.alias("noflo-noflo-runtime-iframe/component.json", "noflo-ui/deps/noflo-runtime-iframe/component.json");
+require.alias("noflo-noflo-runtime-iframe/index.js", "noflo-runtime-iframe/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-runtime-iframe/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-runtime-iframe/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-runtime-iframe/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-iframe/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("noflo-noflo-runtime-base/src/Base.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/src/Base.js");
+require.alias("noflo-noflo-runtime-base/src/protocol/Graph.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/src/protocol/Graph.js");
+require.alias("noflo-noflo-runtime-base/src/protocol/Network.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/src/protocol/Network.js");
+require.alias("noflo-noflo-runtime-base/src/protocol/Component.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/src/protocol/Component.js");
+require.alias("noflo-noflo-runtime-base/src/Base.js", "noflo-noflo-runtime-iframe/deps/noflo-runtime-base/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-runtime-base/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-runtime-base/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-runtime-base/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-base/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("noflo-noflo-runtime-base/src/Base.js", "noflo-noflo-runtime-base/index.js");
+require.alias("noflo-noflo-core/index.js", "noflo-noflo-runtime-iframe/deps/noflo-core/index.js");
+require.alias("noflo-noflo-core/component.json", "noflo-noflo-runtime-iframe/deps/noflo-core/component.json");
+require.alias("noflo-noflo-core/components/Callback.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Callback.js");
+require.alias("noflo-noflo-core/components/DisconnectAfterPacket.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/DisconnectAfterPacket.js");
+require.alias("noflo-noflo-core/components/Drop.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Drop.js");
+require.alias("noflo-noflo-core/components/Group.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Group.js");
+require.alias("noflo-noflo-core/components/Kick.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Kick.js");
+require.alias("noflo-noflo-core/components/Merge.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Merge.js");
+require.alias("noflo-noflo-core/components/Output.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Output.js");
+require.alias("noflo-noflo-core/components/Repeat.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Repeat.js");
+require.alias("noflo-noflo-core/components/RepeatAsync.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/RepeatAsync.js");
+require.alias("noflo-noflo-core/components/Split.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Split.js");
+require.alias("noflo-noflo-core/components/RunInterval.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/RunInterval.js");
+require.alias("noflo-noflo-core/components/MakeFunction.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/MakeFunction.js");
 require.alias("noflo-noflo/component.json", "noflo-noflo-core/deps/noflo/component.json");
 require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-core/deps/noflo/src/lib/Graph.js");
 require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-core/deps/noflo/src/lib/InternalSocket.js");
