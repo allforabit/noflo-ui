@@ -55,6 +55,8 @@
       graphsModified: function () {
         this.fire('graphs', this.graphs);
         this.fire('currentgraph', this.graphs[this.graphs.length - 1]);
+        this.search = '';
+        this.searchChanged();
       },
       nodesModified: function () {
         this.fire('nodes', this.nodes);
@@ -154,6 +156,9 @@
         this.clear = false;
       },
       buttons: function () {
+        if (this.graphs.length === 0) {
+          return;
+        }
         this.fire('button', {
           id: 'graph-inspector',
           icon: 'gear',
@@ -162,9 +167,6 @@
         });
       },
       searchChanged: function () {
-        if (!this.search) {
-          return;
-        }
         if (this.search === 'graph settings') {
           this.showGraphInspector();
           return;

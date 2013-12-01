@@ -4,6 +4,8 @@ class IframeRuntime extends Base
   constructor: (graph) ->
     # Prepare the iframe and listen to its state
     @origin = window.location.origin
+    @preview = null
+    @previewObserver = null
 
     super graph
 
@@ -38,13 +40,18 @@ class IframeRuntime extends Base
     @address = preview.src
 
     # Update iframe contents as needed
+    @preview = preview
     if preview.content
-      @on 'connected', =>
-        body = @iframe.contentDocument.querySelector 'body'
-        body.innerHTML = preview.content
+      @on 'connected', @updateIframe
+    # Update it also if the preview contents change
+    @previewObserver = new ObjectObserver preview, @updateIframe
 
     # Start listening for messages from the iframe
     window.addEventListener 'message', @onMessage, false
+
+  updateIframe: =>
+    body = @iframe.contentDocument.querySelector 'body'
+    body.innerHTML = @preview.content
 
   normalizePreview: (preview) ->
     unless preview
@@ -57,8 +64,11 @@ class IframeRuntime extends Base
       preview.height = 300
     preview
 
-  disconnect: (protocol) ->
+  disconnect: ->
     @iframe.removeEventListener 'load', @onLoaded, false
+    if @previewObserver
+      @previewObserver.close()
+      @previewObserver = null
 
     # Stop listening to messages
     window.removeEventListener 'message', @onMessage, false
