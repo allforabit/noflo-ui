@@ -199,22 +199,7 @@ require.relative = function(parent) {
 
   return localRequire;
 };
-require.register("component-indexof/index.js", function(exports, require, module){
-module.exports = function(arr, obj){
-  if (arr.indexOf) return arr.indexOf(obj);
-  for (var i = 0; i < arr.length; ++i) {
-    if (arr[i] === obj) return i;
-  }
-  return -1;
-};
-});
 require.register("component-emitter/index.js", function(exports, require, module){
-
-/**
- * Module dependencies.
- */
-
-var index = require('indexof');
 
 /**
  * Expose `Emitter`.
@@ -283,7 +268,7 @@ Emitter.prototype.once = function(event, fn){
     fn.apply(this, arguments);
   }
 
-  fn._off = on;
+  on.fn = fn;
   this.on(event, on);
   return this;
 };
@@ -321,8 +306,14 @@ Emitter.prototype.removeEventListener = function(event, fn){
   }
 
   // remove specific handler
-  var i = index(callbacks, fn._off || fn);
-  if (~i) callbacks.splice(i, 1);
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
   return this;
 };
 
@@ -3737,6 +3728,7 @@ exports.ArrayPort = ArrayPort;
 });
 require.register("noflo-noflo/src/lib/Component.js", function(exports, require, module){
 var Component, EventEmitter, _ref,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
@@ -3750,6 +3742,7 @@ Component = (function(_super) {
   __extends(Component, _super);
 
   function Component() {
+    this.error = __bind(this.error, this);
     _ref = Component.__super__.constructor.apply(this, arguments);
     return _ref;
   }
@@ -3777,6 +3770,15 @@ Component = (function(_super) {
 
   Component.prototype.getIcon = function() {
     return this.icon;
+  };
+
+  Component.prototype.error = function(e) {
+    if (this.outPorts.error && this.outPorts.error.isAttached()) {
+      this.outPorts.error.send(e);
+      this.outPorts.error.disconnect();
+      return;
+    }
+    throw e;
   };
 
   Component.prototype.shutdown = function() {};
@@ -4155,6 +4157,7 @@ ComponentLoader = (function() {
     graphImplementation = require(this.components['Graph']);
     graphSocket = internalSocket.createSocket();
     graph = graphImplementation.getComponent();
+    graph.loader = this;
     graph.baseDir = this.baseDir;
     graph.inPorts.graph.attach(graphSocket);
     graphSocket.send(component);
@@ -4327,7 +4330,7 @@ Network = (function(_super) {
 
   Network.prototype.portBuffer = {};
 
-  function Network(graph) {
+  function Network(graph, loader) {
     var _this = this;
     this.processes = {};
     this.connections = [];
@@ -4360,7 +4363,11 @@ Network = (function(_super) {
     this.graph.on('removeInitial', function(iip) {
       return _this.removeInitial(iip);
     });
-    this.loader = new componentLoader.ComponentLoader(this.baseDir);
+    if (loader) {
+      this.loader = loader;
+    } else {
+      this.loader = new componentLoader.ComponentLoader(this.baseDir);
+    }
   }
 
   Network.prototype.uptime = function() {
@@ -4794,6 +4801,7 @@ Graph = (function(_super) {
     this.ready = true;
     this.started = false;
     this.baseDir = null;
+    this.loader = null;
     this.inPorts = {
       graph: new noflo.Port('all'),
       start: new noflo.Port('bang')
@@ -4834,7 +4842,7 @@ Graph = (function(_super) {
       }
       noflo.graph.loadJSON(graph, function(instance) {
         instance.baseDir = _this.baseDir;
-        return _this.createNetwork(instance);
+        return _this.createNetwork(instance, _this.loader);
       });
       return;
     }
@@ -12033,6 +12041,11 @@ BaseRuntime = (function(_super) {
 
   BaseRuntime.prototype.disconnect = function() {};
 
+  BaseRuntime.prototype.reconnect = function() {
+    this.disconnect();
+    return this.connect(this.preview);
+  };
+
   BaseRuntime.prototype.start = function() {
     return this.sendNetwork('start');
   };
@@ -12114,7 +12127,10 @@ IframeRuntime = (function(_super) {
   function IframeRuntime(graph) {
     this.onMessage = __bind(this.onMessage, this);
     this.onLoaded = __bind(this.onLoaded, this);
+    this.updateIframe = __bind(this.updateIframe, this);
     this.origin = window.location.origin;
+    this.preview = null;
+    this.previewObserver = null;
     IframeRuntime.__super__.constructor.call(this, graph);
   }
 
@@ -12129,7 +12145,6 @@ IframeRuntime = (function(_super) {
   };
 
   IframeRuntime.prototype.connect = function(preview) {
-    var _this = this;
     this.iframe.addEventListener('load', this.onLoaded, false);
     this.emit('status', {
       online: false,
@@ -12141,14 +12156,18 @@ IframeRuntime = (function(_super) {
     this.iframe.style.width = "" + preview.width + "px";
     this.iframe.style.height = "" + preview.height + "px";
     this.address = preview.src;
+    this.preview = preview;
     if (preview.content) {
-      this.on('connected', function() {
-        var body;
-        body = _this.iframe.contentDocument.querySelector('body');
-        return body.innerHTML = preview.content;
-      });
+      this.on('connected', this.updateIframe);
     }
+    this.previewObserver = new ObjectObserver(preview, this.updateIframe);
     return window.addEventListener('message', this.onMessage, false);
+  };
+
+  IframeRuntime.prototype.updateIframe = function() {
+    var body;
+    body = this.iframe.contentDocument.querySelector('body');
+    return body.innerHTML = this.preview.content;
   };
 
   IframeRuntime.prototype.normalizePreview = function(preview) {
@@ -12167,8 +12186,12 @@ IframeRuntime = (function(_super) {
     return preview;
   };
 
-  IframeRuntime.prototype.disconnect = function(protocol) {
+  IframeRuntime.prototype.disconnect = function() {
     this.iframe.removeEventListener('load', this.onLoaded, false);
+    if (this.previewObserver) {
+      this.previewObserver.close();
+      this.previewObserver = null;
+    }
     window.removeEventListener('message', this.onMessage, false);
     return this.emit('status', {
       online: false,
@@ -12266,6 +12289,7 @@ WebSocketRuntime = (function(_super) {
       return;
     }
     preview = this.normalizePreview(preview);
+    this.preview = preview;
     this.address = preview.wsUrl;
     this.connection = new WebSocket(this.address, this.protocol);
     this.connection.addEventListener('open', function() {
@@ -12290,7 +12314,7 @@ WebSocketRuntime = (function(_super) {
     return this.connecting = true;
   };
 
-  WebSocketRuntime.prototype.disconnect = function(protocol) {
+  WebSocketRuntime.prototype.disconnect = function() {
     if (!this.connection) {
       return;
     }
@@ -12931,7 +12955,7 @@ Router = (function(_super) {
       url: new noflo.Port('string')
     };
     this.outPorts = {
-      route: new noflo.Port('bang'),
+      route: new noflo.ArrayPort('bang'),
       main: new noflo.Port('string'),
       project: new noflo.Port('string'),
       graph: new noflo.Port('string'),
@@ -13005,7 +13029,6 @@ exports.getComponent = function() {
 
 require.alias("component-emitter/index.js", "noflo-ui/deps/emitter/index.js");
 require.alias("component-emitter/index.js", "emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("noflo-noflo/component.json", "noflo-ui/deps/noflo/component.json");
 require.alias("noflo-noflo/src/lib/Graph.js", "noflo-ui/deps/noflo/src/lib/Graph.js");
@@ -13022,7 +13045,6 @@ require.alias("noflo-noflo/src/components/Graph.js", "noflo-ui/deps/noflo/src/co
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-ui/deps/noflo/index.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13055,7 +13077,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-strings/deps/noflo/
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-strings/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-strings/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13084,7 +13105,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-ajax/deps/noflo/src
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-ajax/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-ajax/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13116,7 +13136,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-localstorage/deps/n
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-localstorage/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-localstorage/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13151,7 +13170,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-interaction/deps/no
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-interaction/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-interaction/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13202,7 +13220,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-objects/deps/noflo/
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-objects/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-objects/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13246,7 +13263,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-groups/deps/noflo/s
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-groups/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-groups/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13284,7 +13300,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-dom/deps/noflo/src/
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-dom/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-dom/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13321,7 +13336,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-core/deps/noflo/src
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-core/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-core/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13350,7 +13364,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-polymer/deps/noflo/
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-polymer/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-polymer/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13375,7 +13388,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-runtime-iframe/deps
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-runtime-iframe/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-iframe/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13402,7 +13414,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-runtime-base/deps/n
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-runtime-base/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-runtime-base/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
@@ -13439,7 +13450,6 @@ require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-core/deps/noflo/src
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-core/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-core/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
-require.alias("component-indexof/index.js", "component-emitter/deps/indexof/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
 
