@@ -4330,7 +4330,7 @@ Network = (function(_super) {
 
   Network.prototype.portBuffer = {};
 
-  function Network(graph, loader) {
+  function Network(graph) {
     var _this = this;
     this.processes = {};
     this.connections = [];
@@ -4363,8 +4363,8 @@ Network = (function(_super) {
     this.graph.on('removeInitial', function(iip) {
       return _this.removeInitial(iip);
     });
-    if (loader) {
-      this.loader = loader;
+    if (graph.componentLoader) {
+      this.loader = graph.componentLoader;
     } else {
       this.loader = new componentLoader.ComponentLoader(this.baseDir);
     }
@@ -4842,7 +4842,7 @@ Graph = (function(_super) {
       }
       noflo.graph.loadJSON(graph, function(instance) {
         instance.baseDir = _this.baseDir;
-        return _this.createNetwork(instance, _this.loader);
+        return _this.createNetwork(instance);
       });
       return;
     }
@@ -4858,6 +4858,7 @@ Graph = (function(_super) {
   Graph.prototype.createNetwork = function(graph) {
     var _ref,
       _this = this;
+    graph.componentLoader = this.loader;
     if (((_ref = this.inPorts.start) != null ? _ref.isAttached() : void 0) && !this.started) {
       noflo.createNetwork(graph, function(network) {
         _this.network = network;
