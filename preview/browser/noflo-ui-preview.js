@@ -14918,6 +14918,1069 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-noflo-indexeddb/index.js", function(exports, require, module){
+/*
+ * This file can be used for general library features of noflo-indexeddb.
+ *
+ * The library features can be made available as CommonJS modules that the
+ * components in this project utilize.
+ */
+
+});
+require.register("noflo-noflo-indexeddb/component.json", function(exports, require, module){
+module.exports = JSON.parse('{"name":"noflo-indexeddb","description":"IndexedDB components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-indexeddb","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/Open.coffee","components/Close.coffee","components/DeleteDatabase.coffee","components/CreateStore.coffee","components/CreateIndex.coffee","components/DeleteStore.coffee","components/UpgradeRouter.coffee","components/BeginTransaction.coffee","components/AbortTransaction.coffee","components/GetStore.coffee","components/GetIndex.coffee","components/Query.coffee","components/QueryOnly.coffee","components/QueryFrom.coffee","components/QueryTo.coffee","components/Put.coffee","components/Get.coffee","components/Delete.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"bitbucket","components":{"Open":"components/Open.coffee","Close":"components/Close.coffee","DeleteDatabase":"components/DeleteDatabase.coffee","CreateStore":"components/CreateStore.coffee","CreateIndex":"components/CreateIndex.coffee","DeleteStore":"components/DeleteStore.coffee","UpgradeRouter":"components/UpgradeRouter.coffee","BeginTransaction":"components/BeginTransaction.coffee","AbortTransaction":"components/AbortTransaction.coffee","GetStore":"components/GetStore.coffee","GetIndex":"components/GetIndex.coffee","Query":"components/Query.coffee","QueryOnly":"components/QueryOnly.coffee","QueryFrom":"components/QueryFrom.coffee","QueryTo":"components/QueryTo.coffee","Put":"components/Put.coffee","Get":"components/Get.coffee","Delete":"components/Delete.coffee"}}}');
+});
+require.register("noflo-noflo-indexeddb/components/Open.js", function(exports, require, module){
+var Open, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Open = (function(_super) {
+  __extends(Open, _super);
+
+  function Open() {
+    var _this = this;
+    this.name = null;
+    this.version = null;
+    this.inPorts = {
+      name: new noflo.Port('name'),
+      version: new noflo.Port('number')
+    };
+    this.outPorts = {
+      upgrade: new noflo.Port('object'),
+      db: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.open();
+    });
+    this.inPorts.version.on('data', function(version) {
+      _this.version = version;
+      return _this.open();
+    });
+  }
+
+  Open.prototype.open = function() {
+    var req, version,
+      _this = this;
+    if (!(this.name && this.version)) {
+      return;
+    }
+    req = indexedDB.open(this.name, this.version);
+    this.name = null;
+    version = this.version;
+    this.version = null;
+    req.onupgradeneeded = function(e) {
+      _this.outPorts.upgrade.beginGroup(_this.name);
+      _this.outPorts.upgrade.send({
+        oldVersion: e.oldVersion,
+        newVersion: version,
+        db: e.target.result
+      });
+      _this.outPorts.upgrade.endGroup();
+      return _this.outPorts.upgrade.disconnect();
+    };
+    req.onsuccess = function(e) {
+      _this.outPorts.db.beginGroup(_this.name);
+      _this.outPorts.db.send(e.target.result);
+      _this.outPorts.db.endGroup();
+      return _this.outPorts.db.disconnect();
+    };
+    return req.onerror = this.error.bind(this);
+  };
+
+  return Open;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Open;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Close.js", function(exports, require, module){
+var Close, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Close = (function(_super) {
+  __extends(Close, _super);
+
+  function Close() {
+    this.inPorts = {
+      db: new noflo.Port('object')
+    };
+    this.inPorts.db.on('data', function(db) {
+      return db.close();
+    });
+  }
+
+  return Close;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Close;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/DeleteDatabase.js", function(exports, require, module){
+var DeleteDatabase, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+DeleteDatabase = (function(_super) {
+  __extends(DeleteDatabase, _super);
+
+  function DeleteDatabase() {
+    var _this = this;
+    this.inPorts = {
+      name: new noflo.Port('string')
+    };
+    this.outPorts = {
+      deleted: new noflo.Port('bang'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.name.on('data', function(name) {
+      return _this.deleteDb(name);
+    });
+  }
+
+  DeleteDatabase.prototype.deleteDb = function(name) {
+    var req,
+      _this = this;
+    req = indexedDB.deleteDatabase(name);
+    req.onsuccess = function() {
+      _this.outPorts.deleted.send(true);
+      return _this.outPorts.deleted.disconnect();
+    };
+    return req.onerror = this.error;
+  };
+
+  return DeleteDatabase;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new DeleteDatabase;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/CreateStore.js", function(exports, require, module){
+var CreateStore, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+CreateStore = (function(_super) {
+  __extends(CreateStore, _super);
+
+  function CreateStore() {
+    var _this = this;
+    this.name = null;
+    this.db = null;
+    this.keyPath = '';
+    this.autoIncrement = false;
+    this.inPorts = {
+      name: new noflo.Port('name'),
+      db: new noflo.Port('object'),
+      keypath: new noflo.Port('name'),
+      autoincrement: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      db: new noflo.Port('object'),
+      error: new noflo.Port('error')
+    };
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.create();
+    });
+    this.inPorts.db.on('data', function(db) {
+      _this.db = db;
+      return _this.create();
+    });
+    this.inPorts.keypath.on('data', function(keyPath) {
+      _this.keyPath = keyPath;
+    });
+    this.inPorts.autoincrement.on('data', function(autoIncrement) {
+      _this.autoIncrement = autoIncrement;
+    });
+  }
+
+  CreateStore.prototype.create = function() {
+    var store;
+    if (!(this.name && this.db)) {
+      return;
+    }
+    this.db.transaction.onerror = this.error;
+    store = this.db.createObjectStore(this.name, {
+      keyPath: this.keyPath,
+      autoIncrement: this.autoIncrement
+    });
+    if (store && this.outPorts.store.isAttached()) {
+      this.outPorts.store.beginGroup(this.name);
+      this.outPorts.store.send(store);
+      this.outPorts.store.endGroup();
+      this.outPorts.store.disconnect();
+    }
+    this.db.transaction.onerror = null;
+    if (this.outPorts.db.isAttached()) {
+      this.outPorts.db.send(this.db);
+      this.outPorts.db.disconnect();
+    }
+    this.db = null;
+    return this.name = null;
+  };
+
+  return CreateStore;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new CreateStore;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/CreateIndex.js", function(exports, require, module){
+var CreateIndex, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+CreateIndex = (function(_super) {
+  __extends(CreateIndex, _super);
+
+  function CreateIndex() {
+    var _this = this;
+    this.store = null;
+    this.name = null;
+    this.keyPath = null;
+    this.unique = false;
+    this.multiEntry = false;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      name: new noflo.Port('string'),
+      keypath: new noflo.Port('string'),
+      unique: new noflo.Port('boolean'),
+      multientry: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      index: new noflo.Port('object'),
+      store: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.create();
+    });
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.create();
+    });
+    this.inPorts.keypath.on('data', function(keyPath) {
+      _this.keyPath = keyPath;
+      return _this.create();
+    });
+    this.inPorts.unique.on('data', function(unique) {
+      _this.unique = unique;
+    });
+    this.inPorts.multientry.on('data', function(multiEntry) {
+      _this.multiEntry = multiEntry;
+    });
+  }
+
+  CreateIndex.prototype.create = function() {
+    var index;
+    if (!(this.store && this.name && this.keyPath)) {
+      return;
+    }
+    this.store.onerror = this.error.bind(this);
+    index = this.store.createIndex(this.name, this.keyPath, {
+      unique: this.unique,
+      multiEntry: this.multiEntry
+    });
+    this.store.onerror = null;
+    this.name = null;
+    this.keyPath = null;
+    if (this.outPorts.index.isAttached()) {
+      this.outPorts.index.beginGroup(index.name);
+      this.outPorts.index.send(index);
+      this.outPorts.index.endGroup();
+      this.outPorts.index.disconnect();
+    }
+    if (this.outPorts.store.isAttached()) {
+      this.outPorts.store.send(this.store);
+      this.outPorts.store.disconnect();
+    }
+    return this.store = null;
+  };
+
+  return CreateIndex;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new CreateIndex;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/DeleteStore.js", function(exports, require, module){
+var DeleteStore, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+DeleteStore = (function(_super) {
+  __extends(DeleteStore, _super);
+
+  function DeleteStore() {
+    var _this = this;
+    this.name = null;
+    this.db = null;
+    this.inPorts = {
+      name: new noflo.Port('name'),
+      db: new noflo.Port('object')
+    };
+    this.outPorts = {
+      db: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.deleteStore();
+    });
+    this.inPorts.db.on('data', function(db) {
+      _this.db = db;
+      return _this.deleteStore();
+    });
+  }
+
+  DeleteStore.prototype.deleteStore = function() {
+    if (!(this.name && this.db)) {
+      return;
+    }
+    this.db.transaction.onerror = this.error;
+    this.db.deleteObjectStore(this.name);
+    this.db.transaction.onerror = null;
+    if (this.outPorts.db.isAttached()) {
+      this.outPorts.db.send(this.db);
+      this.outPorts.db.disconnect();
+    }
+    this.db = null;
+    return this.name = null;
+  };
+
+  return DeleteStore;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new DeleteStore;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/UpgradeRouter.js", function(exports, require, module){
+var UpgradeRouter, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+UpgradeRouter = (function(_super) {
+  __extends(UpgradeRouter, _super);
+
+  function UpgradeRouter() {
+    var _this = this;
+    this.groups = [];
+    this.inPorts = {
+      upgrade: new noflo.Port('object')
+    };
+    this.outPorts = {
+      versions: new noflo.ArrayPort('object'),
+      missed: new noflo.Port('object')
+    };
+    this.inPorts.upgrade.on('begingroup', function(group) {
+      return _this.groups.push(group);
+    });
+    this.inPorts.upgrade.on('data', function(upgrade) {
+      return _this.route(upgrade);
+    });
+    this.inPorts.upgrade.on('endgroup', function() {
+      return _this.groups.pop();
+    });
+    this.inPorts.upgrade.on('disconnect', function() {
+      return _this.groups = [];
+    });
+  }
+
+  UpgradeRouter.prototype.route = function(upgrade) {
+    var group, migration, upgraded, _i, _j, _k, _l, _len, _len1, _len2, _len3, _ref, _ref1, _ref2, _ref3;
+    migration = upgrade.oldVersion;
+    upgraded = false;
+    while (migration < upgrade.newVersion) {
+      if (!this.outPorts.versions.isAttached(migration)) {
+        continue;
+      }
+      _ref = this.groups;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        group = _ref[_i];
+        this.outPorts.versions.beginGroup(group);
+      }
+      this.outPorts.versions.send(upgrade.db);
+      _ref1 = this.groups;
+      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+        group = _ref1[_j];
+        this.outPorts.versions.endGroup();
+      }
+      this.outPorts.versions.disconnect();
+      upgraded = true;
+      migration++;
+    }
+    if (upgraded) {
+      return;
+    }
+    if (!this.outPorts.missed.isAttached()) {
+      return;
+    }
+    _ref2 = this.groups;
+    for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+      group = _ref2[_k];
+      this.outPorts.missed.beginGroup(group);
+    }
+    this.outPorts.missed.send(upgrade.db);
+    _ref3 = this.groups;
+    for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
+      group = _ref3[_l];
+      this.outPorts.missed.endGroup();
+    }
+    return this.outPorts.missed.disconnect();
+  };
+
+  return UpgradeRouter;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new UpgradeRouter;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/BeginTransaction.js", function(exports, require, module){
+var BeginTransaction, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+BeginTransaction = (function(_super) {
+  __extends(BeginTransaction, _super);
+
+  function BeginTransaction() {
+    var _this = this;
+    this.stores = null;
+    this.db = null;
+    this.mode = 'readwrite';
+    this.inPorts = {
+      stores: new noflo.Port('string'),
+      db: new noflo.Port('object'),
+      mode: new noflo.Port('string')
+    };
+    this.outPorts = {
+      transaction: new noflo.Port('object'),
+      db: new noflo.Port('object'),
+      error: new noflo.Port('error')
+    };
+    this.inPorts.stores.on('data', function(data) {
+      _this.stores = data.split(',');
+      return _this.begin();
+    });
+    this.inPorts.db.on('data', function(db) {
+      _this.db = db;
+      return _this.begin();
+    });
+    this.inPorts.mode.on('data', function(mode) {
+      _this.mode = mode;
+    });
+  }
+
+  BeginTransaction.prototype.begin = function() {
+    var transaction,
+      _this = this;
+    if (!(this.db && this.stores)) {
+      return;
+    }
+    transaction = this.db.transaction(this.stores, this.mode);
+    transaction.oncomplete = function() {
+      transaction.onerror = null;
+      return transaction.oncomplete = null;
+    };
+    transaction.onerror = this.error.bind(this);
+    this.outPorts.transaction.send(transaction);
+    this.outPorts.transaction.disconnect();
+    if (this.outPorts.db.isAttached()) {
+      this.outPorts.db.send(this.db);
+      this.outPorts.db.disconnect();
+    }
+    return this.stores = null;
+  };
+
+  return BeginTransaction;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new BeginTransaction;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/AbortTransaction.js", function(exports, require, module){
+var AbortTransaction, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+AbortTransaction = (function(_super) {
+  __extends(AbortTransaction, _super);
+
+  function AbortTransaction() {
+    var _this = this;
+    this.inPorts = {
+      transaction: new noflo.Port('object')
+    };
+    this.outPorts = {
+      error: new noflo.Port('object')
+    };
+    this.inPorts.transaction.on('data', function(transaction) {
+      transaction.onerror = _this.error.bind(_this);
+      return transaction.abort();
+    });
+  }
+
+  return AbortTransaction;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new AbortTransaction;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/GetStore.js", function(exports, require, module){
+var GetStore, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+GetStore = (function(_super) {
+  __extends(GetStore, _super);
+
+  function GetStore() {
+    var _this = this;
+    this.transaction = null;
+    this.name = null;
+    this.inPorts = {
+      name: new noflo.Port('string'),
+      transaction: new noflo.Port('object')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      transaction: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.get();
+    });
+    this.inPorts.transaction.on('data', function(transaction) {
+      _this.transaction = transaction;
+      return _this.get();
+    });
+  }
+
+  GetStore.prototype.get = function() {
+    var store;
+    if (!(this.name && this.transaction)) {
+      return;
+    }
+    this.transaction.onerror = this.error;
+    store = this.transaction.objectStore(this.name);
+    this.transaction.onerror = null;
+    this.outPorts.store.beginGroup(this.name);
+    this.outPorts.store.send(store);
+    this.outPorts.store.endGroup();
+    this.outPorts.store.disconnect();
+    if (this.outPorts.transaction.isAttached()) {
+      this.outPorts.transaction.send(this.transaction);
+      this.outPorts.transaction.disconnect();
+    }
+    this.transaction = null;
+    return this.name = null;
+  };
+
+  return GetStore;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new GetStore;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/GetIndex.js", function(exports, require, module){
+var GetIndex, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+GetIndex = (function(_super) {
+  __extends(GetIndex, _super);
+
+  function GetIndex() {
+    var _this = this;
+    this.store = null;
+    this.name = null;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      name: new noflo.Port('string')
+    };
+    this.outPorts = {
+      index: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.get();
+    });
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.get();
+    });
+  }
+
+  GetIndex.prototype.get = function() {
+    var index;
+    if (!(this.store && this.name)) {
+      return;
+    }
+    this.store.onerror = this.error;
+    index = this.store.index(this.name);
+    this.store.onerror = null;
+    this.outPorts.index.beginGroup(this.name);
+    this.outPorts.index.send(index);
+    this.outPorts.index.endGroup();
+    this.outPorts.index.disconnect();
+    this.store = null;
+    return this.name = null;
+  };
+
+  return GetIndex;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new GetIndex;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Query.js", function(exports, require, module){
+var Query, noflo,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Query = (function(_super) {
+  __extends(Query, _super);
+
+  function Query() {
+    this.step = __bind(this.step, this);
+    var _this = this;
+    this.store = null;
+    this.range = null;
+    this.all = false;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      range: new noflo.Port('object'),
+      all: new noflo.Port('bang')
+    };
+    this.outPorts = {
+      item: new noflo.Port('all'),
+      range: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.query();
+    });
+    this.inPorts.range.on('data', function(range) {
+      _this.range = range;
+      return _this.query();
+    });
+    this.inPorts.all.on('data', function() {
+      _this.all = true;
+      return _this.query();
+    });
+  }
+
+  Query.prototype.query = function() {
+    var req;
+    if (!this.store) {
+      return;
+    }
+    if (this.all) {
+      req = this.store.openCursor();
+      this.store = null;
+      this.all = false;
+      req.onsuccess = this.step;
+      req.onerror = this.error;
+      return;
+    }
+    if (this.range) {
+      req = this.store.openCursor(this.range);
+      this.store = null;
+      if (this.outPorts.range.isAttached()) {
+        this.outPorts.range.send(this.range);
+        this.outPorts.range.disconnect();
+      }
+      this.range = null;
+      req.onsuccess = this.step;
+      return req.onerror = this.error;
+    }
+  };
+
+  Query.prototype.step = function(e) {
+    var cursor;
+    cursor = e.target.result;
+    if (!cursor) {
+      this.outPorts.item.disconnect();
+      return;
+    }
+    this.outPorts.item.beginGroup(cursor.key);
+    this.outPorts.item.send(cursor.value);
+    this.outPorts.item.endGroup();
+    return cursor["continue"]();
+  };
+
+  return Query;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Query;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/QueryOnly.js", function(exports, require, module){
+var QueryOnly, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+QueryOnly = (function(_super) {
+  __extends(QueryOnly, _super);
+
+  function QueryOnly() {
+    var _this = this;
+    this.inPorts = {
+      value: new noflo.Port('all')
+    };
+    this.outPorts = {
+      range: new noflo.Port('object')
+    };
+    this.inPorts.value.on('data', function(value) {
+      _this.outPorts.range.send(IDBKeyRange.only(value));
+      return _this.outPorts.range.disconnect();
+    });
+  }
+
+  return QueryOnly;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new QueryOnly;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/QueryFrom.js", function(exports, require, module){
+var QueryFrom, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+QueryFrom = (function(_super) {
+  __extends(QueryFrom, _super);
+
+  function QueryFrom() {
+    var _this = this;
+    this.including = false;
+    this.inPorts = {
+      value: new noflo.Port('all'),
+      including: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      range: new noflo.Port('object')
+    };
+    this.inPorts.value.on('data', function(value) {
+      _this.outPorts.range.send(IDBKeyRange.lowerBound(value, _this.including));
+      return _this.outPorts.range.disconnect();
+    });
+    this.inPorts.including.on('data', function(including) {
+      _this.including = including;
+    });
+  }
+
+  return QueryFrom;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new QueryFrom;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/QueryTo.js", function(exports, require, module){
+var QueryTo, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+QueryTo = (function(_super) {
+  __extends(QueryTo, _super);
+
+  function QueryTo() {
+    var _this = this;
+    this.including = false;
+    this.inPorts = {
+      value: new noflo.Port('all'),
+      including: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      range: new noflo.Port('object')
+    };
+    this.inPorts.value.on('data', function(value) {
+      _this.outPorts.range.send(IDBKeyRange.upperBound(value, _this.including));
+      return _this.outPorts.range.disconnect();
+    });
+    this.inPorts.including.on('data', function(including) {
+      _this.including = including;
+    });
+  }
+
+  return QueryTo;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new QueryTo;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Put.js", function(exports, require, module){
+var Put, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Put = (function(_super) {
+  __extends(Put, _super);
+
+  function Put() {
+    var _this = this;
+    this.store = null;
+    this.value = null;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      value: new noflo.Port('all')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      key: new noflo.Port('all'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.put();
+    });
+    this.inPorts.value.on('data', function(value) {
+      _this.value = value;
+      return _this.put();
+    });
+  }
+
+  Put.prototype.put = function() {
+    var req,
+      _this = this;
+    if (!(this.store && this.value)) {
+      return;
+    }
+    req = this.store.put(this.value);
+    this.value = null;
+    if (this.outPorts.store.isAttached()) {
+      this.outPorts.store.send(this.store);
+      this.outPorts.store.disconnect();
+    }
+    this.store = null;
+    req.onsuccess = function(e) {
+      if (_this.outPorts.key.isAttached()) {
+        _this.outPorts.key.send(e.target.result);
+        return _this.outPorts.key.disconnect();
+      }
+    };
+    return req.onerror = this.error.bind(this);
+  };
+
+  return Put;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Put;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Get.js", function(exports, require, module){
+var Get, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Get = (function(_super) {
+  __extends(Get, _super);
+
+  function Get() {
+    var _this = this;
+    this.store = null;
+    this.key = null;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      key: new noflo.Port('string')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      item: new noflo.Port('all'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.get();
+    });
+    this.inPorts.key.on('data', function(key) {
+      _this.key = key;
+      return _this.get();
+    });
+  }
+
+  Get.prototype.get = function() {
+    var req,
+      _this = this;
+    if (!(this.store && this.key)) {
+      return;
+    }
+    req = this.store.get(this.key);
+    if (this.outPorts.store.isAttached()) {
+      this.outPorts.store.send(this.store);
+      this.outPorts.store.disconnect();
+    }
+    this.store = null;
+    req.onsuccess = function(e) {
+      _this.outPorts.item.beginGroup(_this.key);
+      _this.outPorts.item.send(e.target.result);
+      _this.outPorts.item.endGroup();
+      _this.outPorts.item.disconnect();
+      return _this.key = null;
+    };
+    return req.onerror = this.error.bind(this);
+  };
+
+  return Get;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Get;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Delete.js", function(exports, require, module){
+var Delete, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Delete = (function(_super) {
+  __extends(Delete, _super);
+
+  function Delete() {
+    var _this = this;
+    this.store = null;
+    this.key = null;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      key: new noflo.Port('string')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.get();
+    });
+    this.inPorts.key.on('data', function(key) {
+      _this.key = key;
+      return _this.get();
+    });
+  }
+
+  Delete.prototype.get = function() {
+    var req,
+      _this = this;
+    if (!(this.store && this.key)) {
+      return;
+    }
+    req = this.store["delete"](this.key);
+    req.onsuccess = function(e) {
+      if (_this.outPorts.store.isAttached()) {
+        _this.outPorts.store.send(_this.store);
+        _this.outPorts.store.disconnect();
+      }
+      _this.key = null;
+      return _this.store = null;
+    };
+    return req.onerror = this.error;
+  };
+
+  return Delete;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Delete;
+};
+
+});
 require.register("d4tocchini-noflo-draggabilly/index.js", function(exports, require, module){
 /*
  * This file can be used for general library features that are exposed as CommonJS modules
@@ -15151,13 +16214,19 @@ exports.getComponent = function() {
 };
 
 });
-require.register("forresto-seriously/index.js", function(exports, require, module){
-module.exports = require('./seriously.js');
+require.register("forresto-noflo-seriously/index.js", function(exports, require, module){
+/*
+ * This file can be used for general library features of noflo-seriously.
+ *
+ * The library features can be made available as CommonJS modules that the
+ * components in this project utilize.
+ */
 
+// require.alias("forresto-noflo-seriously/vendor/seriously.js", "seriously");
 });
-require.register("forresto-seriously/seriously.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/seriously.js", function(exports, require, module){
 /*jslint devel: true, bitwise: true, browser: true, white: true, nomen: true, plusplus: true, maxerr: 50, indent: 4, todo: true */
-/*global Float32Array, Float64Array, Uint8Array, Uint16Array, WebGLTexture, HTMLInputElement, HTMLSelectElement, HTMLElement, WebGLFramebuffer, HTMLCanvasElement, WebGLRenderingContext, define, module */
+/*global Float32Array, Uint8Array, Uint16Array, WebGLTexture, HTMLInputElement, HTMLSelectElement, HTMLElement, WebGLFramebuffer, HTMLCanvasElement, WebGLRenderingContext, define, module, exports */
 (function (root, factory) {
 	'use strict';
 	if (typeof exports === 'object') {
@@ -15188,11 +16257,16 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		Global environment variables
 	*/
 
+	testContext,
+	colorElement,
 	incompatibility,
 	seriousEffects = {},
+	seriousTransforms = {},
 	timeouts = [],
 	allEffectsByHook = {},
-	defaultTransform,
+	allTransformsByHook = {},
+	identity,
+	nop = function () {},
 
 	/*
 		Global reference variables
@@ -15200,160 +16274,25 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 	// http://www.w3.org/TR/css3-color/#svg-color
 	colorNames = {
-		'transparent': [0,0,0,0],
-		'aliceblue':	[240/255,248/255,1,1],
-		'antiquewhite':	[250/255,235/255,215/255,1],
-		'aqua':	[0,1,1,1],
-		'aquamarine':	[127/255,1,212/255,1],
-		'azure':	[240/255,1,1,1],
-		'beige':	[245/255,245/255,220/255,1],
-		'bisque':	[1,228/255,196/255,1],
-		'black':	[0,0,0,1],
-		'blanchedalmond':	[1,235/255,205/255,1],
-		'blue':	[0,0,1,1],
-		'blueviolet':	[138/255,43/255,226/255,1],
-		'brown':	[165/255,42/255,42/255,1],
-		'burlywood':	[222/255,184/255,135/255,1],
-		'cadetblue':	[95/255,158/255,160/255,1],
-		'chartreuse':	[127/255,1,0,1],
-		'chocolate':	[210/255,105/255,30/255,1],
-		'coral':	[1,127/255,80/255,1],
-		'cornflowerblue':	[100/255,149/255,237/255,1],
-		'cornsilk':	[1,248/255,220/255,1],
-		'crimson':	[220/255,20/255,60/255,1],
-		'cyan':	[0,1,1,1],
-		'darkblue':	[0,0,139/255,1],
-		'darkcyan':	[0,139/255,139/255,1],
-		'darkgoldenrod':	[184/255,134/255,11/255,1],
-		'darkgray':	[169/255,169/255,169/255,1],
-		'darkgreen':	[0,100/255,0,1],
-		'darkgrey':	[169/255,169/255,169/255,1],
-		'darkkhaki':	[189/255,183/255,107/255,1],
-		'darkmagenta':	[139/255,0,139/255,1],
-		'darkolivegreen':	[85/255,107/255,47/255,1],
-		'darkorange':	[1,140/255,0,1],
-		'darkorchid':	[153/255,50/255,204/255,1],
-		'darkred':	[139/255,0,0,1],
-		'darksalmon':	[233/255,150/255,122/255,1],
-		'darkseagreen':	[143/255,188/255,143/255,1],
-		'darkslateblue':	[72/255,61/255,139/255,1],
-		'darkslategray':	[47/255,79/255,79/255,1],
-		'darkslategrey':	[47/255,79/255,79/255,1],
-		'darkturquoise':	[0,206/255,209/255,1],
-		'darkviolet':	[148/255,0,211/255,1],
-		'deeppink':	[1,20/255,147/255,1],
-		'deepskyblue':	[0,191/255,1,1],
-		'dimgray':	[105/255,105/255,105/255,1],
-		'dimgrey':	[105/255,105/255,105/255,1],
-		'dodgerblue':	[30/255,144/255,1,1],
-		'firebrick':	[178/255,34/255,34/255,1],
-		'floralwhite':	[1,250/255,240/255,1],
-		'forestgreen':	[34/255,139/255,34/255,1],
-		'fuchsia':	[1,0,1,1],
-		'gainsboro':	[220/255,220/255,220/255,1],
-		'ghostwhite':	[248/255,248/255,1,1],
-		'gold':	[1,215/255,0,1],
-		'goldenrod':	[218/255,165/255,32/255,1],
-		'gray':	[128/255,128/255,128/255,1],
-		'green':	[0,128/255,0,1],
-		'greenyellow':	[173/255,1,47/255,1],
-		'grey':	[128/255,128/255,128/255,1],
-		'honeydew':	[240/255,1,240/255,1],
-		'hotpink':	[1,105/255,180/255,1],
-		'indianred':	[205/255,92/255,92/255,1],
-		'indigo':	[75/255,0,130/255,1],
-		'ivory':	[1,1,240/255,1],
-		'khaki':	[240/255,230/255,140/255,1],
-		'lavender':	[230/255,230/255,250/255,1],
-		'lavenderblush':	[1,240/255,245/255,1],
-		'lawngreen':	[124/255,252/255,0,1],
-		'lemonchiffon':	[1,250/255,205/255,1],
-		'lightblue':	[173/255,216/255,230/255,1],
-		'lightcoral':	[240/255,128/255,128/255,1],
-		'lightcyan':	[224/255,1,1,1],
-		'lightgoldenrodyellow':	[250/255,250/255,210/255,1],
-		'lightgray':	[211/255,211/255,211/255,1],
-		'lightgreen':	[144/255,238/255,144/255,1],
-		'lightgrey':	[211/255,211/255,211/255,1],
-		'lightpink':	[1,182/255,193/255,1],
-		'lightsalmon':	[1,160/255,122/255,1],
-		'lightseagreen':	[32/255,178/255,170/255,1],
-		'lightskyblue':	[135/255,206/255,250/255,1],
-		'lightslategray':	[119/255,136/255,153/255,1],
-		'lightslategrey':	[119/255,136/255,153/255,1],
-		'lightsteelblue':	[176/255,196/255,222/255,1],
-		'lightyellow':	[1,1,224/255,1],
-		'lime':	[0,1,0,1],
-		'limegreen':	[50/255,205/255,50/255,1],
-		'linen':	[250/255,240/255,230/255,1],
-		'magenta':	[1,0,1,1],
-		'maroon':	[128/255,0,0,1],
-		'mediumaquamarine':	[102/255,205/255,170/255,1],
-		'mediumblue':	[0,0,205/255,1],
-		'mediumorchid':	[186/255,85/255,211/255,1],
-		'mediumpurple':	[147/255,112/255,219/255,1],
-		'mediumseagreen':	[60/255,179/255,113/255,1],
-		'mediumslateblue':	[123/255,104/255,238/255,1],
-		'mediumspringgreen':	[0,250/255,154/255,1],
-		'mediumturquoise':	[72/255,209/255,204/255,1],
-		'mediumvioletred':	[199/255,21/255,133/255,1],
-		'midnightblue':	[25/255,25/255,112/255,1],
-		'mintcream':	[245/255,1,250/255,1],
-		'mistyrose':	[1,228/255,225/255,1],
-		'moccasin':	[1,228/255,181/255,1],
-		'navajowhite':	[1,222/255,173/255,1],
-		'navy':	[0,0,128/255,1],
-		'oldlace':	[253/255,245/255,230/255,1],
-		'olive':	[128/255,128/255,0,1],
-		'olivedrab':	[107/255,142/255,35/255,1],
-		'orange':	[1,165/255,0,1],
-		'orangered':	[1,69/255,0,1],
-		'orchid':	[218/255,112/255,214/255,1],
-		'palegoldenrod':	[238/255,232/255,170/255,1],
-		'palegreen':	[152/255,251/255,152/255,1],
-		'paleturquoise':	[175/255,238/255,238/255,1],
-		'palevioletred':	[219/255,112/255,147/255,1],
-		'papayawhip':	[1,239/255,213/255,1],
-		'peachpuff':	[1,218/255,185/255,1],
-		'peru':	[205/255,133/255,63/255,1],
-		'pink':	[1,192/255,203/255,1],
-		'plum':	[221/255,160/255,221/255,1],
-		'powderblue':	[176/255,224/255,230/255,1],
-		'purple':	[128/255,0,128/255,1],
-		'red':	[1,0,0,1],
-		'rosybrown':	[188/255,143/255,143/255,1],
-		'royalblue':	[65/255,105/255,225/255,1],
-		'saddlebrown':	[139/255,69/255,19/255,1],
-		'salmon':	[250/255,128/255,114/255,1],
-		'sandybrown':	[244/255,164/255,96/255,1],
-		'seagreen':	[46/255,139/255,87/255,1],
-		'seashell':	[1,245/255,238/255,1],
-		'sienna':	[160/255,82/255,45/255,1],
-		'silver':	[192/255,192/255,192/255,1],
-		'skyblue':	[135/255,206/255,235/255,1],
-		'slateblue':	[106/255,90/255,205/255,1],
-		'slategray':	[112/255,128/255,144/255,1],
-		'slategrey':	[112/255,128/255,144/255,1],
-		'snow':	[1,250/255,250/255,1],
-		'springgreen':	[0,1,127/255,1],
-		'steelblue':	[70/255,130/255,180/255,1],
-		'tan':	[210/255,180/255,140/255,1],
-		'teal':	[0,128/255,128/255,1],
-		'thistle':	[216/255,191/255,216/255,1],
-		'tomato':	[1,99/255,71/255,1],
-		'turquoise':	[64/255,224/255,208/255,1],
-		'violet':	[238/255,130/255,238/255,1],
-		'wheat':	[245/255,222/255,179/255,1],
-		'white':	[1,1,1,1],
-		'whitesmoke':	[245/255,245/255,245/255,1],
-		'yellow':	[1,1,0,1],
-		'yellowgreen':	[154/255,205/255,50/255,1]
+		transparent: [0, 0, 0, 0],
+		red: [1, 0, 0, 1],
+		green: [0, 1, 0, 1],
+		blue: [0, 0, 1, 1],
+		white: [1, 1, 1, 1]
 	},
+
+	vectorFields = ['x', 'y', 'z', 'w'],
+	colorFields = ['r', 'g', 'b', 'a'],
 
 	/*
 		utility functions
 	*/
 
+	/*
+	mat4 matrix functions borrowed from gl-matrix by toji
+	https://github.com/toji/gl-matrix
+	License: https://github.com/toji/gl-matrix/blob/master/LICENSE.md
+	*/
 	mat4 = {
 		/*
 		 * mat4.frustum
@@ -15368,7 +16307,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		 * Returns:
 		 * dest if specified, a new mat4 otherwise
 		 */
-		frustum: function(left, right, bottom, top, near, far, dest) {
+		frustum: function (left, right, bottom, top, near, far, dest) {
 			if(!dest) { dest = mat4.create(); }
 			var rl = (right - left),
 				tb = (top - bottom),
@@ -15392,22 +16331,20 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			return dest;
 		},
 
-		perspective: function(fovy, aspect, near, far, dest) {
+		perspective: function (fovy, aspect, near, far, dest) {
 			var top = near*Math.tan(fovy*Math.PI / 360.0),
 				right = top*aspect;
 			return mat4.frustum(-right, right, -top, top, near, far, dest);
 		},
-		multiply: function (mat, mat2, dest) {
-			if (!dest) { dest = mat; }
-
+		multiply: function (dest, mat, mat2) {
 			// Cache the matrix values (makes for huge speed increases!)
-			var a00 = mat[ 0], a01 = mat[ 1], a02 = mat[ 2], a03 = mat[3],
-				a10 = mat[ 4], a11 = mat[ 5], a12 = mat[ 6], a13 = mat[7],
-				a20 = mat[ 8], a21 = mat[ 9], a22 = mat[10], a23 = mat[11],
+			var a00 = mat[0], a01 = mat[1], a02 = mat[2], a03 = mat[3],
+				a10 = mat[4], a11 = mat[5], a12 = mat[6], a13 = mat[7],
+				a20 = mat[8], a21 = mat[9], a22 = mat[10], a23 = mat[11],
 				a30 = mat[12], a31 = mat[13], a32 = mat[14], a33 = mat[15],
 
 			// Cache only the current line of the second matrix
-				b0 = mat2[0], b1 = mat2[1], b2 = mat2[2], b3 = mat2[3];
+			b0 = mat2[0], b1 = mat2[1], b2 = mat2[2], b3 = mat2[3];
 			dest[0] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
 			dest[1] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
 			dest[2] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
@@ -15460,16 +16397,35 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			dest[14] = 0;
 			dest[15] = 1;
 			return dest;
+		},
+		copy: function (out, a) {
+			out[0] = a[0];
+			out[1] = a[1];
+			out[2] = a[2];
+			out[3] = a[3];
+			out[4] = a[4];
+			out[5] = a[5];
+			out[6] = a[6];
+			out[7] = a[7];
+			out[8] = a[8];
+			out[9] = a[9];
+			out[10] = a[10];
+			out[11] = a[11];
+			out[12] = a[12];
+			out[13] = a[13];
+			out[14] = a[14];
+			out[15] = a[15];
+			return out;
 		}
 	},
 
-	requestAnimFrame = (function(){
+	requestAnimationFrame = (function (){
 		var lastTime = 0;
-		return  window.requestAnimationFrame       ||
+		return  window.requestAnimationFrame ||
 				window.webkitRequestAnimationFrame ||
-				window.mozRequestAnimationFrame    ||
-				window.oRequestAnimationFrame      ||
-				window.msRequestAnimationFrame     ||
+				window.mozRequestAnimationFrame ||
+				window.oRequestAnimationFrame ||
+				window.msRequestAnimationFrame ||
 				function (callback) {
 					var currTime, timeToCall, id;
 
@@ -15483,13 +16439,29 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 					lastTime = currTime + timeToCall;
 					return id;
 				};
-	}());
+	}()),
+
+	cancelAnimFrame = (function (){
+		return  window.cancelAnimationFrame ||
+				window.webkitCancelAnimationFrame ||
+				window.mozCancelAnimationFrame ||
+				window.oCancelAnimationFrame ||
+				window.msCancelAnimationFrame ||
+				function (id) {
+					window.cancelTimeout(id);
+				};
+	}()),
+
+	reservedNames = ['source', 'target', 'effect', 'effects', 'benchmark', 'incompatible',
+		'util', 'ShaderProgram', 'inputValidators', 'save', 'load',
+		'plugin', 'removePlugin', 'alias', 'removeAlias', 'stop', 'go',
+		'destroy', 'isDestroyed'];
 
 	function getElement(input, tags) {
 		var element,
 			tag;
 		if (typeof input === 'string') {
-			//element = document.getElementById(input) || document.getElementsByTagName( input )[0];
+			//element = document.getElementById(input) || document.getElementsByTagName(input)[0];
 			element = document.querySelector(input);
 		} else if (!input) {
 			return false;
@@ -15512,27 +16484,27 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 	}
 
 	function extend(dest, src) {
-		var property, g, s;
+		var property,
+			descriptor;
 
 		//todo: are we sure this is safe?
 		if (dest.prototype && src.prototype && dest.prototype !== src.prototype) {
 			extend(dest.prototype, src.prototype);
 		}
 
-		for ( property in src ) {
+		for (property in src) {
 			if (src.hasOwnProperty(property)) {
-				g = src.__lookupGetter__(property);
-				s = src.__lookupSetter__(property);
+				descriptor = Object.getOwnPropertyDescriptor(src, property);
 
-				if (g || s) {
-					if (g) {
-						dest.__defineGetter__(property, g);
-					}
-					if (s) {
-						dest.__defineSetter__(property, s);
-					}
+				if (descriptor.get || descriptor.set) {
+					Object.defineProperty(dest, property, {
+						configurable: true,
+						enumerable: true,
+						get: descriptor.get,
+						set: descriptor.set
+					});
 				} else {
-					dest[ property ] = src[ property ];
+					dest[property] = src[property];
 				}
 			}
 		}
@@ -15541,7 +16513,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 	}
 
 	//http://www.w3.org/TR/css3-color/#hsl-color
-	function hslToRgb(h, s, l, a) {
+	function hslToRgb(h, s, l, a, out) {
 		function hueToRgb(m1, m2, h) {
 			h = h % 1;
 			if (h < 0) {
@@ -15566,12 +16538,17 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			m2 = l + s - l * s;
 		}
 		m1 = l * 2 - m2;
-		return [
-			hueToRgb(m1, m2, h + 1/3),
-			hueToRgb(m1, m2, h),
-			hueToRgb(m1, m2, h - 1/3),
-			a
-		];
+
+		if (!out) {
+			out = [];
+		}
+
+		out[0] = hueToRgb(m1, m2, h + 1/3);
+		out[1] = hueToRgb(m1, m2, h);
+		out[2] = hueToRgb(m1, m2, h - 1/3);
+		out[3] = a;
+
+		return out;
 	}
 
 	/*
@@ -15603,7 +16580,12 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		window.postMessage('seriously-timeout-message', window.location);
 	}
 
-	window.addEventListener('message', function(event) {
+	function isArrayLike(obj) {
+		return Array.isArray(obj) ||
+			(obj && obj.BYTES_PER_ELEMENT && 'length' in obj);
+	}
+
+	window.addEventListener('message', function (event) {
 		if (event.source === window && event.data === 'seriously-timeout-message') {
 			event.stopPropagation();
 			if (timeouts.length > 0) {
@@ -15613,9 +16595,37 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		}
 	}, true);
 
+	function getTestContext() {
+		var canvas;
+
+		if (testContext || !window.WebGLRenderingContext) {
+			return testContext;
+		}
+
+		canvas = document.createElement('canvas');
+		try {
+			testContext = canvas.getContext('experimental-webgl');
+			canvas.addEventListener('webglcontextlost', function (event) {
+				/*
+				If/When context is lost, just clear testContext and create
+				a new one the next time it's needed
+				*/
+				event.preventDefault();
+				if (testContext && testContext.canvas === this) {
+					testContext = undefined;
+				}
+			}, false);
+		} catch (webglError) {
+			console.log('Unable to access WebGL.');
+		}
+
+		return testContext;
+	}
+
 	function checkSource(source) {
 		var element, canvas, ctx, texture;
 
+		//todo: don't need to create a new array every time we do this
 		element = getElement(source, ['img', 'canvas', 'video']);
 		if (!element) {
 			return false;
@@ -15627,13 +16637,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			return false;
 		}
 
-		if (window.WebGLRenderingContext) {
-			try {
-				ctx = canvas.getContext('experimental-webgl');
-			} catch (webglError) {
-				console.log('Unable to access WebGL. Trying 2D canvas.');
-			}
-		}
+		ctx = getTestContext();
 
 		if (ctx) {
 			texture = ctx.createTexture();
@@ -15642,7 +16646,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			try {
 				ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGBA, ctx.RGBA, ctx.UNSIGNED_BYTE, element);
 			} catch (textureError) {
-				if (textureError.name === 'SECURITY_ERR') {
+				if (textureError.code === window.DOMException.SECURITY_ERR) {
 					console.log('Unable to access cross-domain image');
 				} else {
 					console.log('Error: ' + textureError.message);
@@ -15657,7 +16661,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				ctx.drawImage(element, 0, 0);
 				ctx.getImageData(0, 0, 1, 1);
 			} catch (drawImageError) {
-				if (drawImageError.name === 'SECURITY_ERR') {
+				if (drawImageError.code === window.DOMException.SECURITY_ERR) {
 					console.log('Unable to access cross-domain image');
 				} else {
 					console.log('Error: ' + drawImageError.message);
@@ -15666,24 +16670,107 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 		}
 
-
 		// This method will return a false positive for resources that aren't
 		// actually images or haven't loaded yet
 
 		return true;
 	}
 
+	function validateInputSpecs(effect) {
+		var reserved = ['render', 'initialize', 'original', 'plugin', 'alias',
+			'prototype', 'destroy', 'isDestroyed'],
+			input,
+			name;
+
+		function nop(value) {
+			return value;
+		}
+
+		for (name in effect.inputs) {
+			if (effect.inputs.hasOwnProperty(name)) {
+				if (reserved.indexOf(name) >= 0 || Object.prototype[name]) {
+					throw 'Reserved effect input name: ' + name;
+				}
+
+				input = effect.inputs[name];
+
+				if (isNaN(input.min)) {
+					input.min = -Infinity;
+				}
+
+				if (isNaN(input.max)) {
+					input.max = Infinity;
+				}
+
+				if (isNaN(input.minCount)) {
+					input.minCount = -Infinity;
+				}
+
+				if (isNaN(input.maxCount)) {
+					input.maxCount = Infinity;
+				}
+
+				if (isNaN(input.step)) {
+					input.step = 0;
+				}
+
+				if (input.defaultValue === undefined || input.defaultValue === null) {
+					if (input.type === 'number') {
+						input.defaultValue = Math.min(Math.max(0, input.min), input.max);
+					} else if (input.type === 'color') {
+						input.defaultValue = [0, 0, 0, 0];
+					} else if (input.type === 'enum') {
+						if (input.options && input.options.length) {
+							input.defaultValue = input.options[0];
+						} else {
+							input.defaultValue = '';
+						}
+					} else if (input.type === 'boolean') {
+						input.defaultValue = false;
+					} else {
+						input.defaultValue = '';
+					}
+				}
+
+				if (input.type === 'vector') {
+					if (input.dimensions < 2) {
+						input.dimensions = 2;
+					} else if (input.dimensions > 4) {
+						input.dimensions = 4;
+					} else if (!input.dimensions || isNaN(input.dimensions)) {
+						input.dimensions = 4;
+					} else {
+						input.dimensions = Math.round(input.dimensions);
+					}
+				} else {
+					input.dimensions = 1;
+				}
+
+				input.shaderDirty = !!input.shaderDirty;
+
+				if (typeof input.validate !== 'function') {
+					input.validate = Seriously.inputValidators[input.type] || nop;
+				}
+
+				if (!effect.defaultImageInput && input.type === 'image') {
+					effect.defaultImageInput = name;
+				}
+			}
+		}
+	}
+
 	/*
 		helper Classes
 	*/
 
-	function FrameBuffer(gl, width, height, useFloat) {
+	function FrameBuffer(gl, width, height, options) {
 		var frameBuffer,
 			renderBuffer,
 			tex,
-			status;
+			status,
+			useFloat = options === true ? options : (options && options.useFloat);
 
-		useFloat = false && useFloat && !!gl.getExtension("OES_texture_float"); //useFloat is not ready!
+		useFloat = false;//useFloat && !!gl.getExtension("OES_texture_float"); //useFloat is not ready!
 		if (useFloat) {
 			this.type = gl.FLOAT;
 		} else {
@@ -15693,12 +16780,19 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		frameBuffer = gl.createFramebuffer();
 		gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
 
-		this.texture = gl.createTexture();
-		gl.bindTexture(gl.TEXTURE_2D, this.texture);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		if (options && options.texture) {
+			this.texture = options.texture;
+			gl.bindTexture(gl.TEXTURE_2D, this.texture);
+			this.ownTexture = false;
+		} else {
+			this.texture = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D, this.texture);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			this.ownTexture = true;
+		}
 
 		try {
 			if (this.type === gl.FLOAT) {
@@ -15718,17 +16812,9 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		renderBuffer = gl.createRenderbuffer();
 		gl.bindRenderbuffer(gl.RENDERBUFFER, renderBuffer);
 		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderBuffer);
 
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.texture, 0);
-
-		//clean up
-		gl.bindTexture(gl.TEXTURE_2D, null);
-		gl.bindRenderbuffer(gl.RENDERBUFFER, null);
-		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-		if (!gl.isFramebuffer(frameBuffer)) {
-			throw('Invalid framebuffer');
-		}
 
 		status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
 
@@ -15752,6 +16838,11 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			throw('Incomplete framebuffer: ' + status);
 		}
 
+		//clean up
+		gl.bindTexture(gl.TEXTURE_2D, null);
+		gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
 		this.gl = gl;
 		this.frameBuffer = frameBuffer;
 		this.renderBuffer = renderBuffer;
@@ -15759,29 +16850,59 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		this.height = height;
 	}
 
-	FrameBuffer.prototype.destroy = function() {
+	FrameBuffer.prototype.resize = function (width, height) {
+		var gl = this.gl;
+
+		if (this.width === width && this.height === height) {
+			return;
+		}
+
+		this.width = width;
+		this.height = height;
+
+		if (!gl) {
+			return;
+		}
+
+		gl.bindTexture(gl.TEXTURE_2D, this.texture);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer);
+		gl.bindRenderbuffer(gl.RENDERBUFFER, this.renderBuffer);
+
+		//todo: handle float
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.texture, 0);
+
+		gl.bindTexture(gl.TEXTURE_2D, null);
+		gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	};
+
+	FrameBuffer.prototype.destroy = function () {
 		var gl = this.gl;
 
 		if (gl) {
 			gl.deleteFramebuffer(this.frameBuffer);
 			gl.deleteRenderbuffer(this.renderBuffer);
-			gl.deleteTexture(this.texture);
+			if (this.ownTexture) {
+				gl.deleteTexture(this.texture);
+			}
 		}
 
 		delete this.frameBuffer;
 		delete this.renderBuffer;
 		delete this.texture;
+		delete this.gl;
 	};
 
 	/* ShaderProgram - utility class for building and accessing WebGL shaders */
 
 	function ShaderProgram(gl, vertexShaderSource, fragmentShaderSource) {
-
 		var program, vertexShader, fragmentShader,
-			programError = '', shaderError,
-			num_uniforms,
-			num_attribs,
-			i, info, name, loc, setter, getter;
+			programError = '',
+			shaderError,
+			i, l,
+			obj;
 
 		function compileShader(source, fragment) {
 			var shader, i;
@@ -15807,9 +16928,8 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		}
 
 		function makeShaderSetter(info, loc) {
-
 			if (info.type === gl.SAMPLER_2D) {
-				return function(value) {
+				return function (value) {
 					info.glTexture = gl['TEXTURE' + value];
 					gl.uniform1i(loc, value);
 				};
@@ -15817,79 +16937,63 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 			if (info.type === gl.BOOL|| info.type === gl.INT) {
 				if (info.size > 1) {
-					return function(value) {
+					return function (value) {
 						gl.uniform1iv(loc, value);
 					};
 				}
 
-				return function(value) {
+				return function (value) {
 					gl.uniform1i(loc, value);
 				};
 			}
 
 			if (info.type === gl.FLOAT) {
 				if (info.size > 1) {
-					return function(value) {
+					return function (value) {
 						gl.uniform1fv(loc, value);
 					};
 				}
 
-				return function(value) {
+				return function (value) {
 					gl.uniform1f(loc, value);
 				};
 			}
 
 			if (info.type === gl.FLOAT_VEC2) {
-				return function(obj) {
-					//todo: standardize this so we don't have to do this check
-					if ( Array.isArray(obj) ) {
-						gl.uniform2f(loc, obj[0], obj[1]);
-					} else {
-						gl.uniform2f(loc, obj.x, obj.y);
-					}
+				return function (obj) {
+					gl.uniform2f(loc, obj[0], obj[1]);
 				};
 			}
 
 			if (info.type === gl.FLOAT_VEC3) {
-				return function(obj) {
-					//todo: standardize this so we don't have to do this check
-					if ( Array.isArray(obj) ) {
-						gl.uniform3f(loc, obj[0], obj[1], obj[2]);
-					} else {
-						gl.uniform3f(loc, obj.x, obj.y, obj.z);
-					}
+				return function (obj) {
+					gl.uniform3f(loc, obj[0], obj[1], obj[2]);
 				};
 			}
 
 			if (info.type === gl.FLOAT_VEC4) {
-				return function(obj) {
-					//todo: standardize this so we don't have to do this check
-					if ( Array.isArray(obj) ) {
-						gl.uniform4f(loc, obj[0], obj[1], obj[2], obj[3]);
-					} else {
-						gl.uniform4f(loc, obj.x, obj.y, obj.z, obj.w);
-					}
+				return function (obj) {
+					gl.uniform4f(loc, obj[0], obj[1], obj[2], obj[3]);
 				};
 			}
 
 			if (info.type === gl.FLOAT_MAT3) {
-				return function(mat3) {
+				return function (mat3) {
 					gl.uniformMatrix3fv(loc, false, mat3);
 				};
 			}
 
 			if (info.type === gl.FLOAT_MAT4) {
-				return function(mat4) {
+				return function (mat4) {
 					gl.uniformMatrix4fv(loc, false, mat4);
 				};
 			}
 
 			throw "Unknown shader uniform type: " + info.type;
-
 		}
 
 		function makeShaderGetter(loc) {
-			return function() {
+			return function () {
 				return gl.getUniform(program, loc);
 			};
 		}
@@ -15919,41 +17023,45 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		}
 
 		gl.useProgram(program);
-		num_uniforms = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-		this.uniforms = [];
-		for (i = 0; i < num_uniforms; ++i) {
-			info = gl.getActiveUniform(program, i);
-			name = info.name;
-			loc = gl.getUniformLocation(program, name);
-			loc.name = name;
 
-			setter = makeShaderSetter(info, loc);
-			info.set = setter;
-			this['set_' + name] = setter;
+		this.uniforms = {};
 
-			getter = makeShaderGetter(loc);
-			info.get = getter;
-			this['get_' + name] = getter;
+		l = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+		for (i = 0; i < l; ++i) {
+			obj = {
+				info: gl.getActiveUniform(program, i)
+			};
 
-			info.loc = this['location_' + name] = loc;
+			obj.name = obj.info.name;
+			obj.loc = gl.getUniformLocation(program, obj.name);
+			obj.set = makeShaderSetter(obj.info, obj.loc);
+			obj.get = makeShaderGetter(obj.loc);
+			this.uniforms[obj.name] = obj;
 
-			this.uniforms.push(info);
+			if (!this[obj.name]) {
+				//for convenience
+				this[obj.name] = obj;
+			}
 		}
 
-		num_attribs = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
-		this.attributes = [];
-		for (i = 0; i < num_attribs; ++i) {
-			info = gl.getActiveAttrib(program, i);
-			name = info.name;
-			loc = gl.getAttribLocation(program, name);
-			this['location_' + name] = loc;
-			this.attributes.push(name);
+		this.attributes = {};
+		this.location = {};
+		l = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
+		for (i = 0; i < l; ++i) {
+			obj = {
+				info: gl.getActiveAttrib(program, i)
+			};
+
+			obj.name = obj.info.name;
+			obj.location = gl.getAttribLocation(program, obj.name);
+			this.attributes[obj.name] = obj;
+			this.location[obj.name] = obj.location;
 		}
 
 		this.gl = gl;
 		this.program = program;
 
-		this.destroy = function() {
+		this.destroy = function () {
 			var i;
 
 			if (gl) {
@@ -15964,7 +17072,6 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 			for (i in this) {
 				if (this.hasOwnProperty(i)) {
-
 					delete this[i];
 				}
 			}
@@ -15975,7 +17082,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		};
 	}
 
-	ShaderProgram.prototype.useProgram = function() {
+	ShaderProgram.prototype.use = function () {
 		this.gl.useProgram(this.program);
 	};
 
@@ -15986,7 +17093,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 	function Seriously(options) {
 
 		//if called without 'new', make a new object and return that
-		if (window === this || !(this instanceof Seriously) ) {
+		if (window === this || !(this instanceof Seriously)) {
 			return new Seriously(options);
 		}
 
@@ -15997,20 +17104,21 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			nodeId = 0,
 			sources = [],
 			targets = [],
+			transforms = [],
 			effects = [],
 			aliases = {},
-			callbacks = [],
-			animationCallbacks = [],
+			preCallbacks = [],
+			postCallbacks = [],
 			glCanvas,
 			gl,
 			rectangleModel,
 			baseShader,
 			baseVertexShader, baseFragmentShader,
-			Node, SourceNode, EffectNode, TargetNode,
-			Effect, Source, Target,
+			Node, SourceNode, EffectNode, TransformNode, TargetNode,
+			Effect, Source, Transform, Target,
 			auto = false,
-			callbacksRunning = false,
-			isDestroyed = false;
+			isDestroyed = false,
+			rafId;
 
 		function makeGlModel(shape, gl) {
 			var vertex, index, texCoord;
@@ -16054,14 +17162,14 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 			shape.indices = new Uint16Array([
 				0, 1, 2,
-				0, 2, 3    // Front face
+				0, 2, 3	// Front face
 			]);
 
 			shape.coords = new Float32Array([
-				0,0,
-				1,0,
-				1,1,
-				0,1
+				0, 0,
+				1, 0,
+				1, 1,
+				0, 1
 			]);
 
 			return makeGlModel(shape, gl);
@@ -16103,20 +17211,26 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 		}
 
-		//runs on every frame, as long as there are media sources (img, video, canvas, etc.) to check
-		//any sources that are updated are set to dirty, forcing all dependent nodes to render on next pass
-		//target nodes that are set to auto by .go() will render immediately when set to dirty
-		function monitorSources() {
+		/*
+		runs on every frame, as long as there are media sources (img, video, canvas, etc.) to check,
+		dirty target nodes or pre/post callbacks to run. any sources that are updated are set to dirty,
+		forcing all dependent nodes to render
+		*/
+		function renderDaemon() {
 			var i, node, media,
 				keepRunning = false;
 
-			if (animationCallbacks.length) {
-				for (i = 0; i < animationCallbacks.length; i++) {
-					animationCallbacks[i].call(seriously);
+			rafId = null;
+
+			if (preCallbacks.length) {
+				keepRunning = true;
+				for (i = 0; i < preCallbacks.length; i++) {
+					preCallbacks[i].call(seriously);
 				}
 			}
 
 			if (sources && sources.length) {
+				keepRunning = true;
 				for (i = 0; i < sources.length; i++) {
 					node = sources[i];
 
@@ -16128,8 +17242,6 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 						node.setDirty();
 					}
 				}
-
-				keepRunning = true;
 			}
 
 			for (i = 0; i < targets.length; i++) {
@@ -16139,63 +17251,81 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				}
 			}
 
-			if (keepRunning) {
-				requestAnimFrame(monitorSources);
+			if (postCallbacks.length) {
+				keepRunning = true;
+				for (i = 0; i < postCallbacks.length; i++) {
+					postCallbacks[i].call(seriously);
+				}
+			}
+
+			//rafId may have been set again by a callback or in target.setDirty()
+			if (keepRunning && !rafId) {
+				rafId = requestAnimationFrame(renderDaemon);
 			}
 		}
 
 		function draw(shader, model, uniforms, frameBuffer, node, options) {
 			var numTextures = 0,
-				name, value, setter,
+				name, value, shaderUniform,
 				width, height,
-				nodeGl = (node && node.gl) || gl,
-				opts = options || {};
+				nodeGl = (node && node.gl) || gl;
 
 			if (!nodeGl) {
 				return;
 			}
 
 			if (node) {
-				width = opts.width || node.width || nodeGl.canvas.width;
-				height = opts.height || node.height || nodeGl.canvas.height;
+				width = options && options.width || node.width || nodeGl.canvas.width;
+				height = options && options.height || node.height || nodeGl.canvas.height;
 			} else {
-				width = opts.width || nodeGl.canvas.width;
-				height = opts.height || nodeGl.canvas.height;
+				width = options && options.width || nodeGl.canvas.width;
+				height = options && options.height || nodeGl.canvas.height;
 			}
 
-			shader.useProgram();
+			shader.use();
 
 			nodeGl.viewport(0, 0, width, height);
 
 			nodeGl.bindFramebuffer(nodeGl.FRAMEBUFFER, frameBuffer);
 
 			/* todo: do this all only once at the beginning, since we only have one model? */
-			nodeGl.enableVertexAttribArray(shader.location_position);
-			nodeGl.enableVertexAttribArray(shader.location_texCoord);
+			nodeGl.enableVertexAttribArray(shader.location.position);
+			nodeGl.enableVertexAttribArray(shader.location.texCoord);
 
 			if (model.texCoord) {
 				nodeGl.bindBuffer(nodeGl.ARRAY_BUFFER, model.texCoord);
-				nodeGl.vertexAttribPointer(shader.location_texCoord, model.texCoord.size, nodeGl.FLOAT, false, 0, 0);
+				nodeGl.vertexAttribPointer(shader.location.texCoord, model.texCoord.size, nodeGl.FLOAT, false, 0, 0);
 			}
 
 			nodeGl.bindBuffer(nodeGl.ARRAY_BUFFER, model.vertex);
-			nodeGl.vertexAttribPointer(shader.location_position, model.vertex.size, nodeGl.FLOAT, false, 0, 0);
+			nodeGl.vertexAttribPointer(shader.location.position, model.vertex.size, nodeGl.FLOAT, false, 0, 0);
 
 			nodeGl.bindBuffer(nodeGl.ELEMENT_ARRAY_BUFFER, model.index);
 
 			//default for depth is disable
-			if (opts.depth) {
+			if (options && options.depth) {
 				gl.enable(gl.DEPTH_TEST);
 			} else {
 				gl.disable(gl.DEPTH_TEST);
 			}
 
 			//default for blend is enable
-			if (opts.blend === undefined || opts.blend) {
+			if (!options || options.blend === undefined || options.blend) {
 				gl.enable(gl.BLEND);
-				gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA,
-									gl.SRC_ALPHA, gl.DST_ALPHA);
-				gl.blendEquation(gl.FUNC_ADD);
+				gl.blendFunc(
+					options && options.srcRGB || gl.SRC_ALPHA,
+					options && options.dstRGB || gl.ONE_MINUS_SRC_ALPHA
+				);
+
+				/*
+				gl.blendFuncSeparate(
+					options && options.srcRGB || gl.SRC_ALPHA,
+					options && options.dstRGB || gl.ONE_MINUS_SRC_ALPHA,
+					options && options.srcAlpha || gl.SRC_ALPHA,
+					options && options.dstAlpha || gl.DST_ALPHA
+				);
+				*/
+				gl.blendEquation(options && options.blendEquation || gl.FUNC_ADD);
 			} else {
 				gl.disable(gl.BLEND);
 			}
@@ -16204,29 +17334,31 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			for (name in uniforms) {
 				if (uniforms.hasOwnProperty(name)) {
 					value = uniforms[name];
-					setter = 'set_' + name;
-					if (shader[setter]) {
+					shaderUniform = shader.uniforms[name];
+					if (shaderUniform) {
 						if (value instanceof WebGLTexture) {
 							nodeGl.activeTexture(nodeGl.TEXTURE0 + numTextures);
 							nodeGl.bindTexture(nodeGl.TEXTURE_2D, value);
-							shader[setter](numTextures); //todo: make this faster
+							shaderUniform.set(numTextures);
 							numTextures++;
-						} else if (value instanceof SourceNode || value instanceof EffectNode) {
+						} else if (value instanceof SourceNode ||
+								value instanceof EffectNode ||
+								value instanceof TransformNode) {
 							if (value.texture) {
 								nodeGl.activeTexture(nodeGl.TEXTURE0 + numTextures);
 								nodeGl.bindTexture(nodeGl.TEXTURE_2D, value.texture);
-								shader[setter](numTextures); //todo: make this faster
+								shaderUniform.set(numTextures);
 								numTextures++;
 							}
 						} else if(value !== undefined && value !== null) {
-							shader['set_' + name](value);
+							shaderUniform.set(value);
 						}
 					}
 				}
 			}
 
 			//default for clear is true
-			if (opts.clear === undefined || opts.clear) {
+			if (!options || options.clear === undefined || options.clear) {
 				nodeGl.clearColor(0.0, 0.0, 0.0, 0.0);
 				nodeGl.clear(nodeGl.COLOR_BUFFER_BIT | nodeGl.DEPTH_BUFFER_BIT);
 			}
@@ -16240,16 +17372,21 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 		function findInputNode(source, options) {
 			var node, i;
-			if (source instanceof SourceNode || source instanceof EffectNode) {
+
+			if (source instanceof SourceNode ||
+					source instanceof EffectNode ||
+					source instanceof TransformNode) {
 				node = source;
-			} else if (source instanceof Effect || source instanceof Source) {
+			} else if (source instanceof Effect ||
+					source instanceof Source ||
+					source instanceof Transform) {
 				node = nodesById[source.id];
 
 				if (!node) {
 					throw 'Cannot connect a foreign node';
 				}
 			} else {
-				if ( typeof source === 'string' && isNaN(source) ) {
+				if (typeof source === 'string' && isNaN(source)) {
 					source = getElement(source, ['canvas', 'img', 'video']);
 				}
 
@@ -16265,59 +17402,44 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			return node;
 		}
 
-		function runCallbacks() {
-			function run() {
-				var i;
-				for (i = 0; i < callbacks.length; i++) {
-					callbacks[i].call(seriously);
-				}
-				callbacksRunning = false;
+		//trace back all sources to make sure we're not making a cyclical connection
+		function traceSources(node, original) {
+			var i,
+				source,
+				sources;
+
+			if (!(node instanceof EffectNode) && !(node instanceof TransformNode)) {
+				return false;
 			}
 
-			if (!callbacksRunning && callbacks.length) {
-				setTimeoutZero(run);
-				callbacksRunning = true;
+			sources = node.sources;
+
+			for (i in sources) {
+				if (sources.hasOwnProperty(i)) {
+					source = sources[i];
+
+					if (source === original || traceSources(source, original)) {
+						return true;
+					}
+				}
 			}
+
+			return false;
 		}
 
-		Node = function (options) {
-			var width, height, depth;
-			this.transform = new Float32Array(16);
-			this.projection = new Float32Array(16);
-
-			if (options) {
-				this.desiredWidth = parseInt(options.width, 10);
-				this.desiredHeight = parseInt(options.height, 10);
-				this.fov = parseInt(options.fov, 10);
-			}
-			if (isNaN(this.fov)) {
-				this.fov = 0;
-			}
-
-			width = this.width = this.desiredWidth || 1;
-			height = this.height = this.desiredHeight || 1;
-			//depth = Math.sin(Math.PI / 4) / Math.sin(this.fov * Math.PI / 360); // 1 / sin(angle/2)
-			if (this.fov) {
-				depth = 1 / Math.tan(this.fov * Math.PI / 360.0);
-			} else {
-				depth = 1;
-			}
+		Node = function () {
+			this.width = 1;
+			this.height = 1;
 
 			this.gl = gl;
 
-			this.reset();
-
 			this.uniforms = {
-				transform: this.transform,
-				srsSize: [width, height, depth],
-				projection: this.projection
+				resolution: [this.width, this.height],
+				transform: null
 			};
-
-			this.perspective(this.fov);
 
 			this.dirty = true;
 			this.isDestroyed = false;
-			this.transformed = false;
 
 			this.seriously = seriously;
 
@@ -16343,14 +17465,6 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 		Node.prototype.initFrameBuffer = function (useFloat) {
 			if (gl) {
-				if (!this.width) {
-					this.width = this.desiredWidth || glCanvas.width;
-				}
-
-				if (!this.height) {
-					this.height = this.desiredHeight || glCanvas.height;
-				}
-
 				this.frameBuffer = new FrameBuffer(gl, this.width, this.height, useFloat);
 			}
 		};
@@ -16371,16 +17485,10 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			//todo: should we render here?
 			this.render();
 
-			if (this instanceof SourceNode) {
-				//todo: move this to SourceNode.render so it only runs when it changes
-				this.uniforms.source = this.texture;
-				draw(baseShader, rectangleModel, this.uniforms, this.frameBuffer.frameBuffer, this);
-			}
-
 			//todo: figure out formats and types
 			if (dest === undefined) {
 				dest = new Uint8Array(width * height * 4);
-			} else if ( !dest instanceof Uint8Array ) {
+			} else if (!dest instanceof Uint8Array) {
 				throw 'Incompatible array type';
 			}
 
@@ -16390,190 +17498,42 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			return dest;
 		};
 
-		Node.prototype.reset = function () {
-			var i;
-			for (i = 0; i < 16; i++) {
-				this.transform[i] = defaultTransform[i];
-			}
-			this.transformed = false;
-			this.setDirty();
-		};
+		Node.prototype.resize = function () {
+			var width,
+				height;
 
-		Node.prototype.setSize = function (width, height) {
-			if (!width || !height) {
-				return;
-			}
-			this.width = width;
-			this.height = height;
-
-			this.perspective(this.fov);
-			this.uniforms.srsSize[0] = width;
-			this.uniforms.srsSize[1] = height;
-		};
-
-
-		Node.prototype.setTransform = function(mat) {
-			var i, val, isDefault = true;
-
-			if (!mat ||
-				!Array.isArray(mat) && !(mat instanceof Float32Array) && !(mat instanceof Float64Array)) {
-				this.reset();
-				return;
-			}
-
-			if (mat.length < 16) {
-				throw 'transform matrix must be array or typed array of 16 numbers.';
-			}
-
-			for (i = 0; i < 16; i++) {
-				val = mat[i];
-				if (isNaN(val)) {
-					throw 'transform matrix must be array or typed array of 16 numbers.';
-				}
-				if (val !== defaultTransform[i]) {
-					isDefault = false;
-				}
-				this.transform[i] = val;
-			}
-
-			this.transformed = !isDefault;
-			this.setDirty();
-		};
-
-		Node.prototype.perspective = function(fov) {
-			fov = parseFloat(fov);
-			if (isNaN(fov)) {
-				this.fov = 0;
+			if (this.source) {
+				width = this.source.width;
+				height = this.source.height;
+			} else if (this.sources && this.sources.source) {
+				width = this.sources.source.width;
+				height = this.sources.source.height;
+			} else if (this.inputs && this.inputs.width) {
+				width = this.inputs.width;
+				height = this.inputs.height || width;
+			} else if (this.inputs && this.inputs.height) {
+				width = height = this.inputs.height;
 			} else {
-				this.fov = fov;
+				//this node will be responsible for calculating its own size
+				width = 1;
+				height = 1;
 			}
 
-			if (this.fov) {
-				mat4.perspective(this.fov, this.width / this.height, 1, 100, this.projection);
-				this.uniforms.srsSize[2] = 1 / Math.tan(this.fov * Math.PI / 360.0);
-			} else {
-				mat4.identity(this.projection);
-				this.projection[0] = this.height / this.width;
-	//			this.projection[10] = 2/200;
-				this.uniforms.srsSize[2] = 1;
+			if (this.width !== width || this.height !== height) {
+				this.width = width;
+				this.height = height;
+
+				this.setDirty();
 			}
 
-			this.setDirty();
-		};
-
-		//matrix code inspired by glMatrix
-		Node.prototype.translate = function(x, y, z) {
-			var mat = this.transform;
-
-			if (isNaN(x)) {
-				x = 0;
+			if (this.uniforms && this.uniforms.resolution) {
+				this.uniforms.resolution[0] = width;
+				this.uniforms.resolution[1] = height;
 			}
 
-			if (isNaN(y)) {
-				y = 0;
+			if (this.frameBuffer && this.frameBuffer.resize) {
+				this.frameBuffer.resize(width, height);
 			}
-			y *= this.width / this.height;
-
-			if (isNaN(z)) {
-				z = 0;
-			}
-
-			mat[12] = mat[0]*x + mat[4]*y + mat[8]*z + mat[12];
-			mat[13] = mat[1]*x + mat[5]*y + mat[9]*z + mat[13];
-			mat[14] = mat[2]*x + mat[6]*y + mat[10]*z + mat[14];
-			mat[15] = mat[3]*x + mat[7]*y + mat[11]*z + mat[15];
-
-			this.transformed = true;
-			this.setDirty();
-		};
-
-		//todo: only 2D for now, so z is always 1.  allow 3D later.
-		Node.prototype.scale = function(x, y) {
-			if (y === undefined) {
-				y = x;
-			}
-
-			var mat = this.transform;
-			mat[0] *= x;
-			mat[1] *= x;
-			mat[2] *= x;
-			mat[3] *= x;
-			mat[4] *= y;
-			mat[5] *= y;
-			mat[6] *= y;
-			mat[7] *= y;
-
-			this.transformed = true;
-			this.setDirty();
-		};
-
-		Node.prototype.rotateX = function(angle) {
-			var mat = this.transform,
-				sin = Math.sin(angle),
-				cos = Math.cos(angle),
-
-			// Cache the matrix values (faster!)
-				a10 = mat[4], a11 = mat[5], a12 = mat[6], a13 = mat[7],
-				a20 = mat[8], a21 = mat[9], a22 = mat[10], a23 = mat[11];
-
-			// Perform axis-specific matrix multiplication
-			mat[4] = a10*cos + a20*-sin;
-			mat[5] = a11*cos + a21*-sin;
-			mat[6] = a12*cos + a22*-sin;
-			mat[7] = a13*cos + a23*-sin;
-
-			mat[8] = a10*sin + a20*cos;
-			mat[9] = a11*sin + a21*cos;
-			mat[10] = a12*sin + a22*cos;
-			mat[11] = a13*sin + a23*cos;
-			this.transformed = true;
-			this.setDirty();
-		};
-
-		Node.prototype.rotateY = function(angle) {
-			var mat = this.transform,
-				sin = Math.sin(angle),
-				cos = Math.cos(angle),
-
-			// Cache the matrix values (faster!)
-				a00 = mat[0], a01 = mat[1], a02 = mat[2], a03 = mat[3],
-				a20 = mat[8], a21 = mat[9], a22 = mat[10], a23 = mat[11];
-
-			// Perform axis-specific matrix multiplication
-			mat[0] = a00*cos + a20*-sin;
-			mat[1] = a01*cos + a21*-sin;
-			mat[2] = a02*cos + a22*-sin;
-			mat[3] = a03*cos + a23*-sin;
-
-			mat[8] = a00*sin + a20*cos;
-			mat[9] = a01*sin + a21*cos;
-			mat[10] = a02*sin + a22*cos;
-			mat[11] = a03*sin + a23*cos;
-			this.transformed = true;
-			this.setDirty();
-		};
-
-		Node.prototype.rotateZ = function(angle) {
-			var mat = this.transform,
-				sin = Math.sin(angle),
-				cos = Math.cos(angle),
-
-			// Cache the matrix values (makes for huge speed increases!)
-				a00 = mat[0], a01 = mat[1], a02 = mat[2], a03 = mat[3],
-				a10 = mat[4], a11 = mat[5], a12 = mat[6], a13 = mat[7];
-
-			// Perform axis-specific matrix multiplication
-			mat[0] = a00*cos + a10*sin;
-			mat[1] = a01*cos + a11*sin;
-			mat[2] = a02*cos + a12*sin;
-			mat[3] = a03*cos + a13*sin;
-
-			mat[4] = a00*-sin + a10*cos;
-			mat[5] = a01*-sin + a11*cos;
-			mat[6] = a02*-sin + a12*cos;
-			mat[7] = a03*-sin + a13*cos;
-			this.transformed = true;
-			this.setDirty();
 		};
 
 		Node.prototype.destroy = function () {
@@ -16629,10 +17589,10 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 				lookup = me.inputElements[inputName];
 
-				if ( typeof input === 'string' && isNaN(input)) {
+				if (typeof input === 'string' && isNaN(input)) {
 					if (effectInput.type === 'enum') {
 						if (effectInput.options && effectInput.options.filter) {
-							i = ('' + input).toLowerCase();
+							i = String(input).toLowerCase();
 							value = effectInput.options.filter(function (e) {
 								return (typeof e === 'string' && e.toLowerCase() === i) ||
 									(e.length && typeof e[0] === 'string' && e[0].toLowerCase() === i);
@@ -16658,6 +17618,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 					if (lookup && lookup.element !== input) {
 						lookup.element.removeEventListener('change', lookup.listener, true);
+						lookup.element.removeEventListener('input', lookup.listener, true);
 						delete me.inputElements[inputName];
 						lookup = null;
 					}
@@ -16666,7 +17627,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 						lookup = {
 							element: input,
 							listener: (function (name, element) {
-								return function() {
+								return function () {
 									var oldValue, newValue;
 
 									if (input.type === 'checkbox') {
@@ -16691,16 +17652,22 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 							}(inputName, input))
 						};
 
-						if (input.type === 'checkbox') {
-							value = input.checked;
-						}
-
 						me.inputElements[inputName] = lookup;
-						input.addEventListener('change', lookup.listener, true);
+						if (input.type === 'range') {
+							input.addEventListener('input', lookup.listener, true);
+							input.addEventListener('change', lookup.listener, true);
+						} else {
+							input.addEventListener('change', lookup.listener, true);
+						}
+					}
+
+					if (lookup && input.type === 'checkbox') {
+						value = input.checked;
 					}
 				} else {
 					if (lookup) {
 						lookup.element.removeEventListener('change', lookup.listener, true);
+						lookup.element.removeEventListener('input', lookup.listener, true);
 						delete me.inputElements[inputName];
 					}
 					value = input;
@@ -16742,12 +17709,19 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				if (me.effect.inputs.hasOwnProperty(name)) {
 					if (this[name] === undefined) {
 						if (me.effect.inputs[name].type === 'image') {
-							this.__defineSetter__(name, makeImageSetter(name));
-							this.__defineGetter__(name, makeImageGetter(name));
+							Object.defineProperty(this, name, {
+								configurable: true,
+								enumerable: true,
+								get: makeImageGetter(name),
+								set: makeImageSetter(name)
+							});
 						} else {
-							this.__defineSetter__(name, makeSetter(name));
-
-							this.__defineGetter__(name, makeGetter(name));
+							Object.defineProperty(this, name, {
+								configurable: true,
+								enumerable: true,
+								get: makeGetter(name),
+								set: makeSetter(name)
+							});
 						}
 					} else {
 						//todo: this is temporary. get rid of it.
@@ -16756,43 +17730,50 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				}
 			}
 
-			this.__defineGetter__('inputs', function () {
-				return {
-					source: {
-						type: 'image'
+			Object.defineProperties(this, {
+				inputs: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return {
+							source: {
+								type: 'image'
+							}
+						};
 					}
-				};
+				},
+				original: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.source;
+					}
+				},
+				width: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.width;
+					}
+				},
+				height: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.height;
+					}
+				},
+				id: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.id;
+					}
+				}
 			});
 
-			this.__defineSetter__('inputs', function () {
-				//should we throw an error or just fail silently
-				return;
-			});
-
-			this.__defineGetter__('original', function () {
-				return me.source;
-			});
-
-			this.__defineSetter__('original', function () {
-			});
-
-			this.__defineSetter__('width', function(value) {
-				me.setSize(value);
-			});
-
-			this.__defineSetter__('height', function(value) {
-				me.setSize(undefined, value);
-			});
-
-			this.__defineGetter__('id', function () {
-				return me.id;
-			});
-
-			this.__defineSetter__('id', function () {
-			});
-
-			this.render = function(callback) {
-				me.render(callback);
+			this.render = function () {
+				me.render();
 				return this;
 			};
 
@@ -16800,84 +17781,45 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				return me.readPixels(x, y, width, height, dest);
 			};
 
-			this.alias = function(inputName, aliasName) {
+			this.alias = function (inputName, aliasName) {
 				me.alias(inputName, aliasName);
 				return this;
 			};
 
-			this.reset = function() {
-				me.reset();
-				return this;
-			};
-
-			this.setTransform = function(transform) {
-				me.setTransform(transform);
-				return this;
-			};
-
-			this.perspective = function(fov) {
-				me.perspective(fov);
-				return this;
-			};
-
-			this.translate = function(x, y, z) {
-				me.translate(x, y, z);
-				return this;
-			};
-
-			this.scale = function(x, y) {
-				me.scale(x, y);
-				return this;
-			};
-
-			this.rotateX = function(angle) {
-				me.rotateX(angle);
-				return this;
-			};
-
-			this.rotateY = function(angle) {
-				me.rotateY(angle);
-				return this;
-			};
-
-			this.rotateZ = function(angle) {
-				me.rotateZ(angle);
-				return this;
-			};
-
-			this.matte = function(polygons) {
+			this.matte = function (polygons) {
 				me.matte(polygons);
 			};
 
-			this.destroy = function() {
-				var i, nop = function() { };
+			this.destroy = function () {
+				var i,
+					descriptor;
 
 				me.destroy();
 
 				for (i in this) {
 					if (this.hasOwnProperty(i) && i !== 'isDestroyed') {
-						if (this.__lookupGetter__(i) ||
-							typeof this[i] !== 'function') {
-
+						descriptor = Object.getOwnPropertyDescriptor(this, i);
+						if (descriptor.get || descriptor.set ||
+								typeof this[i] !== 'function') {
 							delete this[i];
 						} else {
 							this[i] = nop;
 						}
 					}
 				}
-
-				//todo: remove getters/setters
 			};
 
-			this.isDestroyed = function() {
+			this.isDestroyed = function () {
 				return me.isDestroyed;
 			};
 		};
 
 		EffectNode = function (hook, options) {
+			var key, name, input;
+
 			Node.call(this, options);
 
-			this.effect = seriousEffects[hook];
+			this.effectRef = seriousEffects[hook];
 			this.sources = {};
 			this.targets = [];
 			this.inputElements = {};
@@ -16885,11 +17827,30 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			this.shaderDirty = true;
 			this.hook = hook;
 			this.options = options;
+			this.transform = null;
+
+			if (this.effectRef.definition) {
+				this.effect = this.effectRef.definition.call(this, options);
+				/*
+				todo: copy over inputs object separately in case some are specified
+				in advance and some are specified in definition function
+				*/
+				for (key in this.effectRef) {
+					if (this.effectRef.hasOwnProperty(key) && !this.effect[key]) {
+						this.effect[key] = this.effectRef[key];
+					}
+				}
+				if (this.effect.inputs !== this.effectRef.inputs) {
+					validateInputSpecs(this.effect);
+				}
+			} else {
+				this.effect = extend({}, this.effectRef);
+			}
 
 			//todo: set up frame buffer(s), inputs, transforms, stencils, draw method. allow plugin to override
 
+			this.uniforms.transform = identity;
 			this.inputs = {};
-			var name, input;
 			for (name in this.effect.inputs) {
 				if (this.effect.inputs.hasOwnProperty(name)) {
 					input = this.effect.inputs[name];
@@ -16904,6 +17865,8 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			if (gl) {
 				this.buildShader();
 			}
+
+			this.inPlace = this.effect.inPlace;
 
 			this.pub = new Effect(this);
 
@@ -16940,59 +17903,18 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 		};
 
-		EffectNode.prototype.setSize = function (width, height) {
-			var i, maxWidth = 0, maxHeight = 0, dirty = false;
+		EffectNode.prototype.resize = function () {
+			var i;
 
-			if (width !== undefined) {
-				if (width <= 0) {
-					this.desiredWidth = null;
-				} else {
-					if (this.desiredWidth !== width) {
-						dirty = true;
-					}
-					this.desiredWidth = width;
-				}
+			Node.prototype.resize.call(this);
+
+			if (this.effect.resize) {
+				this.effect.resize.call(this);
 			}
 
-			if (height !== undefined) {
-				if (height <= 0) {
-					this.desiredHeight = null;
-				} else {
-					if (this.desiredHeight !== height) {
-						dirty = true;
-					}
-					this.desiredHeight = height;
-				}
+			for (i = 0; i < this.targets.length; i++) {
+				this.targets[i].resize();
 			}
-
-			if (!this.desiredWidth || !this.desiredHeight) {
-				for (i = 0; i < this.targets.length; i++) {
-					maxWidth = Math.max(maxWidth, this.targets[i].width);
-					maxHeight = Math.max(maxHeight, this.targets[i].height);
-				}
-
-				this.width = this.desiredWidth || maxWidth;
-				this.height = this.desiredHeight || maxHeight;
-
-				this.setDirty();
-
-				for (i in this.sources) {
-					if (this.sources.hasOwnProperty(i) && this.sources[i].setSize) {
-						this.sources[i].setSize();
-					}
-				}
-			} else {
-				this.width = this.desiredWidth;
-				this.height = this.desiredHeight;
-
-				if (dirty) {
-					this.setDirty();
-				}
-			}
-
-			//this.uniforms.srsSize[0] = this.width;
-			//this.uniforms.srsSize[1] = this.height;
-			Node.prototype.setSize.call(this, this.width, this.height);
 		};
 
 		EffectNode.prototype.setTarget = function (target) {
@@ -17004,18 +17926,12 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 
 			this.targets.push(target);
-
-			this.setSize();
 		};
 
 		EffectNode.prototype.removeTarget = function (target) {
 			var i = this.targets && this.targets.indexOf(target);
 			if (i >= 0) {
 				this.targets.splice(i, 1);
-			}
-
-			if (this.targets.length) {
-				this.setSize();
 			}
 		};
 
@@ -17061,12 +17977,16 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 		};
 
-		EffectNode.prototype.render = function (callback) {
+		EffectNode.prototype.render = function () {
 			var i,
 				frameBuffer,
 				effect = this.effect,
 				that = this,
-				dirty = this.dirty || this.reusedFrameBuffer;
+				inPlace;
+
+			function drawFn(shader, model, uniforms, frameBuffer, node, options) {
+				draw(shader, model, uniforms, frameBuffer, node || that, options);
+			}
 
 			if (!this.initialized) {
 				this.initialize();
@@ -17076,25 +17996,25 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				this.buildShader();
 			}
 
-			if (dirty) {
+			if (this.dirty) {
 				for (i in this.sources) {
 					if (this.sources.hasOwnProperty(i) &&
 						(!effect.requires || effect.requires.call(this, i, this.inputs))) {
-						this.sources[i].render();
+
+						//todo: set source texture
+						//sourcetexture = this.sources[i].render() || this.sources[i].texture
+
+						inPlace = typeof this.inPlace === 'function' ? this.inPlace(i) : this.inPlace;
+						this.sources[i].render(!inPlace);
 					}
 				}
 
-				if (this.reusedFrameBuffer) {
-					//todo: frameBuffer =
-				} else if (this.frameBuffer) {
+				if (this.frameBuffer) {
 					frameBuffer = this.frameBuffer.frameBuffer;
 				}
 
 				if (typeof effect.draw === 'function') {
-					effect.draw.call(this, this.shader, this.model, this.uniforms, frameBuffer,
-						function(shader, model, uniforms, frameBuffer, node, options) {
-							draw(shader, model, uniforms, frameBuffer, node || that, options);
-						});
+					effect.draw.call(this, this.shader, this.model, this.uniforms, frameBuffer, drawFn);
 				} else if (frameBuffer) {
 					draw(this.shader, this.model, this.uniforms, frameBuffer, this);
 				}
@@ -17102,40 +18022,13 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				this.dirty = false;
 			}
 
-			if (callback && typeof callback === 'function') {
-				callback();
-			}
-
-			return this;
+			return this.texture;
 		};
 
 		EffectNode.prototype.setInput = function (name, value) {
-			var input, uniform;
-
-			//trace back all sources to make sure we're not making a cyclical connection
-			function traceSources(node, original) {
-				var i,
-					source,
-					sources;
-
-				if ( !(node instanceof EffectNode) ) {
-					return false;
-				}
-
-				sources = node.sources;
-
-				for (i in sources) {
-					if (sources.hasOwnProperty(i)) {
-						source = sources[i];
-
-						if ( source === original || traceSources(source, original) ) {
-							return true;
-						}
-					}
-				}
-
-				return false;
-			}
+			var input, uniform,
+				sourceKeys,
+				source;
 
 			if (this.effect.inputs.hasOwnProperty(name)) {
 				input = this.effect.inputs[name];
@@ -17150,7 +18043,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 								this.sources[name].removeTarget(this);
 							}
 
-							if ( traceSources(value, this) ) {
+							if (traceSources(value, this)) {
 								throw 'Attempt to make cyclical connection.';
 							}
 
@@ -17158,13 +18051,28 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 							value.setTarget(this);
 						}
 					} else {
+						delete this.sources[name];
 						value = false;
 					}
 
 					uniform = this.sources[name];
+
+					sourceKeys = Object.keys(this.sources);
+					if (this.inPlace === true && sourceKeys.length === 1) {
+						source = this.sources[sourceKeys[0]];
+						this.uniforms.transform = source && source.cumulativeMatrix || identity;
+					} else {
+						this.uniforms.transform = identity;
+					}
+
+					this.resize();
 				} else {
-					value = input.validate.call(this, value, input, name);
+					value = input.validate.call(this, value, input, this.inputs[name]);
 					uniform = value;
+				}
+
+				if (this.inputs[name] === value && input.type !== 'color' && input.type !== 'vector') {
+					return value;
 				}
 
 				this.inputs[name] = value;
@@ -17179,16 +18087,16 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 				this.setDirty();
 
+				if (input.update) {
+					input.update.call(this, value);
+				}
+
 				return value;
 			}
 		};
 
 		EffectNode.prototype.alias = function (inputName, aliasName) {
-			var that = this,
-				reservedNames = ['source', 'target', 'effect', 'effects', 'benchmark', 'incompatible',
-					'util', 'ShaderProgram', 'inputValidators', 'save', 'load',
-					'plugin', 'removePlugin', 'alias', 'removeAlias', 'stop', 'go',
-					'destroy', 'isDestroyed'];
+			var that = this;
 
 			if (reservedNames.indexOf(aliasName) >= 0) {
 				throw aliasName + ' is a reserved name and cannot be used as an alias.';
@@ -17206,12 +18114,15 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 					input: inputName
 				};
 
-				seriously.__defineSetter__(aliasName, function (value) {
-					return that.setInput(inputName, value);
-				});
-
-				seriously.__defineGetter__(aliasName, function () {
-					return that.inputs[inputName];
+				Object.defineProperty(seriously, aliasName, {
+					configurable: true,
+					enumerable: true,
+					get: function () {
+						return that.inputs[inputName];
+					},
+					set: function (value) {
+						return that.setInput(inputName, value);
+					}
 				});
 			}
 
@@ -17604,7 +18515,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		};
 
 		EffectNode.prototype.destroy = function () {
-			var i, item, hook = this.hook;
+			var i, key, item, hook = this.hook;
 
 			//let effect destroy itself
 			if (this.effect.destroy && typeof this.effect.destroy === 'function') {
@@ -17619,45 +18530,45 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			delete this.shader;
 
 			//stop watching any input elements
-			for (i in this.inputElements) {
-				if (this.inputElements.hasOwnProperty(i)) {
-					item = this.inputElements[i];
+			for (key in this.inputElements) {
+				if (this.inputElements.hasOwnProperty(key)) {
+					item = this.inputElements[key];
 					item.element.removeEventListener('change', item.listener, true);
+					item.element.removeEventListener('input', item.listener, true);
 				}
 			}
 
 			//sources
-			for (i in this.sources) {
-				if (this.sources.hasOwnProperty(i)) {
-					item = this.sources[i];
+			for (key in this.sources) {
+				if (this.sources.hasOwnProperty(key)) {
+					item = this.sources[key];
 					if (item && item.removeTarget) {
 						item.removeTarget(this);
 					}
-					delete this.sources[i];
+					delete this.sources[key];
 				}
 			}
 
 			//targets
-			for (i = 0; i < this.targets.length; i++) {
-				item = this.targets[i];
+			while (this.targets.length) {
+				item = this.targets.pop();
 				if (item && item.removeSource) {
 					item.removeSource(this);
 				}
-				delete this.targets[i];
 			}
 
 			for (i in this) {
-				if (this.hasOwnProperty(i) && i !== 'id') {
-					delete this[i];
+				if (this.hasOwnProperty(key) && key !== 'id') {
+					delete this[key];
 				}
 			}
 
 			//remove any aliases
-			for (i in aliases) {
-				if (aliases.hasOwnProperty(i)) {
-					item = aliases[i];
+			for (key in aliases) {
+				if (aliases.hasOwnProperty(key)) {
+					item = aliases[key];
 					if (item.node === this) {
-						seriously.removeAlias(i);
+						seriously.removeAlias(key);
 					}
 				}
 			}
@@ -17680,25 +18591,28 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			var me = sourceNode;
 
 			//priveleged accessor methods
-			this.__defineGetter__('original', function () {
-				return me.source;
+			Object.defineProperties(this, {
+				original: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.source;
+					}
+				},
+				id: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.id;
+					}
+				}
 			});
 
-			this.__defineSetter__('original', function () {
-			});
-
-			this.__defineGetter__('id', function () {
-				return me.id;
-			});
-
-			this.__defineSetter__('id', function () {
-			});
-
-			this.render = function(callback) {
-				me.render(callback);
+			this.render = function () {
+				me.render();
 			};
 
-			this.update = function() {
+			this.update = function () {
 				me.setDirty();
 			};
 
@@ -17706,56 +18620,17 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				return me.readPixels(x, y, width, height, dest);
 			};
 
-			this.reset = function() {
-				me.reset();
-				return this;
-			};
-
-			this.setTransform = function(transform) {
-				me.setTransform(transform);
-				return this;
-			};
-
-			this.perspective = function(fov) {
-				me.perspective(fov);
-				return this;
-			};
-
-			this.translate = function(x, y, z) {
-				me.translate(x, y, z);
-				return this;
-			};
-
-			this.scale = function(x, y) {
-				me.scale(x, y);
-				return this;
-			};
-
-			this.rotateX = function(angle) {
-				me.rotateX(angle);
-				return this;
-			};
-
-			this.rotateY = function(angle) {
-				me.rotateY(angle);
-				return this;
-			};
-
-			this.rotateZ = function(angle) {
-				me.rotateZ(angle);
-				return this;
-			};
-
-			this.destroy = function() {
-				var i, nop = function() { };
+			this.destroy = function () {
+				var i,
+					descriptor;
 
 				me.destroy();
 
 				for (i in this) {
 					if (this.hasOwnProperty(i) && i !== 'isDestroyed') {
-						if (this.__lookupGetter__(i) ||
-							typeof this[i] !== 'function') {
-
+						descriptor = Object.getOwnPropertyDescriptor(this, i);
+						if (descriptor.get || descriptor.set ||
+								typeof this[i] !== 'function') {
 							delete this[i];
 						} else {
 							this[i] = nop;
@@ -17764,7 +18639,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				}
 			};
 
-			this.isDestroyed = function() {
+			this.isDestroyed = function () {
 				return me.isDestroyed;
 			};
 		};
@@ -17775,61 +18650,53 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		SourceNode = function (source, options) {
 			var opts = options || {},
 				flip = opts.flip === undefined ? true : opts.flip,
-				width, height,
+				width = opts.width,
+				height = opts.height,
 				deferTexture = false,
 				that = this,
 				matchedType = false;
 
-			Node.call(this, opts);
-			width = this.width;
-			height = this.height;
+			Node.call(this);
 
-			if ( typeof source === 'string' && isNaN(source) ) {
+			if (typeof source === 'string' && isNaN(source)) {
 				source = getElement(source, ['canvas', 'img', 'video']);
 			}
 
 			if (source instanceof HTMLElement) {
 				if (source.tagName === 'CANVAS') {
-					this.desiredWidth = width = source.width;
-					this.desiredHeight = height = source.height;
+					this.width = source.width;
+					this.height = source.height;
 
 					this.render = this.renderImageCanvas;
-					this.setSize(width, height);
 				} else if (source.tagName === 'IMG') {
-					width = source.naturalWidth;
-					height = source.naturalHeight;
+					this.width = source.naturalWidth || 1;
+					this.height = source.naturalHeight || 1;
 
 					if (!source.complete) {
 						deferTexture = true;
 
-						source.addEventListener('load', function() {
-							that.desiredWidth = source.naturalWidth;
-							that.desiredHeight = source.naturalHeight;
-							that.setSize(source.naturalWidth, source.naturalHeight);
+						source.addEventListener('load', function () {
+							that.width = source.naturalWidth;
+							that.height = source.naturalHeight;
+							that.resize();
 							that.initialize();
 						}, true);
-					} else {
-						that.setSize(source.naturalWidth, source.naturalHeight);
 					}
 
 					this.render = this.renderImageCanvas;
 				} else if (source.tagName === 'VIDEO') {
-					that.desiredWidth = width = source.videoWidth;
-					that.desiredHeight = height = source.videoHeight;
+					this.width = source.videoWidth || 1;
+					this.height = source.videoHeight || 1;
 
 					if (!source.readyState) {
 						deferTexture = true;
 
-						source.addEventListener('loadedmetadata', function() {
-							that.desiredWidth = source.videoWidth;
-							that.desiredHeight = source.videoHeight;
-							that.setSize(source.videoWidth, source.videoHeight);
+						source.addEventListener('loadedmetadata', function () {
+							that.width = source.videoWidth;
+							that.height = source.videoHeight;
+							that.resize();
 							that.initialize();
 						}, true);
-					} else {
-						that.desiredWidth = source.videoWidth;
-						that.desiredHeight = source.videoHeight;
-						that.setSize(source.videoWidth, source.videoHeight);
 					}
 
 					this.render = this.renderVideo;
@@ -17846,13 +18713,12 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				//Because of this bug, Firefox doesn't recognize ImageData, so we have to duck type
 				//https://bugzilla.mozilla.org/show_bug.cgi?id=637077
 
-				this.desiredWidth = width = source.width;
-				this.desiredHeight = height = source.height;
-				this.setSize(width, height);
+				this.width = source.width;
+				this.height = source.height;
 				matchedType = true;
 
 				this.render = this.renderImageCanvas;
-			} else if ( Array.isArray(source) ) {
+			} else if (isArrayLike(source)) {
 				if (!width || !height) {
 					throw 'Height and width must be provided with an Array';
 				}
@@ -17861,9 +18727,8 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 					throw 'Array length must be height x width x 4.';
 				}
 
-				this.desiredWidth = width;
-				this.desiredHeight = height;
-				this.setSize(width, height);
+				this.width = width;
+				this.height = height;
 
 				matchedType = true;
 
@@ -17871,26 +18736,9 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				if (opts.flip === undefined) {
 					flip = false;
 				}
-				source = new Uint8Array(source);
-				this.render = this.renderTypedArray;
-			} else if ( source instanceof Uint8Array ) {
-				if (!width || !height) {
-					throw 'Height and width must be provided with a Uint8Array';
-				}
 
-				if (width * height * 4 !== source.length) {
-					throw 'Typed array length must be height x width x 4.';
-				}
-
-				this.desiredWidth = width;
-				this.desiredHeight = height;
-				this.setSize(width, height);
-
-				matchedType = true;
-
-				//use opposite default for flip
-				if (opts.flip === undefined) {
-					flip = false;
+				if (!(source instanceof Uint8Array)) {
+					source = new Uint8Array(source);
 				}
 				this.render = this.renderTypedArray;
 			} else if (source instanceof WebGLTexture) {
@@ -17905,54 +18753,53 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 					}
 				} else if (!isNaN(height)) {
 					width = height;
-				} else {
+				}/* else {
 					//todo: guess based on dimensions of target canvas
 					//throw 'Must specify width and height when using a WebGL texture as a source';
-				}
+				}*/
 
-				this.desiredWidth = width;
-				this.desiredHeight = height;
-				this.setSize(width, height);
+				this.width = width;
+				this.height = height;
 
 				if (opts.flip === undefined) {
 					flip = false;
 				}
 				matchedType = true;
 
-				this.sourceTexture = source;
+				this.texture = source;
 				this.initialized = true;
 
 				//todo: if WebGLTexture source is from a different context render it and copy it over
-				this.render = function() { };
+				this.render = function () {};
 			}
 
 			if (!matchedType) {
 				throw 'Unknown source type';
 			}
 
+			this.source = source;
+			this.flip = flip;
+
+			this.targets = [];
+
 			if (!deferTexture) {
+				this.resize();
 				this.initialize();
 			}
 
-			this.source = source;
-			this.flip = flip;
-			this.width = width;
-			this.height = height;
-
-			this.targets = [];
 			this.pub = new Source(this);
 
 			sources.push(this);
 
-			if (sources.length === 1 && !animationCallbacks.length) {
-				monitorSources();
+			if (sources.length && !rafId) {
+				renderDaemon();
 			}
 		};
 
 		extend(SourceNode, Node);
 
-		SourceNode.prototype.initialize = function() {
-			if (!gl || this.sourceTexture) {
+		SourceNode.prototype.initialize = function () {
+			if (!gl || this.texture) {
 				return;
 			}
 
@@ -17964,10 +18811,19 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 			gl.bindTexture(gl.TEXTURE_2D, null);
 
-			this.sourceTexture = texture;
+			this.texture = texture;
 			this.initialized = true;
 			this.allowRefresh = true;
 			this.setDirty();
+		};
+
+		SourceNode.prototype.initFrameBuffer = function (useFloat) {
+			if (gl) {
+				this.frameBuffer = new FrameBuffer(gl, this.width, this.height, {
+					texture: this.texture,
+					useFloat: useFloat
+				});
+			}
 		};
 
 		SourceNode.prototype.setTarget = function (target) {
@@ -17988,7 +18844,29 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 		};
 
-		SourceNode.prototype.renderVideo = function(callback) {
+		SourceNode.prototype.resize = function () {
+			var i,
+				target;
+
+			this.uniforms.resolution[0] = this.width;
+			this.uniforms.resolution[1] = this.height;
+
+			if (this.framebuffer) {
+				this.framebuffer.resize(this.width, this.height);
+			}
+
+			this.setDirty();
+
+			for (i = 0; i < this.targets.length; i++) {
+				target = this.targets[i];
+				target.resize();
+				if (target.setTransformDirty) {
+					target.setTransformDirty();
+				}
+			}
+		};
+
+		SourceNode.prototype.renderVideo = function () {
 			var video = this.source;
 
 			if (!gl || !video || !video.videoHeight || !video.videoWidth || video.readyState < 2) {
@@ -18007,7 +18885,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				this.lastRenderFrame !== video.mozPresentedFrames ||
 				this.lastRenderTime !== video.currentTime) {
 
-				gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+				gl.bindTexture(gl.TEXTURE_2D, this.texture);
 				gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, this.flip);
 				try {
 					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
@@ -18024,28 +18902,11 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				}
 				this.lastRenderFrame = video.mozPresentedFrames;
 				this.lastRenderTimeStamp = Date.now();
-			}
-
-			if (this.transformed || this.fov) {
-				if (!this.frameBuffer) {
-					this.initFrameBuffer();
-				}
-				this.texture = this.frameBuffer.texture;
-				this.uniforms.source = this.sourceTexture;
-				if (this.dirty) {
-					draw(baseShader, rectangleModel, this.uniforms, this.frameBuffer.frameBuffer, this);
-				}
-			} else {
-				this.texture = this.sourceTexture;
-			}
-
-			this.dirty = false;
-			if (callback && typeof callback === 'function') {
-				callback();
+				this.dirty = false;
 			}
 		};
 
-		SourceNode.prototype.renderImageCanvas = function(callback) {
+		SourceNode.prototype.renderImageCanvas = function () {
 			var media = this.source;
 
 			if (!gl || !media || !media.height || !media.width) {
@@ -18061,7 +18922,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 
 			if (this.dirty) {
-				gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+				gl.bindTexture(gl.TEXTURE_2D, this.texture);
 				gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, this.flip);
 				try {
 					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, media);
@@ -18073,29 +18934,11 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				}
 
 				this.lastRenderTime = Date.now() / 1000;
-				this.dirty = true;
-			}
-
-			if (this.transformed || this.fov) {
-				if (!this.frameBuffer) {
-					this.initFrameBuffer();
-				}
-				this.texture = this.frameBuffer.texture;
-				this.uniforms.source = this.sourceTexture;
-				if (this.dirty) {
-					draw(baseShader, rectangleModel, this.uniforms, this.frameBuffer.frameBuffer, this);
-				}
-			} else {
-				this.texture = this.sourceTexture;
-			}
-			this.dirty = false;
-
-			if (callback && typeof callback === 'function') {
-				callback();
+				this.dirty = false;
 			}
 		};
 
-		SourceNode.prototype.renderTypedArray = function(callback) {
+		SourceNode.prototype.renderTypedArray = function () {
 			var media = this.source;
 
 			if (!gl || !media || !media.length) {
@@ -18113,47 +18956,28 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 
 			if (this.dirty) {
-				gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+				gl.bindTexture(gl.TEXTURE_2D, this.texture);
 				gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, this.flip);
 				gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, media);
 
 				this.lastRenderTime = Date.now() / 1000;
-				this.dirty = true;
-			}
-
-			if (this.transformed || this.fov) {
-				if (!this.frameBuffer) {
-					this.initFrameBuffer();
-				}
-				this.texture = this.frameBuffer.texture;
-				this.uniforms.source = this.sourceTexture;
-				if (this.dirty) {
-					draw(baseShader, rectangleModel, this.uniforms, this.frameBuffer.frameBuffer, this);
-				}
-			} else {
-				this.texture = this.sourceTexture;
-			}
-			this.dirty = false;
-
-			if (callback && typeof callback === 'function') {
-				callback();
+				this.dirty = false;
 			}
 		};
 
-		SourceNode.prototype.destroy = function() {
-			var i, item;
+		SourceNode.prototype.destroy = function () {
+			var i, key, item;
 
 			if (this.gl && this.texture) {
 				this.gl.deleteTexture(this.texture);
 			}
 
 			//targets
-			for (i = 0; i < this.targets.length; i++) {
-				item = this.targets[i];
+			while (this.targets.length) {
+				item = this.targets.pop();
 				if (item && item.removeSource) {
 					item.removeSource(this);
 				}
-				delete this.targets[i];
 			}
 
 			//remove self from master list of sources
@@ -18162,9 +18986,9 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				sources.splice(i, 1);
 			}
 
-			for (i in this) {
-				if (this.hasOwnProperty(i) && i !== 'id') {
-					delete this[i];
+			for (key in this) {
+				if (this.hasOwnProperty(key) && key !== 'id') {
+					delete this[key];
 				}
 			}
 
@@ -18177,154 +19001,128 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			var me = targetNode;
 
 			//priveleged accessor methods
-			this.__defineGetter__('inputs', function () {
-				return {
-					source: {
-						type: 'image'
-						//todo: include current value
+			Object.defineProperties(this, {
+				inputs: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return {
+							source: {
+								type: 'image'
+							}
+						};
 					}
-				};
-			});
+				},
+				source: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						if (me.source) {
+							return me.source.pub;
+						}
+					},
+					set: function (value) {
+						me.setSource(value);
+					}
+				},
+				original: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.target;
+					}
+				},
+				width: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.width;
+					},
+					set: function (value) {
+						if (!isNaN(value) && value >0 && me.width !== value) {
+							me.width = me.desiredWidth = value;
+							me.target.width = value;
 
-			this.__defineSetter__('inputs', function () {
-				//should we throw an error or just fail silently
-				return;
-			});
+							me.setTransformDirty();
+							/*
+							if (this.source && this.source.resize) {
+								this.source.resize(value);
 
-			this.__defineGetter__('source', function () {
-				if (me.source) {
-					return me.source.pub;
+								//todo: for secondary webgl nodes, we need a new array
+								//if (this.pixels && this.pixels.length !== (this.width * this.height * 4)) {
+								//	delete this.pixels;
+								//}
+							}
+							*/
+						}
+					}
+				},
+				height: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.height;
+					},
+					set: function (value) {
+						if (!isNaN(value) && value >0 && me.height !== value) {
+							me.height = me.desiredHeight = value;
+							me.target.height = value;
+
+							me.setTransformDirty();
+
+							/*
+							if (this.source && this.source.resize) {
+								this.source.resize(undefined, value);
+
+								//for secondary webgl nodes, we need a new array
+								//if (this.pixels && this.pixels.length !== (this.width * this.height * 4)) {
+								//	delete this.pixels;
+								//}
+							}
+							*/
+						}
+					}
+				},
+				id: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.id;
+					}
 				}
 			});
 
-			this.__defineSetter__('source', function (value) {
-				me.setSource(value);
-				return this;
-			});
-
-			this.__defineGetter__('original', function () {
-				return me.target;
-			});
-
-			this.__defineSetter__('original', function () {
-			});
-
-			this.__defineSetter__('width', function(value) {
-				if (!isNaN(value) && value >0 && me.width !== value) {
-					me.width = me.desiredWidth = value;
-					me.target.width = value;
-
-					me.setDirty();
-					/*
-					if (this.source && this.source.setSize) {
-						this.source.setSize(value);
-
-						//todo: for secondary webgl nodes, we need a new array
-						//if ( this.pixels && this.pixels.length !== (this.width * this.height * 4) ) {
-						//	delete this.pixels;
-						//}
-					}
-					*/
-				}
-			});
-
-			this.__defineSetter__('height', function(value) {
-				if (!isNaN(value) && value >0 && me.height !== value) {
-					me.height = me.desiredHeight = value;
-					me.target.height = value;
-
-					me.setDirty();
-
-					/*
-					if (this.source && this.source.setSize) {
-						this.source.setSize(undefined, value);
-
-						//for secondary webgl nodes, we need a new array
-						//if ( this.pixels && this.pixels.length !== (this.width * this.height * 4) ) {
-						//	delete this.pixels;
-						//}
-					}
-					*/
-				}
-			});
-
-			this.__defineGetter__('id', function () {
-				return me.id;
-			});
-
-			this.__defineSetter__('id', function () {
-			});
-
-			this.render = function(callback) {
-				me.render(callback);
+			this.render = function () {
+				me.render();
 			};
 
 			this.readPixels = function (x, y, width, height, dest) {
 				return me.readPixels(x, y, width, height, dest);
 			};
 
-			this.reset = function() {
-				me.reset();
-				return this;
-			};
-
-			this.setTransform = function(transform) {
-				me.setTransform(transform);
-				return this;
-			};
-
-			this.perspective = function(fov) {
-				me.perspective(fov);
-				return this;
-			};
-
-			this.translate = function(x, y, z) {
-				me.translate(x, y, z);
-				return this;
-			};
-
-			this.scale = function(x, y) {
-				me.scale(x, y);
-				return this;
-			};
-
-			this.rotateX = function(angle) {
-				me.rotateX(angle);
-				return this;
-			};
-
-			this.rotateY = function(angle) {
-				me.rotateY(angle);
-				return this;
-			};
-
-			this.rotateZ = function(angle) {
-				me.rotateZ(angle);
-				return this;
-			};
-
-			this.go = function(options) {
+			this.go = function (options) {
 				me.go(options);
 			};
 
-			this.stop = function() {
+			this.stop = function () {
 				me.stop();
 			};
 
-			this.getTexture = function() {
+			this.getTexture = function () {
 				return me.frameBuffer.texture;
 			};
 
-			this.destroy = function() {
-				var i, nop = function() { };
+			this.destroy = function () {
+				var i,
+					descriptor;
 
 				me.destroy();
 
 				for (i in this) {
 					if (this.hasOwnProperty(i) && i !== 'isDestroyed') {
-						if (this.__lookupGetter__(i) ||
-							typeof this[i] !== 'function') {
-
+						descriptor = Object.getOwnPropertyDescriptor(this, i);
+						if (descriptor.get || descriptor.set ||
+								typeof this[i] !== 'function') {
 							delete this[i];
 						} else {
 							this[i] = nop;
@@ -18333,7 +19131,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				}
 			};
 
-			this.isDestroyed = function() {
+			this.isDestroyed = function () {
 				return me.isDestroyed;
 			};
 		};
@@ -18477,12 +19275,14 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 
 			this.target = target;
+			this.transform = null;
+			this.transformDirty = true;
 			this.flip = flip;
 			this.width = width;
 			this.height = height;
-			this.callbacks = [];
 
-			this.setSize(width, height);
+			this.uniforms.resolution[0] = this.width;
+			this.uniforms.resolution[1] = this.height;
 
 			if (opts.auto !== undefined) {
 				this.auto = opts.auto;
@@ -18498,23 +19298,12 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 		extend(TargetNode, Node);
 
-		TargetNode.prototype.setSource = function(source) {
+		TargetNode.prototype.setSource = function (source) {
 			var newSource;
 
 			//todo: what if source is null/undefined/false
 
-			if (source instanceof SourceNode || source instanceof EffectNode) {
-				newSource = source;
-			} else if (source instanceof Effect || source instanceof Source) {
-				newSource = nodesById[source.id];
-
-				if (!newSource) {
-					throw 'Cannot connect a foreign node';
-				}
-
-			} else {
-				newSource = findInputNode(source);
-			}
+			newSource = findInputNode(source);
 
 			//todo: check for cycles
 
@@ -18527,50 +19316,54 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 				this.setDirty();
 			}
-
 		};
 
 		TargetNode.prototype.setDirty = function () {
-			var that;
-
-			function runCallbacks() {
-				var i;
-				for (i = 0; i < that.callbacks.length; i++) {
-					that.callbacks[i]();
-				}
-			}
-
-			function render() {
-				that.render(runCallbacks);
-			}
-
 			this.dirty = true;
 
-			if (this.auto) {
-				that = this;
-				requestAnimFrame(render);
+			if (this.auto && !rafId) {
+				rafId = requestAnimationFrame(renderDaemon);
 			}
 		};
 
-		TargetNode.prototype.go = function (options) {
-			if (options) {
-				if (typeof options === 'function') {
-					this.callbacks.push(options);
-				} else if (options.callback && typeof options.callback === 'function') {
-					this.callbacks.push(options.callback);
-				}
+		TargetNode.prototype.resize = function () {
+			//if target is a canvas, reset size to canvas size
+			if (this.target instanceof HTMLCanvasElement &&
+					(this.width !== this.target.width || this.height !== this.target.height)) {
+				this.width = this.target.width;
+				this.height = this.target.height;
+				this.uniforms.resolution[0] = this.width;
+				this.uniforms.resolution[1] = this.height;
+				this.setTransformDirty();
 			}
 
+			if (this.source &&
+				(this.source.width !== this.width || this.source.height !== this.height)) {
+				if (!this.transform) {
+					this.transform = new Float32Array(16);
+				}
+			}
+		};
+
+		TargetNode.prototype.setTransformDirty = function () {
+			this.transformDirty = true;
+			this.setDirty();
+		};
+
+		TargetNode.prototype.go = function () {
 			this.auto = true;
 			this.setDirty();
 		};
 
 		TargetNode.prototype.stop = function () {
 			this.auto = false;
-			this.callbacks.splice(0);
 		};
 
-		TargetNode.prototype.renderWebGL = function(callback) {
+		TargetNode.prototype.renderWebGL = function () {
+			var matrix, x, y;
+
+			this.resize();
+
 			if (this.dirty) {
 				if (!this.source) {
 					return;
@@ -18579,19 +19372,33 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				this.source.render();
 
 				this.uniforms.source = this.source.texture;
+
+				if (this.source.width === this.width && this.source.height === this.height) {
+					this.uniforms.transform = this.source.cumulativeMatrix || identity;
+				} else if (this.transformDirty) {
+					matrix = this.transform;
+					mat4.copy(matrix, this.source.cumulativeMatrix || identity);
+					x = this.source.width / this.width;
+					y = this.source.height / this.height;
+					matrix[0] *= x;
+					matrix[1] *= x;
+					matrix[2] *= x;
+					matrix[3] *= x;
+					matrix[4] *= y;
+					matrix[5] *= y;
+					matrix[6] *= y;
+					matrix[7] *= y;
+					this.uniforms.transform = matrix;
+					this.transformDirty = false;
+				}
+
 				draw(baseShader, rectangleModel, this.uniforms, this.frameBuffer.frameBuffer, this);
 
 				this.dirty = false;
-
-				runCallbacks();
-			}
-
-			if (callback && typeof callback === 'function') {
-				callback();
 			}
 		};
 
-		TargetNode.prototype.renderSecondaryWebGL = function(callback) {
+		TargetNode.prototype.renderSecondaryWebGL = function () {
 			if (this.dirty && this.source) {
 				this.source.render();
 
@@ -18610,23 +19417,11 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				draw(this.shader, this.model, this.uniforms, null, this);
 
 				this.dirty = false;
-
-				runCallbacks();
-			}
-
-			if (callback && typeof callback === 'function') {
-				callback();
 			}
 		};
 
-		TargetNode.prototype.render2D = function(callback) {
-			//todo: make this actually do something
-
-			runCallbacks();
-
-			if (callback && typeof callback === 'function') {
-				callback();
-			}
+		TargetNode.prototype.render2D = function () {
+			//todo: make this actually do something?
 		};
 
 		TargetNode.prototype.removeSource = function (source) {
@@ -18635,7 +19430,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 		};
 
-		TargetNode.prototype.destroy = function() {
+		TargetNode.prototype.destroy = function () {
 			var i;
 
 			//source
@@ -18648,12 +19443,432 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			delete this.uniforms;
 			delete this.pixels;
 			delete this.auto;
-			this.callbacks.splice(0);
 
 			//remove self from master list of targets
 			i = targets.indexOf(this);
 			if (i >= 0) {
 				targets.splice(i, 1);
+			}
+
+			Node.prototype.destroy.call(this);
+		};
+
+		Transform = function (transformNode) {
+			var me = transformNode,
+				self = this,
+				key;
+
+			function setProperty(name, def) {
+				// todo: validate value passed to 'set'
+				Object.defineProperty(self, name, {
+					configurable: true,
+					enumerable: true,
+					get: function () {
+						return def.get.call(me);
+					},
+					set: function (val) {
+						if (def.set.call(me, val)) {
+							me.setTransformDirty();
+						}
+					}
+				});
+			}
+
+			function makeMethod(method) {
+				return function () {
+					if (method.apply(me, arguments)) {
+						me.setTransformDirty();
+					}
+				};
+			}
+
+			//priveleged accessor methods
+			Object.defineProperties(this, {
+				id: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.id;
+					}
+				},
+				source: {
+					enumerable: true,
+					configurable: true,
+					get: function () {
+						return me.source.pub;
+					},
+					set: function (source) {
+						me.setSource(source);
+					}
+				}
+			});
+
+			// attach methods
+			for (key in me.methods) {
+				if (me.methods.hasOwnProperty(key)) {
+					this[key] = makeMethod(me.methods[key].bind(me));
+				}
+			}
+
+			for (key in me.inputs) {
+				if (me.inputs.hasOwnProperty(key)) {
+					setProperty(key, me.inputs[key]);
+				}
+			}
+
+			this.update = function () {
+				me.setDirty();
+			};
+
+			this.alias = function (inputName, aliasName) {
+				me.alias(inputName, aliasName);
+				return this;
+			};
+
+			this.destroy = function () {
+				var i,
+					descriptor;
+
+				me.destroy();
+
+				for (i in this) {
+					if (this.hasOwnProperty(i) && i !== 'isDestroyed') {
+						//todo: probably can simplify this if the only setter/getter is id
+						descriptor = Object.getOwnPropertyDescriptor(this, i);
+						if (descriptor.get || descriptor.set ||
+								typeof this[i] !== 'function') {
+							delete this[i];
+						} else {
+							this[i] = nop;
+						}
+					}
+				}
+			};
+
+			this.isDestroyed = function () {
+				return me.isDestroyed;
+			};
+		};
+
+		TransformNode = function (hook, options) {
+			var key,
+				input;
+
+			this.matrix = new Float32Array(16);
+			this.cumulativeMatrix = new Float32Array(16);
+
+			this.width = 1;
+			this.height = 1;
+
+			this.seriously = seriously;
+
+			this.transformRef = seriousTransforms[hook];
+			this.hook = hook;
+			this.id = nodeId;
+			nodes.push(this);
+			nodesById[nodeId] = this;
+			nodeId++;
+
+			this.options = options;
+			this.sources = null;
+			this.targets = [];
+			this.inputElements = {};
+			this.inputs = {};
+			this.methods = {};
+
+			this.texture = null;
+			this.frameBuffer = null;
+			this.uniforms = null;
+
+			this.dirty = true;
+			this.transformDirty = true;
+			this.renderDirty = false;
+			this.isDestroyed = false;
+			this.transformed = false;
+
+			if (this.transformRef.definition) {
+				this.plugin = this.transformRef.definition.call(this, options);
+				for (key in this.transformRef) {
+					if (this.transformRef.hasOwnProperty(key) && !this.plugin[key]) {
+						this.plugin[key] = this.transformRef[key];
+					}
+				}
+
+				/*
+				todo: validate method definitions, check against reserved names
+				if (this.plugin.inputs !== this.transformRef.inputs) {
+					validateInputSpecs(this.plugin);
+				}
+				*/
+			} else {
+				this.plugin = extend({}, this.transformRef);
+			}
+
+			for (key in this.plugin.inputs) {
+				if (this.plugin.inputs.hasOwnProperty(key)) {
+					input = this.plugin.inputs[key];
+
+					if (input.method && typeof input.method === 'function') {
+						this.methods[key] = input.method;
+					} else if (typeof input.set === 'function' && typeof input.get === 'function') {
+						this.inputs[key] = input;
+					}
+				}
+			}
+
+			this.pub = new Transform(this);
+
+			transforms.push(this);
+
+			allTransformsByHook[hook].push(this);
+		};
+
+		TransformNode.prototype.setDirty = function () {
+			this.renderDirty = true;
+			Node.prototype.setDirty.call(this);
+		};
+
+		TransformNode.prototype.setTransformDirty = function () {
+			var i,
+				target;
+			this.transformDirty = true;
+			this.dirty = true;
+			this.renderDirty = true;
+			for (i = 0; i < this.targets.length; i++) {
+				target = this.targets[i];
+				if (target.setTransformDirty) {
+					target.setTransformDirty();
+				} else {
+					target.setDirty();
+				}
+			}
+		};
+
+		TransformNode.prototype.resize = function () {
+			var i;
+
+			Node.prototype.resize.call(this);
+
+			for (i = 0; i < this.targets.length; i++) {
+				this.targets[i].resize();
+			}
+
+			this.setTransformDirty();
+		};
+
+		TransformNode.prototype.setSource = function (source) {
+			var newSource;
+
+			//todo: what if source is null/undefined/false
+
+			newSource = findInputNode(source);
+
+			if (newSource === this.source) {
+				return;
+			}
+
+			if (traceSources(newSource, this)) {
+				throw 'Attempt to make cyclical connection.';
+			}
+
+			if (this.source) {
+				this.source.removeTarget(this);
+			}
+			this.source = newSource;
+			newSource.setTarget(this);
+
+			this.resize();
+		};
+
+		TransformNode.prototype.setTarget = function (target) {
+			var i;
+			for (i = 0; i < this.targets.length; i++) {
+				if (this.targets[i] === target) {
+					return;
+				}
+			}
+
+			this.targets.push(target);
+		};
+
+		TransformNode.prototype.removeTarget = function (target) {
+			var i = this.targets && this.targets.indexOf(target);
+			if (i >= 0) {
+				this.targets.splice(i, 1);
+			}
+
+			if (this.targets && this.targets.length) {
+				this.resize();
+			}
+		};
+
+		TransformNode.prototype.alias = function (inputName, aliasName) {
+			var me = this,
+				input,
+				def;
+
+			if (reservedNames.indexOf(aliasName) >= 0) {
+				throw aliasName + ' is a reserved name and cannot be used as an alias.';
+			}
+
+			if (this.plugin.inputs.hasOwnProperty(inputName)) {
+				if (!aliasName) {
+					aliasName = inputName;
+				}
+
+				seriously.removeAlias(aliasName);
+
+				input = this.inputs[inputName];
+				if (input) {
+					def = me.inputs[inputName];
+					Object.defineProperty(seriously, aliasName, {
+						configurable: true,
+						enumerable: true,
+						get: function () {
+							return def.get.call(me);
+						},
+						set: function (val) {
+							if (def.set.call(me, val)) {
+								me.setTransformDirty();
+							}
+						}
+					});
+				} else {
+					input = this.methods[inputName];
+					if (input) {
+						def = input;
+						seriously[aliasName] = function () {
+							if (def.apply(me, arguments)) {
+								me.setTransformDirty();
+							}
+						};
+					}
+				}
+
+				if (input) {
+					aliases[aliasName] = {
+						node: this,
+						input: inputName
+					};
+				}
+			}
+
+			return this;
+		};
+
+		TransformNode.prototype.render = function (renderTransform) {
+			if (!this.source) {
+				if (this.transformDirty) {
+					mat4.copy(this.cumulativeMatrix, this.matrix);
+					this.transformDirty = false;
+				}
+				this.texture = null;
+				this.dirty = false;
+
+				return;
+			}
+
+			this.source.render();
+
+			if (this.transformDirty) {
+				if (this.transformed) {
+					//use this.matrix
+					if (this.source.cumulativeMatrix) {
+						mat4.multiply(this.cumulativeMatrix, this.matrix, this.source.cumulativeMatrix);
+					} else {
+						mat4.copy(this.cumulativeMatrix, this.matrix);
+					}
+				} else {
+					//copy source.cumulativeMatrix
+					mat4.copy(this.cumulativeMatrix, this.source.cumulativeMatrix || identity);
+				}
+
+				this.transformDirty = false;
+			}
+
+			if (renderTransform && gl) {
+				if (this.renderDirty) {
+					if (!this.frameBuffer) {
+						this.uniforms = {
+							resolution: [this.width, this.height]
+						};
+						this.frameBuffer = new FrameBuffer(gl, this.width, this.height);
+					}
+
+					this.uniforms.source = this.source.texture;
+					this.uniforms.transform = this.cumulativeMatrix || identity;
+					draw(baseShader, rectangleModel, this.uniforms, this.frameBuffer.frameBuffer, this);
+
+					this.renderDirty = false;
+				}
+				this.texture = this.frameBuffer.texture;
+			} else if (this.source) {
+				this.texture = this.source.texture;
+			} else {
+				this.texture = null;
+			}
+
+			this.dirty = false;
+
+			return this.texture;
+		};
+
+		TransformNode.prototype.destroy = function () {
+			var i, key, item, hook = this.hook;
+
+			//let effect destroy itself
+			if (this.plugin.destroy && typeof this.plugin.destroy === 'function') {
+				this.plugin.destroy.call(this);
+			}
+			delete this.effect;
+
+			//stop watching any input elements
+			for (i in this.inputElements) {
+				if (this.inputElements.hasOwnProperty(i)) {
+					item = this.inputElements[i];
+					item.element.removeEventListener('change', item.listener, true);
+					item.element.removeEventListener('input', item.listener, true);
+				}
+			}
+
+			//sources
+			if (this.source) {
+				this.source.removeTarget(this);
+			}
+
+			//targets
+			while (this.targets.length) {
+				item = this.targets.pop();
+				if (item && item.removeSource) {
+					item.removeSource(this);
+				}
+			}
+
+			for (key in this) {
+				if (this.hasOwnProperty(key) && key !== 'id') {
+					delete this[key];
+				}
+			}
+
+			//remove any aliases
+			for (key in aliases) {
+				if (aliases.hasOwnProperty(key)) {
+					item = aliases[key];
+					if (item.node === this) {
+						seriously.removeAlias(key);
+					}
+				}
+			}
+
+			//remove self from master list of effects
+			i = transforms.indexOf(this);
+			if (i >= 0) {
+				transforms.splice(i, 1);
+			}
+
+			i = allTransformsByHook[hook].indexOf(this);
+			if (i >= 0) {
+				allTransformsByHook[hook].splice(i, 1);
 			}
 
 			Node.prototype.destroy.call(this);
@@ -18672,13 +19887,12 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		}
 
 		if (options.canvas) {
-
 		}
 
 		/*
 		priveleged methods
 		*/
-		this.effect = function(hook, options) {
+		this.effect = function (hook, options) {
 			if (!seriousEffects[hook]) {
 				throw 'Unknown effect: ' + hook;
 			}
@@ -18691,6 +19905,29 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			var sourceNode = findInputNode(source, options);
 			//var sourceNode = new SourceNode(source, options);
 			return sourceNode.pub;
+		};
+
+		this.transform = function (hook, opts) {
+			var transformNode;
+
+			if (typeof hook !== 'string') {
+				opts = hook;
+				hook = false;
+			}
+
+			if (hook) {
+				if (!seriousTransforms[hook]) {
+					throw 'Unknown transforms: ' + hook;
+				}
+			} else {
+				hook = options && options.defaultTransform || '2d';
+				if (!seriousTransforms[hook]) {
+					throw 'No transform specified';
+				}
+			}
+
+			transformNode = new TransformNode(hook, opts);
+			return transformNode.pub;
 		};
 
 		this.target = function (target, options) {
@@ -18720,60 +19957,46 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 		};
 
-		this.go = function(options) {
+		this.go = function (pre, post) {
 			var i;
 
-			if (options) {
-				if (typeof options === 'function') {
-					callbacks.push(options);
-					options = {};
-				} else if (options.callback && typeof options.callback === 'function') {
-					callbacks.push(options.callback);
-					options = extend({}, options);
-					delete options.callback;
-				}
+			if (typeof pre === 'function' && preCallbacks.indexOf(pre) < 0) {
+				preCallbacks.push(pre);
+			}
+
+			if (typeof post === 'function' && postCallbacks.indexOf(post) < 0) {
+				postCallbacks.push(post);
 			}
 
 			auto = true;
 			for (i = 0; i < targets.length; i++) {
-				targets[i].go(options);
+				targets[i].go();
+			}
+
+			if (!rafId && (preCallbacks.length || postCallbacks.length)) {
+				renderDaemon();
 			}
 		};
 
-		this.animate = function (callback) {
-			if (!callback || typeof callback !== 'function') {
-				return;
-			}
-
-			if (animationCallbacks.indexOf(callback) < 0) {
-				animationCallbacks.push(callback);
-			}
-
-			this.go();
-
-			if (!sources.length && animationCallbacks.length === 1) {
-				monitorSources();
-			}
+		this.stop = function () {
+			preCallbacks.length = 0;
+			postCallbacks.length = 0;
+			cancelAnimFrame(rafId);
+			rafId = null;
 		};
 
-		this.stop = function(options) {
-			var i;
-			animationCallbacks.splice(0);
-			callbacks.splice(0);
-			for (i = 0; i < targets.length; i++) {
-				targets[i].stop(options);
-			}
-		};
-
-		this.render = function(options) {
+		this.render = function () {
 			var i;
 			for (i = 0; i < targets.length; i++) {
 				targets[i].render(options);
 			}
 		};
 
-		this.destroy = function() {
-			var i, node, nop = function() { };
+		this.destroy = function () {
+			var i,
+				node,
+				descriptor;
+
 			while (nodes.length) {
 				node = nodes.shift();
 				node.destroy();
@@ -18799,9 +20022,9 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 			for (i in this) {
 				if (this.hasOwnProperty(i) && i !== 'isDestroyed') {
-					if (this.__lookupGetter__(i) ||
-						typeof this[i] !== 'function') {
-
+					descriptor = Object.getOwnPropertyDescriptor(this, i);
+					if (descriptor.get || descriptor.set ||
+							typeof this[i] !== 'function') {
 						delete this[i];
 					} else {
 						this[i] = nop;
@@ -18818,12 +20041,16 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			targets = [];
 			effects = [];
 			nodes = [];
-			callbacks.splice(0);
+			preCallbacks.length = 0;
+			postCallbacks.length = 0;
+			cancelAnimFrame(rafId);
+			rafId = null;
+
 
 			isDestroyed = true;
 		};
 
-		this.isDestroyed = function() {
+		this.isDestroyed = function () {
 			return isDestroyed;
 		};
 
@@ -18856,43 +20083,51 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 		//todo: load, save, find
 
-		baseVertexShader = '#ifdef GL_ES\n' +
-			'precision mediump float;\n' +
-			'#endif \n' +
-			'\n' +
-			'attribute vec4 position;\n' +
-			'attribute vec2 texCoord;\n' +
-			'\n' +
-			'uniform vec3 srsSize;\n' +
-			'uniform mat4 projection;\n' +
-			'uniform mat4 transform;\n' +
-			'\n' +
-			'varying vec2 vTexCoord;\n' +
-			'varying vec4 vPosition;\n' +
-			'\n' +
-			'void main(void) {\n' +
-			'	vec4 pos = position * vec4(srsSize.x / srsSize.y, 1.0, 1.0, 1.0);\n' +
-			'	gl_Position = transform * pos;\n' +
-			'	gl_Position.z -= srsSize.z;\n' +
-			'	gl_Position = projection * gl_Position;\n' +
-			'	gl_Position.z = 0.0;\n' + //prevent near clipping
-			'	vTexCoord = vec2(texCoord.s, texCoord.t);\n' +
-			'	vPosition = gl_Position;\n' +
-			'}\n';
+		baseVertexShader = [
+			'#ifdef GL_ES',
+			'precision mediump float;',
+			'#endif',
 
-		baseFragmentShader = '#ifdef GL_ES\n\n' +
-			'precision mediump float;\n\n' +
-			'#endif\n\n' +
-			'\n' +
-			'varying vec2 vTexCoord;\n' +
-			'varying vec4 vPosition;\n' +
-			'\n' +
-			'uniform sampler2D source;\n' +
-			'\n' +
-			'void main(void) {\n' +
-			'	gl_FragColor = texture2D(source, vTexCoord);\n' +
-			'}\n';
+			'attribute vec4 position;',
+			'attribute vec2 texCoord;',
 
+			'uniform vec2 resolution;',
+			'uniform mat4 transform;',
+
+			'varying vec2 vTexCoord;',
+			'varying vec4 vPosition;',
+
+			'void main(void) {',
+			// first convert to screen space
+			'	vec4 screenPosition = vec4(position.xy * resolution / 2.0, position.z, position.w);',
+			'	screenPosition = transform * screenPosition;',
+
+			// convert back to OpenGL coords
+			'	gl_Position.xy = screenPosition.xy * 2.0 / resolution;',
+			'	gl_Position.z = screenPosition.z * 2.0 / (resolution.x / resolution.y);',
+			'	gl_Position.w = screenPosition.w;',
+			'	vTexCoord = texCoord;',
+			'	vPosition = gl_Position;',
+			'}\n'
+		].join('\n');
+
+		baseFragmentShader = [
+			'#ifdef GL_ES',
+			'precision mediump float;',
+			'#endif',
+			'varying vec2 vTexCoord;',
+			'varying vec4 vPosition;',
+			'uniform sampler2D source;',
+			'void main(void) {',
+			/*
+			'	if (any(lessThan(vTexCoord, vec2(0.0))) || any(greaterThanEqual(vTexCoord, vec2(1.0)))) {',
+			'		gl_FragColor = vec4(0.0);',
+			'	} else {',
+			*/
+			'		gl_FragColor = texture2D(source, vTexCoord);',
+			//'	}',
+			'}'
+		].join('\n');
 	}
 
 	Seriously.incompatible = function (pluginHook) {
@@ -18905,15 +20140,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			} else if (!window.WebGLRenderingContext) {
 				incompatibility = 'webgl';
 			} else {
-				try {
-					gl = canvas.getContext('experimental-webgl');
-				} catch(expError) {
-					try {
-						gl = canvas.getContext('webgl');
-					} catch(webglError) {
-					}
-				}
-
+				gl = getTestContext();
 				if (!gl) {
 					incompatibility = 'context';
 				}
@@ -18936,108 +20163,41 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		return false;
 	};
 
-	Seriously.plugin = function (hook, effect) {
-		var reserved = ['render', 'initialize', 'original', 'width', 'height',
-			'transform', 'translate', 'translateX', 'translateY', 'translateZ',
-			'rotate', 'rotateX', 'rotateY', 'rotateZ', 'scale', 'scaleX', 'scaleY',
-			'scaleZ', 'benchmark', 'plugin', 'alias', 'reset',
-			'prototype', 'destroy', 'isDestroyed'],
-			name, input;
-
-		function nop(value) {
-			return value;
-		}
+	Seriously.plugin = function (hook, definition, meta) {
+		var effect;
 
 		if (seriousEffects[hook]) {
 			console.log('Effect [' + hook + '] already loaded');
 			return;
 		}
 
-		if (!effect) {
+		if (meta === undefined && typeof definition === 'object') {
+			meta = definition;
+		}
+
+		if (!meta) {
 			return;
 		}
 
+		effect = extend({}, meta);
+
+		if (typeof definition === 'function') {
+			effect.definition = definition;
+		}
+
 		if (effect.inputs) {
-			for (name in effect.inputs) {
-				if (effect.inputs.hasOwnProperty(name)) {
-					if (reserved.indexOf(name) >= 0 || Object.prototype[name]) {
-						throw 'Reserved effect input name: ' + name;
-					}
-
-					input = effect.inputs[name];
-
-					if (isNaN(input.min)) {
-						input.min = -Infinity;
-					}
-
-					if (isNaN(input.max)) {
-						input.max = Infinity;
-					}
-
-					if (isNaN(input.minCount)) {
-						input.minCount = -Infinity;
-					}
-
-					if (isNaN(input.maxCount)) {
-						input.maxCount = Infinity;
-					}
-
-					if (isNaN(input.step)) {
-						input.step = 0;
-					}
-
-					if (input.defaultValue === undefined || input.defaultValue === null) {
-						if (input.type === 'number') {
-							input.defaultValue = Math.min(Math.max(0, input.min), input.max);
-						} else if (input.type === 'color') {
-							input.defaultValue = [0, 0, 0, 0];
-						} else if (input.type === 'enum') {
-							if (input.options && input.options.length) {
-								input.defaultValue = input.options[0];
-							} else {
-								input.defaultValue = '';
-							}
-						} else if (input.type === 'boolean') {
-							input.defaultValue = false;
-						} else {
-							input.defaultValue = '';
-						}
-					}
-
-					if (input.type === 'vector') {
-						if (input.dimensions < 2) {
-							input.dimensions = 2;
-						} else if (input.dimensions > 4) {
-							input.dimensions = 4;
-						} else if (!input.dimensions || isNaN(input.dimensions)) {
-							input.dimensions = 4;
-						} else {
-							input.dimensions = Math.round(input.dimensions);
-						}
-					} else {
-						input.dimensions = 1;
-					}
-
-					input.shaderDirty = !!input.shaderDirty;
-
-					if (typeof input.validate !== 'function') {
-						input.validate = Seriously.inputValidators[input.type] || nop;
-					}
-
-					if (!effect.defaultImageInput && input.type === 'image') {
-						effect.defaultImageInput = name;
-					}
-				}
-			}
+			validateInputSpecs(effect);
 		}
 
 		if (!effect.title) {
 			effect.title = hook;
 		}
 
+		/*
 		if (typeof effect.requires !== 'function') {
 			effect.requires = false;
 		}
+		*/
 
 		seriousEffects[hook] = effect;
 		allEffectsByHook[hook] = [];
@@ -19072,18 +20232,90 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		return this;
 	};
 
+	Seriously.transform = function (hook, definition, meta) {
+		var transform;
+
+		if (seriousTransforms[hook]) {
+			console.log('Transform [' + hook + '] already loaded');
+			return;
+		}
+
+		if (meta === undefined && typeof definition === 'object') {
+			meta = definition;
+		}
+
+		if (!meta && !definition) {
+			return;
+		}
+
+		transform = extend({}, meta);
+
+		if (typeof definition === 'function') {
+			transform.definition = definition;
+		}
+
+		/*
+		todo: validate method definitions
+		if (effect.inputs) {
+			validateInputSpecs(effect);
+		}
+		*/
+
+		if (!transform.title) {
+			transform.title = hook;
+		}
+
+
+		seriousTransforms[hook] = transform;
+		allTransformsByHook[hook] = [];
+
+		return transform;
+	};
+
+	Seriously.removeTransform = function (hook) {
+		var all, transform, plugin;
+
+		if (!hook) {
+			return this;
+		}
+
+		plugin = seriousTransforms[hook];
+
+		if (!plugin) {
+			return this;
+		}
+
+		all = allTransformsByHook[hook];
+		if (all) {
+			while (all.length) {
+				transform = all[0];
+				transform.destroy();
+			}
+			delete allTransformsByHook[hook];
+		}
+
+		delete seriousTransforms[hook];
+
+		return this;
+	};
+
+	//todo: validators should not allocate new objects/arrays if input is valid
 	Seriously.inputValidators = {
-		color: function(value) {
-			var s, a, i;
+		color: function (value, input, oldValue) {
+			var s, a, i, computed, bg;
+
+			a = oldValue || [];
+
 			if (typeof value === 'string') {
 				//todo: support percentages, decimals
 				s = (/^(rgb|hsl)a?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(,\s*(\d+(\.\d*)?)\s*)?\)/i).exec(value);
 				if (s && s.length) {
 					if (s.length < 3) {
-						return [0,0,0,0];
+						a[0] = a[1] = a[2] = a[3] = 0;
+						return a;
 					}
 
-					a = [0,0,0,1];
+					a[3] = 1;
 					for (i = 0; i < 3; i++) {
 						a[i] = parseFloat(s[i+2]) / 255;
 					}
@@ -19091,7 +20323,7 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 						a[3] = parseFloat(s[6]);
 					}
 					if (s[1].toLowerCase() === 'hsl') {
-						return hslToRgb(a[0], a[1], a[2], a[3]);
+						return hslToRgb(a[0], a[1], a[2], a[3], a);
 					}
 					return a;
 				}
@@ -19100,55 +20332,66 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				if (s && s.length) {
 					s = s[1];
 					if (s.length === 3) {
-						a = [
-							parseInt(s[0],16) / 15,
-							parseInt(s[1],16) / 15,
-							parseInt(s[2],16) / 15,
-							1
-						];
+						a[0] = parseInt(s[0], 16) / 15;
+						a[1] = parseInt(s[1], 16) / 15;
+						a[2] = parseInt(s[2], 16) / 15;
+						a[3] = 1;
 					} else if (s.length === 4) {
-						a = [
-							parseInt(s[0],16) / 15,
-							parseInt(s[1],16) / 15,
-							parseInt(s[2],16) / 15,
-							parseInt(s[3],16) / 15
-						];
+						a[0] = parseInt(s[0], 16) / 15;
+						a[1] = parseInt(s[1], 16) / 15;
+						a[2] = parseInt(s[2], 16) / 15;
+						a[3] = parseInt(s[3], 16) / 15;
 					} else if (s.length === 6) {
-						a = [
-							parseInt(s.substr(0,2),16) / 255,
-							parseInt(s.substr(2,2),16) / 255,
-							parseInt(s.substr(4,2),16) / 255,
-							1
-						];
+						a[0] = parseInt(s.substr(0, 2), 16) / 255;
+						a[1] = parseInt(s.substr(2, 2), 16) / 255;
+						a[2] = parseInt(s.substr(4, 2), 16) / 255;
+						a[3] = 1;
 					} else if (s.length === 8) {
-						a = [
-							parseInt(s.substr(0,2),16) / 255,
-							parseInt(s.substr(2,2),16) / 255,
-							parseInt(s.substr(4,2),16) / 255,
-							parseInt(s.substr(6,2),16) / 255
-						];
+						a[0] = parseInt(s.substr(0, 2), 16) / 255;
+						a[1] = parseInt(s.substr(2, 2), 16) / 255;
+						a[2] = parseInt(s.substr(4, 2), 16) / 255;
+						a[3] = parseInt(s.substr(6, 2), 16) / 255;
 					} else {
-						a = [0,0,0,0];
+						a[0] = a[1] = a[2] = a[3] = 0;
 					}
 					return a;
 				}
 
-				a = colorNames[value.toLowerCase()];
-				if (a) {
+				s = colorNames[value.toLowerCase()];
+				if (s) {
+					for (i = 0; i < 4; i++) {
+						a[i] = s[i];
+					}
 					return a;
 				}
 
-				return [0,0,0,0];
+				if (!colorElement) {
+					colorElement = document.createElement('a');
+				}
+				colorElement.style.backgroundColor = '';
+				colorElement.style.backgroundColor = value;
+				computed = window.getComputedStyle(colorElement);
+				bg = computed.getPropertyValue('background-color') ||
+					computed.getPropertyValue('backgroundColor') ||
+					colorElement.style.backgroundColor;
+				if (bg && bg !== value) {
+					return Seriously.inputValidators.color(bg, input, oldValue);
+				}
+
+				a[0] = a[1] = a[2] = a[3] = 0;
+				return a;
 			}
 
-			if (Array.isArray(value)) {
+			if (isArrayLike(value)) {
 				a = value;
 				if (a.length < 3) {
-					return [0,0,0,0];
+					a[0] = a[1] = a[2] = a[3] = 0;
+					return a;
 				}
 				for (i = 0; i < 3; i++) {
 					if (isNaN(a[i])) {
-						return [0,0,0,0];
+						a[0] = a[1] = a[2] = a[3] = 0;
+						return a;
 					}
 				}
 				if (a.length < 4) {
@@ -19158,14 +20401,27 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 			}
 
 			if (typeof value === 'number') {
-				return [value, value, value, 1];
-			//todo: } else if (type === 'Object') {
-				//todo: r, g, b
+				a[0] = a[1] = a[2] = value;
+				a[3] = 1;
+				return a;
 			}
 
-			return [0, 0, 0, 0];
+			if (typeof value === 'object') {
+				for (i = 0; i < 4; i++) {
+					s = colorFields[i];
+					if (value[s] === null || isNaN(value[s])) {
+						a[i] = i === 3 ? 1 : 0;
+					} else {
+						a[i] = value[s];
+					}
+				}
+				return a;
+			}
+
+			a[0] = a[1] = a[2] = a[3] = 0;
+			return a;
 		},
-		number: function(value, input) {
+		number: function (value, input) {
 			if (isNaN(value)) {
 				return input.defaultValue || 0;
 			}
@@ -19186,12 +20442,12 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 			return value;
 		},
-		'enum': function(value, input) {
+		'enum': function (value, input) {
 			var options = input.options || [],
 				filtered;
 
 			filtered = options.filter(function (opt) {
-				return (Array.isArray(opt) && opt.length && opt[0] === value) || opt === value;
+				return (isArrayLike(opt) && opt.length && opt[0] === value) || opt === value;
 			});
 
 			if (filtered.length) {
@@ -19200,29 +20456,36 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 			return input.defaultValue || '';
 		},
-		vector: function(value) {
-			var a, i, s, vectorFields = ['x','y','z','w'];
+		vector: function (value, input, oldValue) {
+			var a, i, s, n = input.dimensions || 4;
 
-			if ( Array.isArray(value) ) {
-				a = {};
-				for (i = 0; i < 4; i++) {
-					a[vectorFields[i]] = isNaN(value[i]) ? 0 : value[i];
+			a = oldValue || [];
+			if (isArrayLike(value)) {
+				for (i = 0; i < n; i++) {
+					a[i] = value[i] || 0;
 				}
 				return a;
 			}
 
 			if (typeof value === 'object') {
-				a = {};
-				for (i = 0; i < 4; i++) {
+				for (i = 0; i < n; i++) {
 					s = vectorFields[i];
-					a[s] = isNaN(value[s]) ? 0 : value[s];
+					if (value[s] === undefined) {
+						s = colorFields[i];
+					}
+					a[i] = value[s] || 0;
 				}
 				return a;
 			}
 
-			return { x: 0, y: 0, z: 0, w: 0 };
+			value = parseFloat(value) || 0;
+			for (i = 0; i < n; i++) {
+				a[i] = value;
+			}
+
+			return a;
 		},
-		'boolean': function(value) {
+		'boolean': function (value) {
 			if (!value) {
 				return false;
 			}
@@ -19280,20 +20543,18 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 	};
 
 	if (window.Float32Array) {
-		defaultTransform = new Float32Array([
+		identity = new Float32Array([
 			1, 0, 0, 0,
 			0, 1, 0, 0,
 			0, 0, 1, 0,
 			0, 0, 0, 1
 		]);
-		//todo: set scale
-	//	mat4.perspective(90, 1, 1, 100, new Float32Array(defaultTransform));
 	}
 
 	//check for plugins loaded out of order
 	if (window.Seriously) {
 		if (typeof window.Seriously === 'object') {
-			(function() {
+			(function () {
 				var i;
 				for (i in window.Seriously) {
 					if (window.Seriously.hasOwnProperty(i) &&
@@ -19312,21 +20573,20 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 	//expose Seriously to the global object
 	Seriously.util = {
+		mat4: mat4,
 		checkSource: checkSource,
 		hslToRgb: hslToRgb,
 		colors: colorNames,
 		setTimeoutZero: setTimeoutZero,
 		ShaderProgram: ShaderProgram,
 		FrameBuffer: FrameBuffer,
-		requestAnimationFrame: function(callback) {
-			requestAnimFrame(callback);
-		},
+		requestAnimationFrame: requestAnimationFrame,
 		shader: {
 			makeNoise: 'float makeNoise(float u, float v, float timer) {\n' +
 						'	float x = u * v * mod(timer * 1000.0, 100.0);\n' +
 						'	x = mod(x, 13.0) * mod(x, 127.0);\n' +
 						'	float dx = mod(x, 0.01);\n' +
-						'	return clamp(0.1 + dx * 100.0, 0.0,1.0);\n' +
+						'	return clamp(0.1 + dx * 100.0, 0.0, 1.0);\n' +
 						'}\n',
 			random: '#ifndef RANDOM\n' +
 				'#define RANDOM\n' +
@@ -19336,6 +20596,650 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 				'#endif\n'
 		}
 	};
+
+	/*
+	Default transform - 2D
+	Affine transforms
+	- translate
+	- rotate (degrees)
+	- scale
+	- skew
+
+	todo: move this to a different file when we have a build tool
+	*/
+	Seriously.transform('2d', function (options) {
+		var me = this,
+			degrees = !(options && options.radians),
+
+			centerX = 0,
+			centerY = 0,
+			scaleX = 1,
+			scaleY = 1,
+			translateX = 0,
+			translateY = 0,
+			rotation = 0,
+			skewX = 0,
+			skewY = 0;
+
+		//todo: skew order
+		//todo: invert?
+
+		function recompute() {
+			var matrix = me.matrix,
+				angle,
+				s, c,
+				m00,
+				m01,
+				m02,
+				m03,
+				m10,
+				m11,
+				m12,
+				m13;
+
+			function translate(x, y) {
+				matrix[12] = matrix[0] * x + matrix[4] * y + matrix[12];
+				matrix[13] = matrix[1] * x + matrix[5] * y + matrix[13];
+				matrix[14] = matrix[2] * x + matrix[6] * y + matrix[14];
+				matrix[15] = matrix[3] * x + matrix[7] * y + matrix[15];
+			}
+
+			if (!translateX &&
+					!translateY &&
+					!rotation &&
+					!skewX &&
+					!skewY &&
+					scaleX === 1 &&
+					scaleY === 1
+					) {
+				me.transformed = false;
+				return;
+			}
+
+			//calculate transformation matrix
+			mat4.identity(matrix);
+
+			translate(translateX + centerX, translateY + centerY);
+
+			//skew
+			if (skewX) {
+				matrix[4] = skewX / me.width;
+			}
+			if (skewY) {
+				matrix[1] = skewY / me.height;
+			}
+
+			if (rotation) {
+				m00 = matrix[0];
+				m01 = matrix[1];
+				m02 = matrix[2];
+				m03 = matrix[3];
+				m10 = matrix[4];
+				m11 = matrix[5];
+				m12 = matrix[6];
+				m13 = matrix[7];
+
+				//rotate
+				angle = -(degrees ? rotation * Math.PI / 180 : rotation);
+				//...rotate
+				s = Math.sin(angle);
+				c = Math.cos(angle);
+				matrix[0] = m00 * c + m10 * s;
+				matrix[1] = m01 * c + m11 * s;
+				matrix[2] = m02 * c + m12 * s;
+				matrix[3] = m03 * c + m13 * s;
+				matrix[4] = m10 * c - m00 * s;
+				matrix[5] = m11 * c - m01 * s;
+				matrix[6] = m12 * c - m02 * s;
+				matrix[7] = m13 * c - m03 * s;
+			}
+
+			//scale
+			if (scaleX !== 1) {
+				matrix[0] *= scaleX;
+				matrix[1] *= scaleX;
+				matrix[2] *= scaleX;
+				matrix[3] *= scaleX;
+			}
+			if (scaleY !== 1) {
+				matrix[4] *= scaleY;
+				matrix[5] *= scaleY;
+				matrix[6] *= scaleY;
+				matrix[7] *= scaleY;
+			}
+
+			translate(-centerX, -centerY);
+
+			me.transformed = true;
+		}
+
+		return {
+			inputs: {
+				reset: {
+					method: function () {
+						centerX = 0;
+						centerY = 0;
+						scaleX = 1;
+						scaleY = 1;
+						translateX = 0;
+						translateY = 0;
+						rotation = 0;
+						skewX = 0;
+						skewY = 0;
+
+						if (me.transformed) {
+							me.transformed = false;
+							return true;
+						}
+
+						return false;
+					}
+				},
+				translate: {
+					method: function (x, y) {
+						if (isNaN(x)) {
+							x = translateX;
+						}
+
+						if (isNaN(y)) {
+							y = translateY;
+						}
+
+						if (x === translateX && y === translateY) {
+							return false;
+						}
+
+						translateX = x;
+						translateY = y;
+
+						recompute();
+						return true;
+					},
+					type: [
+						'number',
+						'number'
+					]
+				},
+				translateX: {
+					get: function () {
+						return translateX;
+					},
+					set: function (x) {
+						if (x === translateX) {
+							return false;
+						}
+
+						translateX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				translateY: {
+					get: function () {
+						return translateY;
+					},
+					set: function (y) {
+						if (y === translateY) {
+							return false;
+						}
+
+						translateY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				rotation: {
+					get: function () {
+						return rotation;
+					},
+					set: function (angle) {
+						if (angle === rotation) {
+							return false;
+						}
+
+						//todo: fmod 360deg or Math.PI * 2 radians
+						rotation = angle;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				center: {
+					method: function (x, y) {
+						if (isNaN(x)) {
+							x = centerX;
+						}
+
+						if (isNaN(y)) {
+							y = centerY;
+						}
+
+						if (x === centerX && y === centerY) {
+							return false;
+						}
+
+						centerX = x;
+						centerY = y;
+
+						recompute();
+						return true;
+					},
+					type: [
+						'number',
+						'number'
+					]
+				},
+				centerX: {
+					get: function () {
+						return centerX;
+					},
+					set: function (x) {
+						if (x === centerX) {
+							return false;
+						}
+
+						centerX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				centerY: {
+					get: function () {
+						return centerY;
+					},
+					set: function (y) {
+						if (y === centerY) {
+							return false;
+						}
+
+						centerY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				skew: {
+					method: function (x, y) {
+						if (isNaN(x)) {
+							x = skewX;
+						}
+
+						if (isNaN(y)) {
+							y = skewY;
+						}
+
+						if (x === skewX && y === skewY) {
+							return false;
+						}
+
+						skewX = x;
+						skewY = y;
+
+						recompute();
+						return true;
+					},
+					type: [
+						'number',
+						'number'
+					]
+				},
+				skewX: {
+					get: function () {
+						return skewX;
+					},
+					set: function (x) {
+						if (x === skewX) {
+							return false;
+						}
+
+						skewX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				skewY: {
+					get: function () {
+						return skewY;
+					},
+					set: function (y) {
+						if (y === skewY) {
+							return false;
+						}
+
+						skewY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				scale: {
+					method: function (x, y) {
+						var newX, newY;
+
+						if (isNaN(x)) {
+							newX = scaleX;
+						} else {
+							newX = x;
+						}
+
+						/*
+						if only one value is specified, set both x and y to the same scale
+						*/
+						if (isNaN(y)) {
+							if (isNaN(x)) {
+								return false;
+							}
+
+							newY = newX;
+						} else {
+							newY = y;
+						}
+
+						if (newX === scaleX && newY === scaleY) {
+							return false;
+						}
+
+						scaleX = newX;
+						scaleY = newY;
+
+						recompute();
+						return true;
+					},
+					type: [
+						'number',
+						'number'
+					]
+				},
+				scaleX: {
+					get: function () {
+						return scaleX;
+					},
+					set: function (x) {
+						if (x === scaleX) {
+							return false;
+						}
+
+						scaleX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				scaleY: {
+					get: function () {
+						return scaleY;
+					},
+					set: function (y) {
+						if (y === scaleY) {
+							return false;
+						}
+
+						scaleY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				}
+			}
+		};
+	}, {
+		title: '2D Transform',
+		description: 'Translate, Rotate, Scale, Skew'
+	});
+
+	/*
+	todo: move this to a different file when we have a build tool
+	*/
+	Seriously.transform('flip', function () {
+		var me = this,
+			horizontal = true;
+
+		function recompute() {
+			var matrix = me.matrix;
+
+			//calculate transformation matrix
+			//mat4.identity(matrix);
+
+			//scale
+			if (horizontal) {
+				matrix[0] = -1;
+				matrix[5] = 1;
+			} else {
+				matrix[0] = 1;
+				matrix[5] = -1;
+			}
+		}
+
+		mat4.identity(me.matrix);
+		recompute();
+
+		me.transformDirty = true;
+
+		me.transformed = true;
+
+		return {
+			inputs: {
+				direction: {
+					get: function () {
+						return horizontal ? 'horizontal' : 'vertical';
+					},
+					set: function (d) {
+						var horiz;
+						if (d === 'vertical') {
+							horiz = false;
+						} else {
+							horiz = true;
+						}
+
+						if (horiz === horizontal) {
+							return false;
+						}
+
+						horizontal = horiz;
+						recompute();
+						return true;
+					},
+					type: 'string'
+				}
+			}
+		};
+	}, {
+		title: 'Flip',
+		description: 'Flip Horizontal/Vertical'
+	});
+
+	/*
+	Reformat
+	todo: move this to a different file when we have a build tool
+	*/
+	Seriously.transform('reformat', function () {
+		var me = this,
+			forceWidth,
+			forceHeight,
+			mode = 'contain';
+
+		function recompute() {
+			var matrix = me.matrix,
+				width = forceWidth || me.width,
+				height = forceHeight || me.height,
+				scaleX,
+				scaleY,
+				source = me.source,
+				sourceWidth = source && source.width || 1,
+				sourceHeight = source && source.height || 1,
+				aspectIn,
+				aspectOut;
+
+			if (mode === 'distort' || width === sourceWidth && height === sourceHeight) {
+				me.transformed = false;
+				return;
+			}
+
+			aspectIn = sourceWidth / sourceHeight;
+
+			aspectOut = width / height;
+
+			if (mode === 'width' || mode === 'contain' && aspectOut <= aspectIn) {
+				scaleX = 1;
+				scaleY = aspectOut / aspectIn;
+			} else if (mode === 'height' || mode === 'contain' && aspectOut > aspectIn) {
+				scaleX = aspectIn / aspectOut;
+				scaleY = 1;
+			} else {
+				//mode === 'cover'
+				if (aspectOut > aspectIn) {
+					scaleX = 1;
+					scaleY = aspectOut / aspectIn;
+				} else {
+					scaleX = aspectIn / aspectOut;
+					scaleY = 1;
+				}
+			}
+
+			if (scaleX === 1 && scaleY === 1) {
+				me.transformed = false;
+				return;
+			}
+
+			//calculate transformation matrix
+			mat4.identity(matrix);
+
+			//scale
+			if (scaleX !== 1) {
+				matrix[0] *= scaleX;
+				matrix[1] *= scaleX;
+				matrix[2] *= scaleX;
+				matrix[3] *= scaleX;
+			}
+			if (scaleY !== 1) {
+				matrix[4] *= scaleY;
+				matrix[5] *= scaleY;
+				matrix[6] *= scaleY;
+				matrix[7] *= scaleY;
+			}
+			me.transformed = true;
+		}
+
+		function getWidth() {
+			return forceWidth || me.source && me.source.width || 1;
+		}
+
+		function getHeight() {
+			return forceHeight || me.source && me.source.height || 1;
+		}
+
+		this.resize = function () {
+			var width = getWidth(),
+				height = getHeight(),
+				i;
+
+			if (this.width !== width || this.height !== height) {
+				this.width = width;
+				this.height = height;
+
+				if (this.uniforms && this.uniforms.resolution) {
+					this.uniforms.resolution[0] = width;
+					this.uniforms.resolution[1] = height;
+				}
+
+				if (this.frameBuffer && this.frameBuffer.resize) {
+					this.frameBuffer.resize(width, height);
+				}
+
+				for (i = 0; i < this.targets.length; i++) {
+					this.targets[i].resize();
+				}
+			}
+
+			this.setTransformDirty();
+
+			recompute();
+		};
+
+		return {
+			inputs: {
+				width: {
+					get: getWidth,
+					set: function (x) {
+						if (x === forceWidth) {
+							return false;
+						}
+
+						forceWidth = x;
+
+						this.resize();
+
+						//don't need to run setTransformDirty again
+						return false;
+					},
+					type: 'number'
+				},
+				height: {
+					get: getHeight,
+					set: function (y) {
+						if (y === forceHeight) {
+							return false;
+						}
+
+						forceHeight = y;
+
+						this.resize();
+
+						//don't need to run setTransformDirty again
+						return false;
+					},
+					type: 'number'
+				},
+				mode: {
+					get: function () {
+						return mode;
+					},
+					set: function (m) {
+						if (m === mode) {
+							return false;
+						}
+
+						mode = m;
+
+						recompute();
+						return true;
+					},
+					type: 'enum',
+					options: [
+						'cover',
+						'contain',
+						'distort',
+						'width',
+						'height'
+					]
+				}
+			}
+		};
+	}, {
+		title: 'Reformat',
+		description: 'Change output dimensions'
+	});
+
+	/*
+	todo: additional transform node types
+	- perspective
+	- matrix
+	- crop? - maybe not - probably would just scale.
+	- camera shake?
+	*/
 
 	/*
 	 * simplex noise shaders
@@ -19376,10 +21280,10 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		'		0.366025403784439, // 0.5*(sqrt(3.0)-1.0)\n' +
 		'		-0.577350269189626, // -1.0 + 2.0 * C.x\n' +
 		'		0.024390243902439); // 1.0 / 41.0\n' +
-		'	vec2 i = floor(v + dot(v, C.yy) );\n' +
+		'	vec2 i = floor(v + dot(v, C.yy));\n' +
 		'	vec2 x0 = v - i + dot(i, C.xx);\n' +
 		'	vec2 i1;\n' +
-		'	//i1.x = step( x0.y, x0.x ); // x0.x > x0.y ? 1.0 : 0.0\n' +
+		'	//i1.x = step(x0.y, x0.x); // x0.x > x0.y ? 1.0 : 0.0\n' +
 		'	//i1.y = 1.0 - i1.x;\n' +
 		'	i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);\n' +
 		'	// x0 = x0 - 0.0 + 0.0 * C.xx ;\n' +
@@ -19388,15 +21292,15 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		'	vec4 x12 = x0.xyxy + C.xxzz;\n' +
 		'	x12.xy -= i1;\n' +
 		'	i = mod289(i); // Avoid truncation effects in permutation\n' +
-		'	vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));\n' +
-		'	vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);\n' +
+		'	vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));\n' +
+		'	vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);\n' +
 		'	m = m*m ;\n' +
 		'	m = m*m ;\n' +
 		'	vec3 x = 2.0 * fract(p * C.www) - 1.0;\n' +
 		'	vec3 h = abs(x) - 0.5;\n' +
 		'	vec3 ox = floor(x + 0.5);\n' +
 		'	vec3 a0 = x - ox;\n' +
-		'	m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );\n' +
+		'	m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);\n' +
 		'	vec3 g;\n' +
 		'	g.x = a0.x * x0.x + h.x * x0.y;\n' +
 		'	g.yz = a0.yz * x12.xz + h.yz * x12.yw;\n' +
@@ -19411,14 +21315,14 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		'	const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);\n' +
 
 		// First corner
-		'	vec3 i = floor(v + dot(v, C.yyy) );\n' +
+		'	vec3 i = floor(v + dot(v, C.yyy));\n' +
 		'	vec3 x0 = v - i + dot(i, C.xxx) ;\n' +
 
 		// Other corners
 		'	vec3 g = step(x0.yzx, x0.xyz);\n' +
 		'	vec3 l = 1.0 - g;\n' +
-		'	vec3 i1 = min( g.xyz, l.zxy );\n' +
-		'	vec3 i2 = max( g.xyz, l.zxy );\n' +
+		'	vec3 i1 = min(g.xyz, l.zxy);\n' +
+		'	vec3 i2 = max(g.xyz, l.zxy);\n' +
 
 		'	// x0 = x0 - 0.0 + 0.0 * C.xxx;\n' +
 		'	// x1 = x0 - i1 + 1.0 * C.xxx;\n' +
@@ -19430,53 +21334,53 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 
 		// Permutations
 		'	i = mod289(i);\n' +
-		'	vec4 p = permute( permute( permute(\n' +
-		'						i.z + vec4(0.0, i1.z, i2.z, 1.0 ))\n' +
-		'						+ i.y + vec4(0.0, i1.y, i2.y, 1.0 ))\n' +
-		'						+ i.x + vec4(0.0, i1.x, i2.x, 1.0 ));\n' +
+		'	vec4 p = permute(permute(permute(\n' +
+		'						i.z + vec4(0.0, i1.z, i2.z, 1.0))\n' +
+		'						+ i.y + vec4(0.0, i1.y, i2.y, 1.0))\n' +
+		'						+ i.x + vec4(0.0, i1.x, i2.x, 1.0));\n' +
 
 		// Gradients: 7x7 points over a square, mapped onto an octahedron.
 		// The ring size 17*17 = 289 is close to a multiple of 49 (49*6 = 294)
 		'	float n_ = 0.142857142857; // 1.0/7.0\n' +
 		'	vec3 ns = n_ * D.wyz - D.xzx;\n' +
 
-		'	vec4 j = p - 49.0 * floor(p * ns.z * ns.z); // mod(p,7*7)\n' +
+		'	vec4 j = p - 49.0 * floor(p * ns.z * ns.z); // mod(p, 7 * 7)\n' +
 
 		'	vec4 x_ = floor(j * ns.z);\n' +
-		'	vec4 y_ = floor(j - 7.0 * x_ ); // mod(j,N)\n' +
+		'	vec4 y_ = floor(j - 7.0 * x_); // mod(j, N)\n' +
 
-		'	vec4 x = x_ *ns.x + ns.yyyy;\n' +
-		'	vec4 y = y_ *ns.x + ns.yyyy;\n' +
+		'	vec4 x = x_ * ns.x + ns.yyyy;\n' +
+		'	vec4 y = y_ * ns.x + ns.yyyy;\n' +
 		'	vec4 h = 1.0 - abs(x) - abs(y);\n' +
 
-		'	vec4 b0 = vec4( x.xy, y.xy );\n' +
-		'	vec4 b1 = vec4( x.zw, y.zw );\n' +
+		'	vec4 b0 = vec4(x.xy, y.xy);\n' +
+		'	vec4 b1 = vec4(x.zw, y.zw);\n' +
 
-		'	//vec4 s0 = vec4(lessThan(b0,0.0))*2.0 - 1.0;\n' +
-		'	//vec4 s1 = vec4(lessThan(b1,0.0))*2.0 - 1.0;\n' +
-		'	vec4 s0 = floor(b0)*2.0 + 1.0;\n' +
-		'	vec4 s1 = floor(b1)*2.0 + 1.0;\n' +
+		'	//vec4 s0 = vec4(lessThan(b0, 0.0)) * 2.0 - 1.0;\n' +
+		'	//vec4 s1 = vec4(lessThan(b1, 0.0)) * 2.0 - 1.0;\n' +
+		'	vec4 s0 = floor(b0) * 2.0 + 1.0;\n' +
+		'	vec4 s1 = floor(b1) * 2.0 + 1.0;\n' +
 		'	vec4 sh = -step(h, vec4(0.0));\n' +
 
-		'	vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;\n' +
-		'	vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;\n' +
+		'	vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy ;\n' +
+		'	vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww ;\n' +
 
-		'	vec3 p0 = vec3(a0.xy,h.x);\n' +
-		'	vec3 p1 = vec3(a0.zw,h.y);\n' +
-		'	vec3 p2 = vec3(a1.xy,h.z);\n' +
-		'	vec3 p3 = vec3(a1.zw,h.w);\n' +
+		'	vec3 p0 = vec3(a0.xy, h.x);\n' +
+		'	vec3 p1 = vec3(a0.zw, h.y);\n' +
+		'	vec3 p2 = vec3(a1.xy, h.z);\n' +
+		'	vec3 p3 = vec3(a1.zw, h.w);\n' +
 
 		//Normalise gradients
-		'	vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));\n' +
+		'	vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));\n' +
 		'	p0 *= norm.x;\n' +
 		'	p1 *= norm.y;\n' +
 		'	p2 *= norm.z;\n' +
 		'	p3 *= norm.w;\n' +
 
 		// Mix final noise value
-		'	vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);\n' +
+		'	vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);\n' +
 		'	m = m * m;\n' +
-		'	return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );\n' +
+		'	return 42.0 * dot(m*m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));\n' +
 		'}\n' +
 		'#endif\n';
 
@@ -19485,9 +21389,9 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		'vec4 grad4(float j, vec4 ip)\n' +
 		'	{\n' +
 		'	const vec4 ones = vec4(1.0, 1.0, 1.0, -1.0);\n' +
-		'	vec4 p,s;\n' +
+		'	vec4 p, s;\n' +
 		'\n' +
-		'	p.xyz = floor( fract (vec3(j) * ip.xyz) * 7.0) * ip.z - 1.0;\n' +
+		'	p.xyz = floor(fract (vec3(j) * ip.xyz) * 7.0) * ip.z - 1.0;\n' +
 		'	p.w = 1.5 - dot(abs(p.xyz), ones.xyz);\n' +
 		'	s = vec4(lessThan(p, vec4(0.0)));\n' +
 		'	p.xyz = p.xyz + (s.xyz*2.0 - 1.0) * s.www;\n' +
@@ -19506,28 +21410,28 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		'						-0.447213595499958); // -1 + 4 * G4\n' +
 		'\n' +
 		// First corner
-		'	vec4 i = floor(v + dot(v, vec4(F4)) );\n' +
+		'	vec4 i = floor(v + dot(v, vec4(F4)));\n' +
 		'	vec4 x0 = v - i + dot(i, C.xxxx);\n' +
 		'\n' +
 		// Other corners
 		'\n' +
 		// Rank sorting originally contributed by Bill Licea-Kane, AMD (formerly ATI)
 		'	vec4 i0;\n' +
-		'	vec3 isX = step( x0.yzw, x0.xxx );\n' +
-		'	vec3 isYZ = step( x0.zww, x0.yyz );\n' +
-		// i0.x = dot( isX, vec3( 1.0 ) );
+		'	vec3 isX = step(x0.yzw, x0.xxx);\n' +
+		'	vec3 isYZ = step(x0.zww, x0.yyz);\n' +
+		// i0.x = dot(isX, vec3(1.0));
 		'	i0.x = isX.x + isX.y + isX.z;\n' +
 		'	i0.yzw = 1.0 - isX;\n' +
-		// i0.y += dot( isYZ.xy, vec2( 1.0 ) );
+		// i0.y += dot(isYZ.xy, vec2(1.0));
 		'	i0.y += isYZ.x + isYZ.y;\n' +
 		'	i0.zw += 1.0 - isYZ.xy;\n' +
 		'	i0.z += isYZ.z;\n' +
 		'	i0.w += 1.0 - isYZ.z;\n' +
 		'\n' +
 			// i0 now contains the unique values 0,1,2,3 in each channel
-		'	vec4 i3 = clamp( i0, 0.0, 1.0 );\n' +
-		'	vec4 i2 = clamp( i0-1.0, 0.0, 1.0 );\n' +
-		'	vec4 i1 = clamp( i0-2.0, 0.0, 1.0 );\n' +
+		'	vec4 i3 = clamp(i0, 0.0, 1.0);\n' +
+		'	vec4 i2 = clamp(i0-1.0, 0.0, 1.0);\n' +
+		'	vec4 i1 = clamp(i0-2.0, 0.0, 1.0);\n' +
 		'\n' +
 		'	vec4 x1 = x0 - i1 + C.xxxx;\n' +
 		'	vec4 x2 = x0 - i2 + C.yyyy;\n' +
@@ -19536,12 +21440,12 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		'\n' +
 		// Permutations
 		'	i = mod289(i);\n' +
-		'	float j0 = permute( permute( permute( permute(i.w) + i.z) + i.y) + i.x);\n' +
-		'	vec4 j1 = permute( permute( permute( permute (\n' +
-		'					i.w + vec4(i1.w, i2.w, i3.w, 1.0 ))\n' +
-		'					+ i.z + vec4(i1.z, i2.z, i3.z, 1.0 ))\n' +
-		'					+ i.y + vec4(i1.y, i2.y, i3.y, 1.0 ))\n' +
-		'					+ i.x + vec4(i1.x, i2.x, i3.x, 1.0 ));\n' +
+		'	float j0 = permute(permute(permute(permute(i.w) + i.z) + i.y) + i.x);\n' +
+		'	vec4 j1 = permute(permute(permute(permute (\n' +
+		'					i.w + vec4(i1.w, i2.w, i3.w, 1.0))\n' +
+		'					+ i.z + vec4(i1.z, i2.z, i3.z, 1.0))\n' +
+		'					+ i.y + vec4(i1.y, i2.y, i3.y, 1.0))\n' +
+		'					+ i.x + vec4(i1.x, i2.x, i3.x, 1.0));\n' +
 		'\n' +
 		// Gradients: 7x7x6 points over a cube, mapped onto a 4-cross polytope
 		// 7*7*6 = 294, which is close to the ring size 17*17 = 289.
@@ -19554,20 +21458,20 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 		'	vec4 p4 = grad4(j1.w, ip);\n' +
 		'\n' +
 		// Normalise gradients
-		'	vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));\n' +
+		'	vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));\n' +
 		'	p0 *= norm.x;\n' +
 		'	p1 *= norm.y;\n' +
 		'	p2 *= norm.z;\n' +
 		'	p3 *= norm.w;\n' +
-		'	p4 *= taylorInvSqrt(dot(p4,p4));\n' +
+		'	p4 *= taylorInvSqrt(dot(p4, p4));\n' +
 		'\n' +
 		// Mix contributions from the five corners
-		'	vec3 m0 = max(0.6 - vec3(dot(x0,x0), dot(x1,x1), dot(x2,x2)), 0.0);\n' +
-		'	vec2 m1 = max(0.6 - vec2(dot(x3,x3), dot(x4,x4) ), 0.0);\n' +
+		'	vec3 m0 = max(0.6 - vec3(dot(x0, x0), dot(x1, x1), dot(x2, x2)), 0.0);\n' +
+		'	vec2 m1 = max(0.6 - vec2(dot(x3, x3), dot(x4, x4)), 0.0);\n' +
 		'	m0 = m0 * m0;\n' +
 		'	m1 = m1 * m1;\n' +
-		'	return 49.0 * ( dot(m0*m0, vec3( dot( p0, x0 ), dot( p1, x1 ), dot( p2, x2 )))\n' +
-		'							+ dot(m1*m1, vec2( dot( p3, x3 ), dot( p4, x4 ) ) ) ) ;\n' +
+		'	return 49.0 * (dot(m0*m0, vec3(dot(p0, x0), dot(p1, x1), dot(p2, x2)))\n' +
+		'							+ dot(m1*m1, vec2(dot(p3, x3), dot(p4, x4)))) ;\n' +
 		'}\n' +
 		'#endif\n';
 
@@ -19576,22 +21480,22 @@ require.register("forresto-seriously/seriously.js", function(exports, require, m
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.ascii.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.ascii.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -19603,6 +21507,7 @@ require.register("forresto-seriously/effects/seriously.ascii.js", function(expor
 	*/
 
 	var identity, letters;
+
 	letters = document.createElement('img');
 	letters.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAvAAAAAICAYAAACf+MsnAAAFY0lEQVR4Xu2Z644bOwyDN+//0NsOigEMQdRHyU6CFDnA+bHVWNaFojiTx8/Pz+/f/4/89/v7z9Xj8Tjib3XyTN9usFcMz8gt3h9zXf/O6nD/W1V7Vb9uXad+nHucZ9xenX7OqTHdSfmRXfmPsSn8xPMrllcfCkdVfHSe7Ned0/yp7jv2GPfqK+MCByc0zzvxKi5RPq8cuvE4+JrwpFM7N78K2yu+qb9kd3qV+ZjUx5n/+xnXP81ctW/UHQ5P3Gd360vxKf+n8dGpxXTeKu6h2ansFT6pvo5G2/FP99NsUf9d/xleInfetcj629m9cf9WOV5K+78R8ERGRLYO8VQiecd/1vwKEJV46JBJRzhRfXftVL/MTgM48UmL0l2OSmzs9kctAJfE4/1KkNFzbj8cjFHsJ/u460vhnPDfqddujJ27poLCWWBuHt0YKr/ki+yOKJnk5Z7pPLfLf4TZif+qvi7XuDWg+HbtNEe79ds9H7m1m2/3+YzLK5Hc9e/gYxdfNP+ZfdV9lT3usWn+9310/qiAdxa1O5gTEqVhoLudxVwVNPrvCqDp/ZX4d0Uk1Y7sbgyU4zooCk8nB3i9Y61V5wWpIjDlP+ZJsxPvmLxEOD2sntk5Pz1LBOb0L+sPfQGs6ksYpt7QAiHuUwtkgl+F3Qyf2YxTX53+Vdjfjc8VYIq7KT+abzof7ervZ8fX8d/Jyc3PmTcnRrrPEbyVTnD8T+Y38pH624mfNIr6muzO95S/sh1Gvog/XmW/a6N+scww43zgqLjcOX9cwFeESQK3Gpx32QggTlwk8Ei8OXfE4VMLeCLQiLBjfJM7VA069XefnZBGJz7Vr24dK3GwEoqLD7p/1+4IMWdRdxaMK9CmP4E62F7nm8S7s4B3BMCkBzQPVQ0IM06+2WLvzlDlI+NfF4d0ljiHuF/Zb/4m/4ojTgnA6f0qfiWA135P5l/NoFv/7txm+5ZyyOw0e1R/skd8ZKKwwnjXf9xLrkBV+2x3Pib9Vz3JOMaNL/KZ+oCkXhDUTLxEwLsC41OfI5DEYe9+mXfr0l2mJH5ISHTOUw2U8IjD5LyVUtxEmrvi4V5ejvijWNWicBbOyfsrYejkMMXmdIFEAZH19ASWnNyrPlBdKH+yU3y0gGjGKf4Mv51ft9zzKk83vul5qr9r7+CT9gHx2zvs0/yofpGX1AuC4svqhYJeJJydNZk/urcSxet91dfiUy94HX6oBHCHi5+F38svCeg1h+zZ6nyF5VUzVC8Q0X9LwE/IkMjmpJ3i27XvxuqQ0c4dp/JTfnb9T847AoNIW/nokIYrYKvnJvln/siPwtD0XAeTU+x0luEugWdLNeY4ecl260vxK8Efl3OnZi4uaZZIMBFeJ/hw6xrFvppvV1Q559d8MwwR50cskIBQ2KhE3y7/ZeddAUjxOr3diZ/8U3+I953z7uzR7Lj4rvjl9HxXvaHaOflSfSkf93y24xx94PpX89I5H2t9+fwK+KVzNOwdIeM+e905+ZqqRIj7pYHiU3FNFnBnkO+41EKige3cpX7GunwoARfjIwKrxNhEJFLfMrsbI+G/smfkojAa60vxPcNeCZCqhjSra6ydBaAWSFzaqnb01c4VEdVCWWPM7svstKDWuKrZpwUb7dVsOzPcxUeGdYdfdgV8Vr+Mv1R8Tn/iHcSNWR8jjjv9URzama9qbp0XlBP4y2Jw6u/E577AZTVz/BM/OfySzSjl79o73FRxaFdfuPG5/XE58PbXEvAT8UBn1HKuSIB8ThYwiZfJnd8z768Aib/3R/iN4J0VeMXcVwvynbl/735OBV6BKTfyT+e/T4/f7dP3uW8F3Aqs/PIHbWXeeeKjnSsAAAAASUVORK5CYII=";
 	identity = new Float32Array([
@@ -19612,7 +21517,7 @@ require.register("forresto-seriously/effects/seriously.ascii.js", function(expor
 		0, 0, 0, 1
 	]);
 
-	Seriously.plugin('ascii', (function () {
+	Seriously.plugin('ascii', function () {
 		var baseShader,
 			scaledBuffer,
 			lettersTexture,
@@ -19660,6 +21565,10 @@ require.register("forresto-seriously/effects/seriously.ascii.js", function(expor
 				gl.bindTexture(gl.TEXTURE_2D, this.texture || this.frameBuffer && this.frameBuffer.texture);
 				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 				gl.bindTexture(gl.TEXTURE_2D, null);
+
+				scaledBuffer = new Seriously.util.FrameBuffer(gl, 1, 1);
+
+				this.uniforms.transform = identity;
 			},
 			shader: function (inputs, shaderSource) {
 				baseShader = new Seriously.util.ShaderProgram(this.gl, shaderSource.vertex, shaderSource.fragment);
@@ -19674,13 +21583,13 @@ require.register("forresto-seriously/effects/seriously.ascii.js", function(expor
 					'uniform sampler2D source;\n' +
 					'uniform sampler2D letters;\n' +
 					'uniform vec4 background;\n' +
-					'uniform vec3 srsSize;\n' +
+					'uniform vec2 resolution;\n' +
 					'\n' +
 					'const vec3 lumcoeff = vec3(0.2125,0.7154,0.0721);\n' +
 					'const vec2 fontSize = vec2(8.0, 8.0);\n' +
 					'\n' +
 					'vec4 lookup(float ascii) {\n' +
-					'	vec2 pos = mod(vTexCoord * srsSize.xy, fontSize) / vec2(752.0, fontSize.x) + vec2(ascii, 0.0);\n' +
+					'	vec2 pos = mod(vTexCoord * resolution, fontSize) / vec2(752.0, fontSize.x) + vec2(ascii, 0.0);\n' +
 					'	return texture2D(letters, pos);\n' +
 					'}\n' +
 					'\n' +
@@ -19702,25 +21611,14 @@ require.register("forresto-seriously/effects/seriously.ascii.js", function(expor
 					scaledWidth = Math.ceil(width / 8);
 					scaledHeight = Math.ceil(height / 8);
 
-					//todo: calculate projection based on width/height
-					//mat4.perspective(this.fov, this.width / this.height, 1, 100, this.projection);
-					//uniforms.projection = identity;
-					uniforms.transform = identity;
+					unif.resolution = uniforms.resolution;
+					unif.transform = identity;
 
-					unif.srsSize = uniforms.srsSize;
-					unif.projection = this.projection;
-					unif.transform = this.transform;
-
-					if (scaledBuffer) {
-						scaledBuffer.destroy();
-					}
-
-					scaledBuffer = new Seriously.util.FrameBuffer(gl, scaledWidth, scaledHeight);
+					scaledBuffer.resize(scaledWidth, scaledHeight);
 
 					//so it stays blocky
 					gl.bindTexture(gl.TEXTURE_2D, scaledBuffer.texture);
 					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
 				}
 
 
@@ -19730,49 +21628,57 @@ require.register("forresto-seriously/effects/seriously.ascii.js", function(expor
 					blend: false
 				});
 
-				unif.transform = this.transform;
 				unif.source = scaledBuffer.texture;
 				unif.background = uniforms.background;
 
 				parent(shader, model, unif, frameBuffer);
 			},
-			inPlace: false,
-			inputs: {
-				source: {
-					type: 'image',
-					uniform: 'source',
-					shaderDirty: false
-				},
-				background: {
-					type: 'color',
-					uniform: 'background',
-					defaultValue: [0, 0, 0, 1]
+			destroy: function () {
+				if (scaledBuffer) {
+					scaledBuffer.destroy();
 				}
-			},
-			description: 'Display image as ascii text in 8-bit color.',
-			title: 'Ascii Text'
+				if (gl && lettersTexture) {
+					gl.deleteTexture(lettersTexture);
+				}
+			}
 		};
-	}()));
-
+	},
+	{
+		inPlace: false,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source',
+				shaderDirty: false
+			},
+			background: {
+				type: 'color',
+				uniform: 'background',
+				defaultValue: [0, 0, 0, 1]
+			}
+		},
+		description: 'Display image as ascii text in 8-bit color.',
+		title: 'Ascii Text'
+	});
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.bleach-bypass.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.bleach-bypass.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -19849,22 +21755,22 @@ require.register("forresto-seriously/effects/seriously.bleach-bypass.js", functi
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.blend.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.blend.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -19880,43 +21786,201 @@ require.register("forresto-seriously/effects/seriously.blend.js", function(expor
 	** Post: http://blog.mouaif.org/?p=94
 
 	*/
-	Seriously.plugin('blend', (function () {
-		var modes = {
-			'normal': 'BlendNormal',
-			'lighten': 'BlendLighten',
-			'darken': 'BlendDarken',
-			'multiply': 'BlendMultiply',
-			'average': 'BlendAverage',
-			'add': 'BlendAdd',
-			'subtract': 'BlendSubtract',
-			'difference': 'BlendDifference',
-			'negation': 'BlendNegation',
-			'exclusion': 'BlendExclusion',
-			'screen': 'BlendScreen',
-			'overlay': 'BlendOverlay',
-			'softlight': 'BlendSoftLight',
-			'hardlight': 'BlendHardLight',
-			'colordodge': 'BlendColorDodge',
-			'colorburn': 'BlendColorBurn',
-			'lineardodge': 'BlendLinearDodge',
-			'linearburn': 'BlendLinearBurn',
-			'linearlight': 'BlendLinearLight',
-			'vividlight': 'BlendVividLight',
-			'pinlight': 'BlendPinLight',
-			'hardmix': 'BlendHardMix',
-			'reflect': 'BlendReflect',
-			'glow': 'BlendGlow',
-			'phoenix': 'BlendPhoenix'
-		};
-		return {
-			initialize: function (parent) {
-				parent();
-			},
-			shader: function (inputs, shaderSource) {
-				var mode = inputs.mode || 'normal';
-				mode = mode.toLowerCase();
-				mode = modes[mode] || 'BlendNormal';
+	var modes = {
+		'normal': 'BlendNormal',
+		'lighten': 'BlendLighten',
+		'darken': 'BlendDarken',
+		'multiply': 'BlendMultiply',
+		'average': 'BlendAverage',
+		'add': 'BlendAdd',
+		'subtract': 'BlendSubtract',
+		'difference': 'BlendDifference',
+		'negation': 'BlendNegation',
+		'exclusion': 'BlendExclusion',
+		'screen': 'BlendScreen',
+		'overlay': 'BlendOverlay',
+		'softlight': 'BlendSoftLight',
+		'hardlight': 'BlendHardLight',
+		'colordodge': 'BlendColorDodge',
+		'colorburn': 'BlendColorBurn',
+		'lineardodge': 'BlendLinearDodge',
+		'linearburn': 'BlendLinearBurn',
+		'linearlight': 'BlendLinearLight',
+		'vividlight': 'BlendVividLight',
+		'pinlight': 'BlendPinLight',
+		'hardmix': 'BlendHardMix',
+		'reflect': 'BlendReflect',
+		'glow': 'BlendGlow',
+		'phoenix': 'BlendPhoenix'
+	},
+	nativeBlendModes = {
+		normal: ['FUNC_ADD', 'SRC_ALPHA', 'ONE_MINUS_SRC_ALPHA', 'SRC_ALPHA', 'DST_ALPHA']/*,
+		add: ['FUNC_ADD', 'SRC_ALPHA', 'ONE_MINUS_SRC_ALPHA', 'SRC_ALPHA', 'DST_ALPHA']*/
+	},
+	identity = new Float32Array([
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	]);
 
+	Seriously.plugin('blend', function () {
+		var topUniforms,
+			bottomUniforms,
+			topOpts = {
+				clear: false
+			};
+
+		// custom resize method
+		this.resize = function () {
+			var width,
+				height,
+				mode = this.inputs.sizeMode,
+				node,
+				fn,
+				i,
+				bottom = this.inputs.bottom,
+				top = this.inputs.top;
+
+			if (mode === 'bottom' || mode === 'top') {
+				node = this.inputs[mode];
+				if (node) {
+					width = node.width;
+					height = node.height;
+				} else {
+					width = 1;
+					height = 1;
+				}
+			} else {
+				if (bottom) {
+					if (top) {
+						fn = (mode === 'union' ? Math.max : Math.min);
+						width = fn(bottom.width, top.width);
+						height = fn(bottom.height, top.height);
+					} else {
+						width = bottom.width;
+						height = bottom.height;
+					}
+				} else if (top) {
+					width = top.width;
+					height = top.height;
+				} else {
+					width = 1;
+					height = 1;
+				}
+			}
+
+			if (this.width !== width || this.height !== height) {
+				this.width = width;
+				this.height = height;
+
+				this.uniforms.resolution[0] = width;
+				this.uniforms.resolution[1] = height;
+
+				if (this.frameBuffer) {
+					this.frameBuffer.resize(width, height);
+				}
+
+				this.setDirty();
+			}
+
+			if (topUniforms) {
+				if (bottom) {
+					bottomUniforms.resolution[0] = bottom.width;
+					bottomUniforms.resolution[1] = bottom.height;
+				}
+				if (top) {
+					topUniforms.resolution[0] = top.width;
+					topUniforms.resolution[1] = top.height;
+				}
+			}
+
+			for (i = 0; i < this.targets.length; i++) {
+				this.targets[i].resize();
+			}
+		};
+
+		return {
+			shader: function (inputs, shaderSource) {
+				var mode = inputs.mode || 'normal',
+					node;
+				mode = mode.toLowerCase();
+
+				if (nativeBlendModes[mode]) {
+					//todo: move this to an 'update' event for 'mode' input
+					if (!topUniforms) {
+						node = this.inputs.top;
+						topUniforms = {
+							resolution: [
+								node && node.width || 1,
+								node && node.height || 1
+							],
+							targetRes: this.uniforms.resolution,
+							source: node,
+							transform: node && node.cumulativeMatrix || identity,
+							opacity: 1
+						};
+
+						node = this.inputs.bottom;
+						bottomUniforms = {
+							resolution: [
+								node && node.width || 1,
+								node && node.height || 1
+							],
+							targetRes: this.uniforms.resolution,
+							source: node,
+							transform: node && node.cumulativeMatrix || identity,
+							opacity: 1
+						};
+					}
+
+					shaderSource.vertex = [
+						'precision mediump float;',
+
+						'attribute vec4 position;',
+						'attribute vec2 texCoord;',
+
+						'uniform vec2 resolution;',
+						'uniform vec2 targetRes;',
+						'uniform mat4 transform;',
+
+						'varying vec2 vTexCoord;',
+						'varying vec4 vPosition;',
+
+						'void main(void) {',
+						// first convert to screen space
+						'	vec4 screenPosition = vec4(position.xy * resolution / 2.0, position.z, position.w);',
+						'	screenPosition = transform * screenPosition;',
+
+						// convert back to OpenGL coords
+						'	gl_Position.xy = screenPosition.xy * 2.0 / resolution;',
+						'	gl_Position.z = screenPosition.z * 2.0 / (resolution.x / resolution.y);',
+						'	gl_Position.xy *= resolution / targetRes;',
+						'	gl_Position.w = screenPosition.w;',
+						'	vTexCoord = texCoord;',
+						'	vPosition = gl_Position;',
+						'}\n'
+					].join('\n');
+
+					shaderSource.fragment = [
+						'precision mediump float;',
+						'varying vec2 vTexCoord;',
+						'varying vec4 vPosition;',
+						'uniform sampler2D source;',
+						'uniform float opacity;',
+						'void main(void) {',
+						'	gl_FragColor = texture2D(source, vTexCoord);',
+						'	gl_FragColor.a *= opacity;',
+						'}'
+					].join('\n');
+
+					return shaderSource;
+				}
+
+				topUniforms = null;
+				bottomUniforms = null;
+
+				mode = modes[mode] || 'BlendNormal';
 				shaderSource.fragment = '#define BlendFunction ' + mode + '\n' +
 					'#ifdef GL_ES\n\n' +
 					'precision mediump float;\n\n' +
@@ -19972,7 +22036,7 @@ require.register("forresto-seriously/effects/seriously.blend.js", function(expor
 					'#define BlendGlow(base, blend)			BlendReflect(blend, base)\n' +
 					'#define BlendPhoenix(base, blend)		(min(base, blend) - max(base, blend) + vec3(1.0))\n' +
 					//'#define BlendOpacity(base, blend, F, O)	(F(base, blend) * O + blend * (1.0 - O))\n' +
-					'#define BlendOpacity(base, blend, F, O, A)	((F(base.rgb * blend.a * O, blend.rgb * blend.a * O) + base.rgb * base.a * (1.0 - blend.a * O)) / A)\n' +
+					'#define BlendOpacity(base, blend, BlendFn, Opacity, Alpha)	((BlendFn(base.rgb * blend.a * Opacity, blend.rgb * blend.a * Opacity) + base.rgb * base.a * (1.0 - blend.a * Opacity)) / Alpha)\n' +
 					'\n' +
 					'varying vec2 vTexCoord;\n' +
 					'varying vec4 vPosition;\n' +
@@ -19987,8 +22051,7 @@ require.register("forresto-seriously/effects/seriously.blend.js", function(expor
 					'	vec3 color;\n' +
 					'	vec4 topPixel = texture2D(top, vTexCoord);\n' +
 					'	vec4 bottomPixel = texture2D(bottom, vTexCoord);\n' +
-					//'	topPixel.a *= opacity;\n' +
-					//'	float alpha = 1.0 - (1.0 - topPixel.a) * (1.0 - bottomPixel.a);\n' +
+
 					'	float alpha = topPixel.a + bottomPixel.a * (1.0 - topPixel.a);\n' +
 					'	if (alpha == 0.0) {\n' +
 					'		color = vec3(0.0);\n' +
@@ -20000,22 +22063,66 @@ require.register("forresto-seriously/effects/seriously.blend.js", function(expor
 
 				return shaderSource;
 			},
-			inPlace: true,
+			draw: function (shader, model, uniforms, frameBuffer, draw) {
+				if (nativeBlendModes[this.inputs.mode]) {
+					if (this.inputs.bottom) {
+						draw(shader, model, bottomUniforms, frameBuffer);
+					}
+
+					if (this.inputs.top) {
+						draw(shader, model, topUniforms, frameBuffer, null, topOpts);
+					}
+				} else {
+					draw(shader, model, uniforms, frameBuffer);
+				}
+			},
 			inputs: {
 				top: {
 					type: 'image',
-					uniform: 'top'
+					uniform: 'top',
+					update: function () {
+						if (topUniforms) {
+							topUniforms.source = this.inputs.top;
+							topUniforms.transform = this.inputs.top.cumulativeMatrix || identity;
+						}
+						this.resize();
+					}
 				},
 				bottom: {
 					type: 'image',
-					uniform: 'bottom'
+					uniform: 'bottom',
+					update: function () {
+						if (bottomUniforms) {
+							bottomUniforms.source = this.inputs.bottom;
+							bottomUniforms.transform = this.inputs.bottom.cumulativeMatrix || identity;
+						}
+						this.resize();
+					}
 				},
 				opacity: {
 					type: 'number',
 					uniform: 'opacity',
 					defaultValue: 1,
 					min: 0,
-					max: 1
+					max: 1,
+					update: function (opacity) {
+						if (topUniforms) {
+							topUniforms.opacity = opacity;
+						}
+					}
+				},
+				sizeMode: {
+					type: 'enum',
+					defaultValue: 'bottom',
+					options: [
+						'bottom',
+						'top',
+						'union',
+						'intersection'
+					],
+					update: function () {
+						this.resize();
+					}
 				},
 				mode: {
 					type: 'enum',
@@ -20049,30 +22156,431 @@ require.register("forresto-seriously/effects/seriously.blend.js", function(expor
 						['phoenix', 'Phoenix']
 					]
 				}
-			},
-			description: 'Blend two layers',
-			title: 'Blend'
+			}
 		};
-	}()));
+	},
+	{
+		inPlace: function () {
+			return !!nativeBlendModes[this.inputs.mode];
+		},
+		description: 'Blend two layers',
+		title: 'Blend'
+	});
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.channels.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.blur.js", function(exports, require, module){
+/* global define, require */
+/*
+Blur
+
+Adapted from v002 by Anton Marini and Tom Butterworth
+* Copyright vade - Anton Marini
+* Creative Commons, Attribution - Non Commercial - Share Alike 3.0
+
+http://v002.info/plugins/v002-blurs/
+*/
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	var passes = [0.2, 0.3, 0.5, 0.8, 1],
+		finalPass = passes.length - 1,
+		horizontal = [1, 0],
+		vertical = [0, 1],
+		identity = new Float32Array([
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1
+		]);
+
+	Seriously.plugin('blur', function (options) {
+		var fbHorizontal,
+			fbVertical,
+			baseShader,
+			loopUniforms = {
+				amount: 0,
+				inputScale: 1,
+				resolution: [this.width, this.height],
+				transform: identity,
+				direction: null,
+				projection: new Float32Array([
+					1, 0, 0, 0,
+					0, 1, 0, 0,
+					0, 0, 1, 0,
+					0, 0, 0, 1
+				])
+			};
+
+		return {
+			initialize: function (parent) {
+				var gl;
+
+				parent();
+
+				gl = this.gl;
+
+				if (!gl) {
+					return;
+				}
+
+				fbHorizontal = new Seriously.util.FrameBuffer(gl, this.width, this.height);
+				fbVertical = new Seriously.util.FrameBuffer(gl, this.width, this.height);
+			},
+			shader: function (inputs, shaderSource) {
+				var gl = this.gl,
+					/*
+					Some devices or browsers (e.g. IE11 preview) don't support enough
+					varying vectors, so we need to fallback to a less efficient method
+					*/
+					maxVaryings = gl.getParameter(gl.MAX_VARYING_VECTORS),
+					defineVaryings = (maxVaryings >= 10 ? '#define USE_VARYINGS' : '');
+
+				baseShader = new Seriously.util.ShaderProgram(gl, shaderSource.vertex, shaderSource.fragment);
+
+				shaderSource.vertex = [
+					defineVaryings,
+					'#define PI ' + Math.PI,
+					'precision mediump float;',
+
+					'attribute vec4 position;',
+					'attribute vec2 texCoord;',
+
+					'uniform vec2 resolution;',
+					'uniform mat4 projection;',
+					'uniform mat4 transform;',
+
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+
+					'uniform vec2 direction;',
+					'uniform float amount;',
+					'uniform float inputScale;',
+
+					'const vec2 zero = vec2(0.0, 0.0);',
+					'#ifdef USE_VARYINGS',
+					'vec2 one;',
+					'vec2 amount1;',
+					'varying vec2 vTexCoord1;',
+					'varying vec2 vTexCoord2;',
+					'varying vec2 vTexCoord3;',
+					'varying vec2 vTexCoord4;',
+					'varying vec2 vTexCoord5;',
+					'varying vec2 vTexCoord6;',
+					'varying vec2 vTexCoord7;',
+					'varying vec2 vTexCoord8;',
+					'#else',
+					'varying vec2 one;',
+					'varying vec2 amount1;',
+					'#endif',
+
+					'void main(void) {',
+					// first convert to screen space
+					'	vec4 screenPosition = vec4(position.xy * resolution / 2.0, position.z, position.w);',
+					'	screenPosition = transform * screenPosition;',
+
+					// convert back to OpenGL coords
+					'	gl_Position = screenPosition;',
+					'	gl_Position.xy = screenPosition.xy * 2.0 / resolution;',
+					'	gl_Position.z = screenPosition.z * 2.0 / (resolution.x / resolution.y);',
+					'	vTexCoord = texCoord;',
+					'	vPosition = gl_Position;',
+
+					'	one = vec2(1.0, 1.0) * inputScale;',
+					'	if (inputScale < 1.0) {',
+					'		one -= 1.0 / resolution;',
+					'	}',
+					//'	one *= inputScale;',
+					'	vTexCoord = max(zero, min(one, texCoord.st * inputScale));',
+					'	amount1 = direction * (inputScale * amount * 5.0 / resolution);',
+
+					'#ifdef USE_VARYINGS',
+					'	vec2 amount2 = amount1 * 3.0;',
+					'	vec2 amount3 = amount1 * 6.0;',
+					'	vec2 amount4 = amount1 * 9.0;',
+					'	vec2 amount5 = -amount1;',
+					'	vec2 amount6 = amount5 * 3.0;',
+					'	vec2 amount7 = amount5 * 6.0;',
+					'	vec2 amount8 = amount5 * 9.0;',
+					'	vTexCoord1 = max(zero, min(one, vTexCoord + amount1));',
+					'	vTexCoord2 = max(zero, min(one, vTexCoord + amount2));',
+					'	vTexCoord3 = max(zero, min(one, vTexCoord + amount3));',
+					'	vTexCoord4 = max(zero, min(one, vTexCoord + amount4));',
+					'	vTexCoord5 = max(zero, min(one, vTexCoord + amount5));',
+					'	vTexCoord6 = max(zero, min(one, vTexCoord + amount6));',
+					'	vTexCoord7 = max(zero, min(one, vTexCoord + amount7));',
+					'	vTexCoord8 = max(zero, min(one, vTexCoord + amount8));',
+					'#endif',
+					'}'
+				].join('\n');
+				shaderSource.fragment = [
+					defineVaryings,
+
+					'precision mediump float;\n',
+
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+
+					'uniform sampler2D source;',
+					'uniform float angle;',
+					'uniform float amount;',
+					'uniform float inputScale;',
+
+					'#ifdef USE_VARYINGS',
+					'varying vec2 vTexCoord1;',
+					'varying vec2 vTexCoord2;',
+					'varying vec2 vTexCoord3;',
+					'varying vec2 vTexCoord4;',
+					'varying vec2 vTexCoord5;',
+					'varying vec2 vTexCoord6;',
+					'varying vec2 vTexCoord7;',
+					'varying vec2 vTexCoord8;',
+					'#else',
+					'varying vec2 amount1;',
+					'varying vec2 one;',
+					'const vec2 zero = vec2(0.0, 0.0);',
+					'#endif',
+
+					'void main(void) {',
+					'#ifndef USE_VARYINGS',
+					'	vec2 vTexCoord1 = max(zero, min(one, vTexCoord + amount1));',
+					'	vec2 vTexCoord2 = max(zero, min(one, vTexCoord + amount1 * 3.0));',
+					'	vec2 vTexCoord3 = max(zero, min(one, vTexCoord + amount1 * 6.0));',
+					'	vec2 vTexCoord4 = max(zero, min(one, vTexCoord + amount1 * 9.0));',
+					'	vec2 vTexCoord5 = max(zero, min(one, vTexCoord - amount1));',
+					'	vec2 vTexCoord6 = max(zero, min(one, vTexCoord - amount1 * 3.0));',
+					'	vec2 vTexCoord7 = max(zero, min(one, vTexCoord - amount1 * 6.0));',
+					'	vec2 vTexCoord8 = max(zero, min(one, vTexCoord - amount1 * 9.0));',
+					'#endif',
+					'	gl_FragColor = texture2D(source, vTexCoord) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord1) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord2) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord3) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord4) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord5) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord6) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord7) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord8) / 9.0;',
+					'}'
+				].join('\n');
+
+				return shaderSource;
+			},
+			draw: function (shader, model, uniforms, frameBuffer, parent) {
+				var i,
+					pass,
+					amount,
+					width,
+					height,
+					opts = {
+						width: 0,
+						height: 0,
+						blend: false
+					},
+					previousPass = 1;
+
+				amount = this.inputs.amount;
+				if (!amount) {
+					uniforms.source = this.inputs.source.texture;
+					parent(baseShader, model, uniforms, frameBuffer);
+					return;
+				}
+
+				if (amount <= 0.01) {
+					//horizontal pass
+					uniforms.inputScale = 1;
+					uniforms.direction = horizontal;
+					uniforms.source = this.inputs.source.texture;
+					parent(shader, model, uniforms, fbHorizontal.frameBuffer);
+
+					//vertical pass
+					uniforms.direction = vertical;
+					uniforms.source = fbVertical.texture;
+					parent(shader, model, uniforms, frameBuffer);
+					return;
+				}
+
+				loopUniforms.amount = amount;
+				loopUniforms.source = this.inputs.source.texture;
+				loopUniforms.projection[0] = this.height / this.width;
+
+				for (i = 0; i < passes.length; i++) {
+					pass = Math.min(1, passes[i] / amount);
+					width = Math.floor(pass * this.width);
+					height = Math.floor(pass * this.height);
+
+					loopUniforms.resolution[0] = width;
+					loopUniforms.resolution[1] = height;
+					loopUniforms.inputScale = previousPass;
+					previousPass = pass;
+
+					opts.width = width;
+					opts.height = height;
+
+					//horizontal pass
+					loopUniforms.direction = horizontal;
+					parent(shader, model, loopUniforms, fbHorizontal.frameBuffer, null, opts);
+
+					//vertical pass
+					loopUniforms.inputScale = pass;
+					loopUniforms.source = fbHorizontal.texture;
+					loopUniforms.direction = vertical;
+					parent(shader, model, loopUniforms, i === finalPass ? frameBuffer : fbVertical.frameBuffer, null, opts);
+
+					loopUniforms.source = fbVertical.texture;
+				}
+			},
+			resize: function () {
+				loopUniforms.resolution[0] = this.width;
+				loopUniforms.resolution[1] = this.height;
+				if (fbHorizontal) {
+					fbHorizontal.resize(this.width, this.height);
+					fbVertical.resize(this.width, this.height);
+				}
+			},
+			destroy: function () {
+				if (fbHorizontal) {
+					fbHorizontal.destroy();
+					fbVertical.destroy();
+					fbHorizontal = null;
+					fbVertical = null;
+				}
+
+				if (baseShader) {
+					baseShader.destroy();
+				}
+
+				loopUniforms = null;
+			}
+		};
+	},
+	{
+		inputs: {
+			source: {
+				type: 'image',
+				shaderDirty: false
+			},
+			amount: {
+				type: 'number',
+				uniform: 'amount',
+				defaultValue: 0.2,
+				min: 0,
+				max: 1
+			}
+		},
+		title: 'Gaussian Blur'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.brightness-contrast.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	Seriously.plugin('brightness-contrast', {
+		shader: function (inputs, shaderSource) {
+			shaderSource.fragment = [
+				'#ifdef GL_ES\n',
+				'precision mediump float;\n',
+				'#endif\n',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'uniform sampler2D source;',
+				'uniform float brightness;',
+				'uniform float saturation;',
+				'uniform float contrast;',
+
+				'const vec3 half3 = vec3(0.5);',
+
+				'void main(void) {',
+				'	vec4 pixel = texture2D(source, vTexCoord);',
+
+				//adjust brightness
+				'	vec3 color = pixel.rgb * brightness;',
+
+				//adjust contrast
+				'	color = (color - half3) * contrast + half3;',
+
+				//keep alpha the same
+				'	gl_FragColor = vec4(color, pixel.a);',
+				'}'
+			].join('\n');
+			return shaderSource;
+		},
+		inPlace: true,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source'
+			},
+			brightness: {
+				type: 'number',
+				uniform: 'brightness',
+				defaultValue: 1,
+				min: 0
+			},
+			contrast: {
+				type: 'number',
+				uniform: 'contrast',
+				defaultValue: 1,
+				min: 0
+			}
+		},
+		title: 'Brightness/Contrast',
+		description: 'Multiply brightness and contrast values. Works the same as CSS filters.'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.channels.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -20094,103 +22602,238 @@ require.register("forresto-seriously/effects/seriously.channels.js", function(ex
 			w: 3
 		};
 
-	function validateChannel(value, input, name) {
-		var val;
-		if (typeof value === 'string') {
-			val = value.charAt(0).toLowerCase();
-			val = channelLookup[val];
-			if (val === undefined) {
-				val = -1;
+	Seriously.plugin('channels', function () {
+		var sources = [],
+			shaders = [],
+			matrices = [],
+			me = this;
+
+		function validateChannel(value, input, name) {
+			var val;
+			if (typeof value === 'string') {
+				val = value.charAt(0).toLowerCase();
+				val = channelLookup[val];
+				if (val === undefined) {
+					val = -1;
+				}
+				if (val < 0) {
+					val = parseFloat(value);
+				}
+			} else {
+				val = value;
 			}
-			if (val < 0) {
-				val = parseFloat(value);
+
+			if (val === 0 || val === 1 || val === 2 || val === 3) {
+				return val;
 			}
-		} else {
-			val = value;
-		}
-		
-		if (val === 0 || val === 1 || val === 2 || val === 3) {
-			return val;
+
+			return me.inputs[name];
 		}
 
-		return this.inputs[name];
-	}
+		function updateChannels() {
+			var inputs = me.inputs,
+				i, j,
+				source,
+				matrix;
 
+			for (i = 0; i < sources.length; i++) {
+				source = sources[i];
+				matrix = matrices[i];
+				if (!matrix) {
+					matrix = matrices[i] = [];
+					me.uniforms['channels' + i] = matrix;
+				}
 
-	Seriously.plugin('channels', (function () {
-		var shaders = [],
-			sources = [],
-			matrices = [
-				[],
-				[],
-				[],
-				[]
-			];
+				for (j = 0; j < 16; j++) {
+					matrix[j] = 0;
+				}
+
+				matrix[inputs.red] = (inputs.redSource === source) ? 1 : 0;
+				matrix[4 + inputs.green] = (inputs.greenSource === source) ? 1 : 0;
+				matrix[8 + inputs.blue] = (inputs.blueSource === source) ? 1 : 0;
+				matrix[12 + inputs.alpha] = (inputs.alphaSource === source) ? 1 : 0;
+			}
+		}
+
+		function updateSources() {
+			var inputs = me.inputs;
+
+			function validateSource(name) {
+				var s, j;
+				s = inputs[name];
+				if (!s) {
+					s = inputs[name] = inputs.source;
+				}
+
+				j = sources.indexOf(s);
+				if (j < 0) {
+					j = sources.length;
+					sources.push(s);
+					me.uniforms['source' + j] = s;
+				}
+			}
+			sources.length = 0;
+
+			validateSource('redSource');
+			validateSource('greenSource');
+			validateSource('blueSource');
+			validateSource('alphaSource');
+
+			me.resize();
+
+			updateChannels();
+		}
+
+		// custom resize method
+		this.resize = function () {
+			var width,
+				height,
+				mode = this.inputs.sizeMode,
+				i,
+				resolution,
+				source;
+
+			if (!sources.length) {
+				width = 1;
+				height = 1;
+			} else if (sources.length === 1) {
+				source = sources[0];
+				width = source.width;
+				height = source.height;
+			} else if (mode === 'union') {
+				width = 0;
+				height = 0;
+				for (i = 0; i < sources.length; i++) {
+					source = sources[0];
+					width = Math.max(width, source.width);
+					height = Math.max(height, source.height);
+				}
+			} else if (mode === 'intersection') {
+				width = Infinity;
+				height = Infinity;
+				for (i = 0; i < sources.length; i++) {
+					source = sources[0];
+					width = Math.min(width, source.width);
+					height = Math.min(height, source.height);
+				}
+			} else {
+				source = me.inputs[mode + 'Source'];
+				if (source) {
+					width = source.width;
+					height = source.height;
+				} else {
+					width = 1;
+					height = 1;
+				}
+			}
+
+			for (i = 0; i < sources.length; i++) {
+				source = sources[i];
+				resolution = me.uniforms['resolution' + i];
+				if (resolution) {
+					resolution[0] = source.width;
+					resolution[1] = source.height;
+				} else {
+					me.uniforms['resolution' + i] = [source.width, source.height];
+				}
+			}
+
+			if (this.width !== width || this.height !== height) {
+				this.width = width;
+				this.height = height;
+
+				this.uniforms.resolution[0] = width;
+				this.uniforms.resolution[1] = height;
+
+				if (this.frameBuffer) {
+					this.frameBuffer.resize(width, height);
+				}
+
+				this.setDirty();
+			}
+
+			for (i = 0; i < this.targets.length; i++) {
+				this.targets[i].resize();
+			}
+		};
 
 		return {
-			shader: function (inputs, shaderSource) {
-				var i, j,
+			shader: function () {
+				var i,
 					frag,
+					vert,
 					shader,
 					uniforms = '',
 					samples = '',
-					source,
-					matrix;
+					varyings = '',
+					position = '';
 
-				function validateSource(name) {
-					var s, j;
-					s = inputs[name];
-					if (!s) {
-						s = inputs[name] = inputs.source;
-					}
+				/*
+				We'll restore this and the draw function below if we ever figure out a way to
+				add/& multiple renders without screwing up the brightness
+				shaderSource.fragment = [
+					'#ifdef GL_ES',
+					'precision mediump float;',
+					'#endif',
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+					'uniform mat4 channels;',
+					'uniform sampler2D source;',
+					//'uniform sampler2D previous;',
+					'void main(void) {',
+					'	vec4 pixel;',
+					'	if (any(lessThan(vTexCoord, vec2(0.0))) || any(greaterThanEqual(vTexCoord, vec2(1.0)))) {',
+					'		pixel = vec4(0.0);',
+					'	} else {',
+					'		pixel = texture2D(source, vTexCoord) * channels;',
+					//'		if (gl_FragColor.a == 0.0) gl_FragColor.a = 1.0;',
+					'	}',
+					'	gl_FragColor = pixel;',
+					'}'
+				].join('\n');
 
-					j = sources.indexOf(s);
-					if (j < 0) {
-						j = sources.length;
-						sources.push(s);
-					}
-				}
-				sources.splice(0, sources.length);
-
-				validateSource('redSource');
-				validateSource('greenSource');
-				validateSource('blueSource');
-				validateSource('alphaSource');
-
-				for (i = 0; i < sources.length; i++) {
-					source = sources[i];
-					matrix = matrices[i];
-
-					for (j = 0; j < 16; j++) {
-						matrix[j] = 0;
-					}
-
-					matrix[inputs.red] = (inputs.redSource === source) ? 1 : 0;
-					matrix[4 + inputs.green] = (inputs.greenSource === source) ? 1 : 0;
-					matrix[8 + inputs.blue] = (inputs.blueSource === source) ? 1 : 0;
-					matrix[12 + inputs.alpha] = (inputs.alphaSource === source) ? 1 : 0;
-					this.uniforms['source' + i] = source;
-					this.uniforms['channel' + i] = matrix;
-
-				}
-
-
+				return shaderSource;
+				*/
 				if (shaders[sources.length]) {
 					return shaders[sources.length];
 				}
 
 				for (i = 0; i < sources.length; i++) {
+					varyings += 'varying vec2 vTexCoord' + i + ';\n';
+
 					uniforms += 'uniform sampler2D source' + i + ';\n' +
-						'uniform mat4 channel' + i + ';\n';
-					samples += 'gl_FragColor += texture2D(source' + i + ', vTexCoord) * channel' + i + ';\n';
+						'uniform mat4 channels' + i + ';\n' +
+						'uniform vec2 resolution' + i + ';\n\n';
+
+					position += '    vTexCoord' + i + ' = (position.xy * resolution / resolution' + i + ') * 0.5 + 0.5;\n';
+
+					samples += '    if (all(greaterThanEqual(vTexCoord' + i + ', vec2(0.0))) && all(lessThan(vTexCoord' + i + ', vec2(1.0)))) {\n' +
+						'        gl_FragColor += texture2D(source' + i + ', vTexCoord' + i + ') * channels' + i + ';\n    }\n';
 				}
+
+				vert = ['#ifdef GL_ES',
+					'precision mediump float;',
+					'#endif',
+
+					'attribute vec4 position;',
+					'attribute vec2 texCoord;',
+
+					'uniform vec2 resolution;',
+					uniforms,
+
+					varyings,
+
+					'void main(void) {',
+					position,
+					'	gl_Position = position;',
+					'}\n'
+				].join('\n');
 
 				frag = '#ifdef GL_ES\n\n' +
 					'precision mediump float;\n\n' +
 					'#endif\n\n' +
 					'\n' +
-					'varying vec2 vTexCoord;\n' +
-					'varying vec4 vPosition;\n' +
+					varyings +
 					'\n' +
 					uniforms +
 					'\n' +
@@ -20198,83 +22841,127 @@ require.register("forresto-seriously/effects/seriously.channels.js", function(ex
 					'	gl_FragColor = vec4(0.0);\n' +
 					samples +
 					'}\n';
+
 				shader = new Seriously.util.ShaderProgram(this.gl,
-					shaderSource.vertex,
+					vert,
 					frag);
 
 				shaders[sources.length] = shader;
 				return shader;
 			},
-			inPlace: true,
+			/*
+			draw: function (shader, model, uniforms, frameBuffer, draw) {
+				var i,
+					source;
+
+				options.clear = true;
+				for (i = 0; i < sources.length; i++) {
+				//for (i = sources.length - 1; i >= 0; i--) {
+					uniforms.channels = matrices[i];
+					source = sources[i];
+					uniforms.source = sources[i];
+					//uniforms.resolution[]
+
+					draw(shader, model, uniforms, frameBuffer, null, options);
+					options.clear = false;
+				}
+			},
+			*/
 			inputs: {
+				sizeMode: {
+					type: 'enum',
+					defaultValue: 'red',
+					options: [
+						'red',
+						'green',
+						'blue',
+						'alpha',
+						'union',
+						'intersection'
+					],
+					update: function () {
+						this.resize();
+					}
+				},
 				source: {
 					type: 'image',
+					update: updateSources,
 					shaderDirty: true
 				},
 				redSource: {
 					type: 'image',
+					update: updateSources,
 					shaderDirty: true
 				},
 				greenSource: {
 					type: 'image',
+					update: updateSources,
 					shaderDirty: true
 				},
 				blueSource: {
 					type: 'image',
+					update: updateSources,
 					shaderDirty: true
 				},
 				alphaSource: {
 					type: 'image',
+					update: updateSources,
 					shaderDirty: true
 				},
 				red: {
 					type: 'enum',
 					options: channelOptions,
 					validate: validateChannel,
+					update: updateChannels,
 					defaultValue: 0
 				},
 				green: {
 					type: 'enum',
 					options: channelOptions,
 					validate: validateChannel,
+					update: updateChannels,
 					defaultValue: 1
 				},
 				blue: {
 					type: 'enum',
 					options: channelOptions,
 					validate: validateChannel,
+					update: updateChannels,
 					defaultValue: 2
 				},
 				alpha: {
 					type: 'enum',
 					options: channelOptions,
 					validate: validateChannel,
+					update: updateChannels,
 					defaultValue: 3
 				}
-			},
-			title: 'Channel Mapping',
-			description: ''
+			}
 		};
-	}()));
+	},
+	{
+		inPlace: false,
+		title: 'Channel Mapping'
+	});
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.chroma.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.chroma.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -20288,108 +22975,115 @@ require.register("forresto-seriously/effects/seriously.chroma.js", function(expo
 	*/
 	Seriously.plugin('chroma', {
 		shader: function (inputs, shaderSource) {
-			shaderSource.vertex = '#ifdef GL_ES\n' +
-				'precision mediump float;\n' +
-				'#endif \n' +
-				'\n' +
-				'attribute vec4 position;\n' +
-				'attribute vec2 texCoord;\n' +
-				'\n' +
-				'uniform vec3 srsSize;\n' +
-				'uniform mat4 projection;\n' +
-				'uniform mat4 transform;\n' +
-				'\n' +
-				'varying vec2 vTexCoord;\n' +
-				'varying vec4 vPosition;\n' +
-				'\n' +
-				'uniform vec4 screen;\n' +
-				'uniform float balance;\n' +
-				'varying float screenSat;\n' +
-				'varying vec3 screenPrimary;\n' +
-				'\n' +
-				'void main(void) {\n' +
-				'	float fmin = min(min(screen.r, screen.g), screen.b);    //Min. value of RGB\n' +
-				'	float fmax = max(max(screen.r, screen.g), screen.b);    //Max. value of RGB\n' +
-				'	float secondaryComponents;\n' +
-				'\n' +
-				//'	luminance = (fmax + fmin) / 2.0; // Luminance\n' +
-				//'	screenSat = fmax - fmin; // Saturation\n' +
-				'	screenPrimary = step(fmax, screen.rgb);\n' +
-				'	secondaryComponents = dot(1.0 - screenPrimary, screen.rgb);\n' +
-				'	screenSat = fmax - mix(secondaryComponents - fmin, secondaryComponents / 2.0, balance);\n' +
-				'\n' +
-			'	vec4 pos = position * vec4(srsSize.x / srsSize.y, 1.0, 1.0, 1.0);\n' +
-			'	gl_Position = transform * pos;\n' +
-			'	gl_Position.z -= srsSize.z;\n' +
-			'	gl_Position = projection * gl_Position;\n' +
-			'	gl_Position.z = 0.0;\n' + //prevent near clipping
-			'	vTexCoord = vec2(texCoord.s, texCoord.t);\n' +
-				'}\n';
-			shaderSource.fragment = '#ifdef GL_ES\n' +
-				'precision mediump float;\n' +
-				'#endif\n' +
-				'\n' +
-				'varying vec2 vTexCoord;\n' +
-				'varying vec4 vPosition;\n' +
-				'\n' +
-				'uniform sampler2D source;\n' +
-				'uniform vec4 screen;\n' +
-				'uniform float screenWeight;\n' +
-				'uniform float balance;\n' +
-				'uniform float clipBlack;\n' +
-				'uniform float clipWhite;\n' +
-				'uniform bool mask;\n' +
-				'\n' +
-				'varying float screenSat;\n' +
-				'varying vec3 screenPrimary;\n' +
-				'\n' +
-				'vec4 sourcePixel;\n' +
-				'\n' +
-				'const mat3 yuv = mat3(\n' +
-				'	54.213, 182.376, 18.411,\n' +
-				'	-54.213, -182.376, 236.589,\n' +
-				'	200.787, -182.376, -18.411\n' +
-				');\n' +
-				'\n' +
-				'float round(float n) {\n' +
-				'	return floor(n) + step(0.5, fract(n));\n' +
-				'}\n' +
-				'\n' +
-				'void main(void) {\n' +
-				'	float pixelSat, luminance, secondaryComponents;\n' +
-				'	vec3 pixelPrimary;\n' +
-				'	vec4 pixel = vec4(0.0);\n' +
-				'	sourcePixel = texture2D(source, vTexCoord);\n' +
+			shaderSource.vertex = [
+				'#ifdef GL_ES',
+				'precision mediump float;',
+				'#endif ',
 
-				'	float fmin = min(min(sourcePixel.r, sourcePixel.g), sourcePixel.b);    //Min. value of RGB\n' +
-				'	float fmax = max(max(sourcePixel.r, sourcePixel.g), sourcePixel.b);    //Max. value of RGB\n' +
-				//'	float delta = fmax - fmin;             //Delta RGB value\n' +
-				'\n' +
-				//'	luminance = (fmax + fmin) / 2.0; // Luminance\n' +
-				//'	luminance = dot(vec3(0.3, 0.59, 0.11), sourcePixel.rgb); // Luminance\n' +
-				'	luminance = fmax; // Luminance\n' +
-				'	pixelPrimary = step(fmax, sourcePixel.rgb);\n' +
-				//'	pixelSat = delta; // Saturation\n' +
-				'	secondaryComponents = dot(1.0 - pixelPrimary, sourcePixel.rgb);\n' +
-				'	pixelSat = fmax - mix(secondaryComponents - fmin, secondaryComponents / 2.0, balance);\n' + // Saturation
-				'	if (pixelSat < 0.1 || luminance < 0.1 || any(notEqual(pixelPrimary, screenPrimary))) {\n' +
-				'		pixel = sourcePixel;\n' +
-				//'		pixel = vec4(1.0);\n' +
+				'attribute vec4 position;',
+				'attribute vec2 texCoord;',
 
-				'	} else if (pixelSat < screenSat) {\n' +
-				'		float alpha = 1.0 - pixelSat / screenSat;\n' +
-				'		alpha = smoothstep(clipBlack, clipWhite, alpha);\n' +
-				//'		float despill = alpha / screenWeight;\n' +
-				'		pixel = vec4((sourcePixel.rgb - (1.0 - alpha) * screen.rgb * screenWeight) / alpha, alpha);\n' +
-				//'		pixel = vec4(vec3(alpha), 1.0);\n' +
-				'	}\n' +
+				'uniform vec2 resolution;',
+				'uniform mat4 transform;',
 
-				'	if (mask) {\n' +
-				'		gl_FragColor = vec4(vec3(pixel.a), 1.0);\n' +
-				'	} else {\n' +
-				'		gl_FragColor = pixel;\n' +
-				'	}\n' +
-				'}\n';
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'uniform vec4 screen;',
+				'uniform float balance;',
+				'varying float screenSat;',
+				'varying vec3 screenPrimary;',
+
+				'void main(void) {',
+				'	float fmin = min(min(screen.r, screen.g), screen.b);    //Min. value of RGB',
+				'	float fmax = max(max(screen.r, screen.g), screen.b);    //Max. value of RGB',
+				'	float secondaryComponents;',
+
+				//'	luminance = (fmax + fmin) / 2.0; // Luminance',
+				//'	screenSat = fmax - fmin; // Saturation',
+				'	screenPrimary = step(fmax, screen.rgb);',
+				'	secondaryComponents = dot(1.0 - screenPrimary, screen.rgb);',
+				'	screenSat = fmax - mix(secondaryComponents - fmin, secondaryComponents / 2.0, balance);',
+
+				// first convert to screen space
+				'	vec4 screenPosition = vec4(position.xy * resolution / 2.0, position.z, position.w);',
+				'	screenPosition = transform * screenPosition;',
+
+				// convert back to OpenGL coords
+				'	gl_Position = screenPosition;',
+				'	gl_Position.xy = screenPosition.xy * 2.0 / resolution;',
+				'	gl_Position.z = screenPosition.z * 2.0 / (resolution.x / resolution.y);',
+				'	vTexCoord = texCoord;',
+				'	vPosition = gl_Position;',
+				'}'
+			].join('\n');
+			shaderSource.fragment = [
+				'#ifdef GL_ES',
+				'precision mediump float;',
+				'#endif',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'uniform sampler2D source;',
+				'uniform vec4 screen;',
+				'uniform float screenWeight;',
+				'uniform float balance;',
+				'uniform float clipBlack;',
+				'uniform float clipWhite;',
+				'uniform bool mask;',
+
+				'varying float screenSat;',
+				'varying vec3 screenPrimary;',
+
+				'vec4 sourcePixel;',
+
+				'const mat3 yuv = mat3(',
+				'	54.213, 182.376, 18.411,',
+				'	-54.213, -182.376, 236.589,',
+				'	200.787, -182.376, -18.411',
+				');',
+
+				'float round(float n) {',
+				'	return floor(n) + step(0.5, fract(n));',
+				'}',
+
+				'void main(void) {',
+				'	float pixelSat, luminance, secondaryComponents;',
+				'	vec3 pixelPrimary;',
+				'	vec4 pixel = vec4(0.0);',
+				'	sourcePixel = texture2D(source, vTexCoord);',
+
+				'	float fmin = min(min(sourcePixel.r, sourcePixel.g), sourcePixel.b);    //Min. value of RGB',
+				'	float fmax = max(max(sourcePixel.r, sourcePixel.g), sourcePixel.b);    //Max. value of RGB',
+				//'	float delta = fmax - fmin;             //Delta RGB value',
+
+				//'	luminance = (fmax + fmin) / 2.0; // Luminance',
+				//'	luminance = dot(vec3(0.3, 0.59, 0.11), sourcePixel.rgb); // Luminance',
+				'	luminance = fmax; // Luminance',
+				'	pixelPrimary = step(fmax, sourcePixel.rgb);',
+				//'	pixelSat = delta; // Saturation',
+				'	secondaryComponents = dot(1.0 - pixelPrimary, sourcePixel.rgb);',
+				'	pixelSat = fmax - mix(secondaryComponents - fmin, secondaryComponents / 2.0, balance);', // Saturation
+				'	if (pixelSat < 0.1 || luminance < 0.1 || any(notEqual(pixelPrimary, screenPrimary))) {',
+				'		pixel = sourcePixel;',
+				//'		pixel = vec4(1.0);',
+
+				'	} else if (pixelSat < screenSat) {',
+				'		float alpha = 1.0 - pixelSat / screenSat;',
+				'		alpha = smoothstep(clipBlack, clipWhite, alpha);',
+				//'		float despill = alpha / screenWeight;',
+				'		pixel = vec4((sourcePixel.rgb - (1.0 - alpha) * screen.rgb * screenWeight) / alpha, alpha);',
+				//'		pixel = vec4(vec3(alpha), 1.0);',
+				'	}',
+
+				'	if (mask) {',
+				'		gl_FragColor = vec4(vec3(pixel.a), 1.0);',
+				'	} else {',
+				'		gl_FragColor = pixel;',
+				'	}',
+				'}'
+			].join('\n');
 			return shaderSource;
 		},
 		inPlace: true,
@@ -20443,22 +23137,22 @@ require.register("forresto-seriously/effects/seriously.chroma.js", function(expo
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.color.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.color.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -20493,22 +23187,156 @@ require.register("forresto-seriously/effects/seriously.color.js", function(expor
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.colorcube.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.colorcomplements.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	Seriously.plugin('colorcomplements', {
+		shader: function (inputs, shaderSource) {
+			shaderSource.fragment = [
+				'#ifdef GL_ES',
+				'precision mediump float;',
+				'#endif\n',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'uniform sampler2D source;',
+				'uniform vec4 guideColor;',
+				'uniform float correlation;',
+				'uniform float amount;',
+				'uniform float concentration;',
+
+				'float hueLerp(float h1, float h2, float v) {',
+				'	float d = abs(h1 - h2);',
+				'	if (d <= 0.5) {',
+				'		return mix(h1, h2, v);',
+				'	} else if (h1 < h2) {',
+				'		return fract(mix((h1 + 1.0), h2, v));',
+				'	} else {',
+				'		return fract(mix(h1, (h2 + 1.0), v));',
+				'	}',
+				'}',
+
+				//conversion functions borrowed from http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
+				'vec3 rgbToHsv(vec3 c) {',
+				'	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);',
+				'	vec4 p = c.g < c.b ? vec4(c.bg, K.wz) : vec4(c.gb, K.xy);',
+				'	vec4 q = c.r < p.x ? vec4(p.xyw, c.r) : vec4(c.r, p.yzx);',
+
+				'	float d = q.x - min(q.w, q.y);',
+				'	float e = 1.0e-10;',
+				'	return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);',
+				'}',
+
+				'vec3 hsvToRgb(vec3 c) {',
+				'	vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);',
+				'	vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);',
+				'	return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);',
+				'}',
+
+				'vec3 hsvComplement(vec3 hsv) {',
+				'	vec3 compl = hsv;',
+				'	compl.x = mod(compl.x - 0.5, 1.0);',
+				'	return compl;',
+				'}',
+
+				'void main(void) {',
+				'	vec4 pixel = texture2D(source, vTexCoord);',
+				'	vec3 hsv = rgbToHsv(pixel.rgb);',
+				'	vec3 hsvPole1 = rgbToHsv(guideColor.rgb);',
+				'	vec3 hsvPole2 = hsvPole1;',
+				'	hsvPole2 = hsvComplement(hsvPole1);',
+				'	float dist1 = abs(hsv.x - hsvPole1.x);',
+				'	dist1 = dist1 > 0.5 ? 1.0 - dist1 : dist1;',
+				'	float dist2 = abs(hsv.x - hsvPole2.x);',
+				'	dist2 = dist2 > 0.5 ? 1.0 - dist2 : dist2;',
+
+				'	float descent = smoothstep(0.0, correlation, hsv.y);',
+				'	vec3 outputHsv = hsv;',
+				'	vec3 pole = dist1 < dist2 ? hsvPole1 : hsvPole2;',
+				'	float dist = min(dist1, dist2);',
+				'	float c = descent * amount * (1.0 - pow((dist * 2.0), 1.0 / concentration));',
+				'	outputHsv.x = hueLerp(hsv.x, pole.x, c);',
+				'	outputHsv.y = mix(hsv.y, pole.y, c);',
+
+				'	gl_FragColor = vec4(hsvToRgb(outputHsv), pixel.a);',
+				'}'
+			].join('\n');
+			return shaderSource;
+		},
+		inPlace: true,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source'
+			},
+			amount: {
+				type: 'number',
+				uniform: 'amount',
+				min: 0,
+				max: 1,
+				defaultValue: 0.8
+			},
+			concentration: {
+				type: 'number',
+				uniform: 'concentration',
+				min: 0.1,
+				max: 4,
+				defaultValue: 2
+			},
+			correlation: {
+				type: 'number',
+				uniform: 'correlation',
+				min: 0,
+				max: 1,
+				defaultValue: 0.5
+			},
+			guideColor: {
+				type: 'color',
+				uniform: 'guideColor',
+				defaultValue: [1, 0.5, 0, 1]
+			}
+		},
+		title: 'Color Complements',
+		categories: ['color'],
+		description: 'http://theabyssgazes.blogspot.com/2010/03/teal-and-orange-hollywood-please-stop.html'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.colorcube.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -20565,16 +23393,17 @@ require.register("forresto-seriously/effects/seriously.colorcube.js", function(e
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.daltonize.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.daltonize.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
 		var Seriously = root.Seriously;
 		if (!Seriously) {
@@ -20585,6 +23414,7 @@ require.register("forresto-seriously/effects/seriously.daltonize.js", function(e
 }(this, function (Seriously, undefined) {
 	'use strict';
 
+//todo: add Simulate mode http://mudcu.be/labs/Color/Vision/Javascript/Color.Vision.Simulate.js
 
 /*
 * Daltonization algorithm from:
@@ -20723,7 +23553,7 @@ require.register("forresto-seriously/effects/seriously.daltonize.js", function(e
 				title: 'Type',
 				type: 'enum',
 				uniform: 'cbtype',
-				defaultValue: '0.0',
+				defaultValue: '0.2',
 				options: [
 					['0.0', 'Off'],
 					['0.2', 'Protanope'],
@@ -20737,190 +23567,595 @@ require.register("forresto-seriously/effects/seriously.daltonize.js", function(e
 	});
 }));
 });
-require.register("forresto-seriously/effects/seriously.edge.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.directionblur.js", function(exports, require, module){
+/* global define, require */
+/*
+Directional Motion Blur
+
+Adapted from v002 by Anton Marini and Tom Butterworth
+* Copyright vade - Anton Marini
+* Creative Commons, Attribution - Non Commercial - Share Alike 3.0
+
+http://v002.info/plugins/v002-blurs/
+*/
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	var passes = [0.2, 0.3, 0.5, 0.8],
+		identity = new Float32Array([
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1
+		]);
+
+	Seriously.plugin('directionblur', function (options) {
+		var fbs,
+			baseShader,
+			loopUniforms = {
+				amount: 0,
+				angle: 0,
+				inputScale: 1,
+				resolution: [this.width, this.height],
+				transform: identity,
+				projection: new Float32Array([
+					1, 0, 0, 0,
+					0, 1, 0, 0,
+					0, 0, 1, 0,
+					0, 0, 0, 1
+				])
+			};
+
+		return {
+			initialize: function (parent) {
+				var gl;
+
+				parent();
+
+				gl = this.gl;
+
+				if (!gl) {
+					return;
+				}
+
+				fbs = [
+					new Seriously.util.FrameBuffer(gl, this.width, this.height),
+					new Seriously.util.FrameBuffer(gl, this.width, this.height)
+				];
+			},
+			shader: function (inputs, shaderSource) {
+				var gl = this.gl,
+					/*
+					Some devices or browsers (e.g. IE11 preview) don't support enough
+					varying vectors, so we need to fallback to a less efficient method
+					*/
+					maxVaryings = gl.getParameter(gl.MAX_VARYING_VECTORS),
+					defineVaryings = (maxVaryings >= 10 ? '#define USE_VARYINGS' : '');
+
+				baseShader = new Seriously.util.ShaderProgram(gl, shaderSource.vertex, shaderSource.fragment);
+
+				shaderSource.vertex = [
+					defineVaryings,
+					'precision mediump float;',
+
+					'attribute vec4 position;',
+					'attribute vec2 texCoord;',
+
+					'uniform vec2 resolution;',
+					'uniform mat4 projection;',
+					'uniform mat4 transform;',
+
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+
+					'uniform float angle;',
+					'uniform float amount;',
+					'uniform float inputScale;',
+
+					'const vec2 zero = vec2(0.0, 0.0);',
+					'#ifdef USE_VARYINGS',
+					'vec2 one;',
+					'vec2 amount1;',
+					'varying vec2 vTexCoord1;',
+					'varying vec2 vTexCoord2;',
+					'varying vec2 vTexCoord3;',
+					'varying vec2 vTexCoord4;',
+					'varying vec2 vTexCoord5;',
+					'varying vec2 vTexCoord6;',
+					'varying vec2 vTexCoord7;',
+					'varying vec2 vTexCoord8;',
+					'#else',
+					'varying vec2 one;',
+					'varying vec2 amount1;',
+					'#endif',
+
+					'void main(void) {',
+					// first convert to screen space
+					'	vec4 screenPosition = vec4(position.xy * resolution / 2.0, position.z, position.w);',
+					'	screenPosition = transform * screenPosition;',
+
+					// convert back to OpenGL coords
+					'	gl_Position = screenPosition;',
+					'	gl_Position.xy = screenPosition.xy * 2.0 / resolution;',
+					'	gl_Position.z = screenPosition.z * 2.0 / (resolution.x / resolution.y);',
+					'	vTexCoord = texCoord;',
+					'	vPosition = gl_Position;',
+
+					'	one = vec2(1.0, 1.0) * inputScale;',
+					'	if (inputScale < 1.0) {',
+					'		one -= 1.0 / resolution;',
+					'	}',
+					'	vTexCoord = max(zero, min(one, texCoord.st * inputScale));',
+					'	amount1 = vec2(cos(angle), sin(angle)) * amount * 5.0 / resolution;',
+
+					'#ifdef USE_VARYINGS',
+					'	vec2 amount2 = amount1 * 3.0;',
+					'	vec2 amount3 = amount1 * 6.0;',
+					'	vec2 amount4 = amount1 * 9.0;',
+					'	vec2 amount5 = -amount1;',
+					'	vec2 amount6 = amount5 * 3.0;',
+					'	vec2 amount7 = amount5 * 6.0;',
+					'	vec2 amount8 = amount5 * 9.0;',
+					'	vTexCoord1 = max(zero, min(one, vTexCoord + amount1));',
+					'	vTexCoord2 = max(zero, min(one, vTexCoord + amount2));',
+					'	vTexCoord3 = max(zero, min(one, vTexCoord + amount3));',
+					'	vTexCoord4 = max(zero, min(one, vTexCoord + amount4));',
+					'	vTexCoord5 = max(zero, min(one, vTexCoord + amount5));',
+					'	vTexCoord6 = max(zero, min(one, vTexCoord + amount6));',
+					'	vTexCoord7 = max(zero, min(one, vTexCoord + amount7));',
+					'	vTexCoord8 = max(zero, min(one, vTexCoord + amount8));',
+					'#endif',
+					'}'
+				].join('\n');
+				shaderSource.fragment = [
+					defineVaryings,
+
+					'precision mediump float;\n',
+
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+
+					'uniform sampler2D source;',
+					'uniform float angle;',
+					'uniform float amount;',
+					'uniform float inputScale;',
+
+					'#ifdef USE_VARYINGS',
+					'varying vec2 vTexCoord1;',
+					'varying vec2 vTexCoord2;',
+					'varying vec2 vTexCoord3;',
+					'varying vec2 vTexCoord4;',
+					'varying vec2 vTexCoord5;',
+					'varying vec2 vTexCoord6;',
+					'varying vec2 vTexCoord7;',
+					'varying vec2 vTexCoord8;',
+					'#else',
+					'varying vec2 amount1;',
+					'varying vec2 one;',
+					'const vec2 zero = vec2(0.0, 0.0);',
+					'#endif',
+
+					'void main(void) {',
+					'#ifndef USE_VARYINGS',
+					'	vec2 vTexCoord1 = max(zero, min(one, vTexCoord + amount1));',
+					'	vec2 vTexCoord2 = max(zero, min(one, vTexCoord + amount1 * 3.0));',
+					'	vec2 vTexCoord3 = max(zero, min(one, vTexCoord + amount1 * 6.0));',
+					'	vec2 vTexCoord4 = max(zero, min(one, vTexCoord + amount1 * 9.0));',
+					'	vec2 vTexCoord5 = max(zero, min(one, vTexCoord - amount1));',
+					'	vec2 vTexCoord6 = max(zero, min(one, vTexCoord - amount1 * 3.0));',
+					'	vec2 vTexCoord7 = max(zero, min(one, vTexCoord - amount1 * 6.0));',
+					'	vec2 vTexCoord8 = max(zero, min(one, vTexCoord - amount1 * 9.0));',
+					'#endif',
+					'	gl_FragColor = texture2D(source, vTexCoord) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord1) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord2) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord3) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord4) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord5) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord6) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord7) / 9.0;',
+					'	gl_FragColor += texture2D(source, vTexCoord8) / 9.0;',
+					'}'
+				].join('\n');
+
+				return shaderSource;
+			},
+			draw: function (shader, model, uniforms, frameBuffer, parent) {
+				var i,
+					fb,
+					pass,
+					amount,
+					width,
+					height,
+					opts = {
+						width: 0,
+						height: 0,
+						blend: false
+					},
+					previousPass = 1;
+
+				amount = this.inputs.amount;
+				if (!amount) {
+					parent(baseShader, model, uniforms, frameBuffer);
+					return;
+				}
+
+				if (amount <= 0.01) {
+					parent(shader, model, uniforms, frameBuffer);
+					return;
+				}
+
+				loopUniforms.amount = amount;
+				loopUniforms.angle = this.inputs.angle;
+				loopUniforms.projection[0] = this.height / this.width;
+
+				for (i = 0; i < passes.length; i++) {
+					pass = Math.min(1, passes[i] / amount);
+					width = Math.floor(pass * this.width);
+					height = Math.floor(pass * this.height);
+
+					loopUniforms.source = fb ? fb.texture : this.inputs.source.texture;
+
+					fb = fbs[i % 2];
+					loopUniforms.inputScale = previousPass;//pass;
+					previousPass = pass;
+					opts.width = width;
+					opts.height = height;
+
+					parent(shader, model, loopUniforms, fb.frameBuffer, null, opts);
+				}
+
+				loopUniforms.source = fb.texture;
+				loopUniforms.inputScale = previousPass;
+				parent(shader, model, loopUniforms, frameBuffer);
+			},
+			resize: function () {
+				loopUniforms.resolution[0] = this.width;
+				loopUniforms.resolution[1] = this.height;
+				if (fbs) {
+					fbs[0].resize(this.width, this.height);
+					fbs[1].resize(this.width, this.height);
+				}
+			},
+			destroy: function () {
+				if (fbs) {
+					fbs[0].destroy();
+					fbs[1].destroy();
+					fbs = null;
+				}
+
+				if (baseShader) {
+					baseShader.destroy();
+				}
+
+				loopUniforms = null;
+			}
+		};
+	},
+	{
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source',
+				shaderDirty: false
+			},
+			amount: {
+				type: 'number',
+				uniform: 'amount',
+				defaultValue: 0.4,
+				min: 0,
+				max: 1
+			},
+			angle: {
+				type: 'number',
+				uniform: 'angle',
+				defaultValue: 0
+			}
+		},
+		title: 'Directional Motion Blur'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.dither.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	/*
+	Shader code:
+	Adapted from a blog post by Martin Upitis
+	http://devlog-martinsh.blogspot.com.es/2011/03/glsl-dithering.html
+	*/
+
+	Seriously.plugin('dither', {
+		shader: function (inputs, shaderSource) {
+			shaderSource.fragment = [
+				'#ifdef GL_ES\n',
+				'precision mediump float;\n',
+				'#endif\n',
+
+				'#define mod4(a) (a >= 4 ? a - 4 : a)',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'uniform sampler2D source;',
+				'uniform vec2 resolution;',
+
+				'const mat4 dither = mat4(' +
+					'1.0, 33.0, 9.0, 41.0,' +
+					'49.0, 17.0, 57.0, 25.0,' +
+					'13.0, 45.0, 5.0, 37.0,' +
+					'61.0, 29.0, 53.0, 21.0' +
+				');',
+
+				'float find_closest(int x, int y, float c0) {',
+				'	float limit = 0.0;',
+				'	int x4 = mod4(x);',
+				'	int y4 = mod4(y);',
+				//annoying hack since GLSL ES doesn't support variable array index
+				'	for (int i = 0; i < 4; i++) {',
+				'		if (i == x4) {',
+				'			for (int j = 0; j < 4; j++) {',
+				'				if (j == y4) {',
+				'					limit = dither[i][j];',
+				'					break;',
+				'				}',
+				'			}',
+				'		}',
+				'	}',
+				'	if (x < 4) {',
+				'		if (y >= 4) {',
+				'			limit += 3.0;',
+				'		}',
+				'	} else {',
+				'		if (y >= 4) {',
+				'			limit += 1.0;',
+				'		} else {',
+				'			limit += 2.0;',
+				'		}',
+				'	}',
+				'	limit /= 65.0;',
+				'	return c0 < limit ? 0.0 : 1.0;',
+				'}',
+
+				'void main (void)  {',
+				'	vec4 pixel = texture2D(source, vTexCoord);',
+				'	vec2 coord = vTexCoord * resolution;',
+				'	int x = int(mod(coord.x, 8.0));',
+				'	int y = int(mod(coord.y, 8.0));',
+				'	pixel.r = find_closest(x, y, pixel.r);',
+				'	pixel.g = find_closest(x, y, pixel.g);',
+				'	pixel.b = find_closest(x, y, pixel.b);',
+				'	gl_FragColor = pixel;',
+				'}'
+			].join('\n');
+			return shaderSource;
+		},
+		inPlace: false,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source'
+			}
+		},
+		title: 'Dither'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.edge.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
 
 	//	Adapted from http://rastergrid.com/blog/2011/01/frei-chen-edge-detector/
+	var sqrt = Math.sqrt,
+		i, j,
+		flatMatrices = [],
+		matrices,
+		freiChenMatrixConstants,
+		sobelMatrixConstants;
 
-	Seriously.plugin('edge', (function () {
-		var sqrt = Math.sqrt,
-			i, j,
-			flatMatrices = [],
-			matrices,
-			freiChenMatrixConstants,
-			sobelMatrixConstants;
-
-		//initialize shader matrix arrays
-		function multiplyArray(factor, a) {
-			var i;
-			for (i = 0; i < a.length; i++) {
-				a[i] *= factor;
-			}
-			return a;
+	//initialize shader matrix arrays
+	function multiplyArray(factor, a) {
+		var i;
+		for (i = 0; i < a.length; i++) {
+			a[i] *= factor;
 		}
+		return a;
+	}
 
-		matrices = [
-			multiplyArray(1.0 / (2.0 * sqrt(2.0)), [ 1.0, sqrt(2.0), 1.0, 0.0, 0.0, 0.0, -1.0, -sqrt(2.0), -1.0 ]),
-			multiplyArray(1.0 / (2.0 * sqrt(2.0)), [1.0, 0.0, -1.0, sqrt(2.0), 0.0, -sqrt(2.0), 1.0, 0.0, -1.0]),
-			multiplyArray(1.0 / (2.0 * sqrt(2.0)), [0.0, -1.0, sqrt(2.0), 1.0, 0.0, -1.0, -sqrt(2.0), 1.0, 0.0]),
-			multiplyArray(1.0 / (2.0 * sqrt(2.0)), [sqrt(2.0), -1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0, -sqrt(2.0)]),
-			multiplyArray(1.0 / 2.0, [0.0, 1.0, 0.0, -1.0, 0.0, -1.0, 0.0, 1.0, 0.0]),
-			multiplyArray(1.0 / 2.0, [-1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0]),
-			multiplyArray(1.0 / 6.0, [1.0, -2.0, 1.0, -2.0, 4.0, -2.0, 1.0, -2.0, 1.0]),
-			multiplyArray(1.0 / 6.0, [-2.0, 1.0, -2.0, 1.0, 4.0, 1.0, -2.0, 1.0, -2.0]),
-			multiplyArray(1.0 / 3.0, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-		];
+	matrices = [
+		multiplyArray(1.0 / (2.0 * sqrt(2.0)), [ 1.0, sqrt(2.0), 1.0, 0.0, 0.0, 0.0, -1.0, -sqrt(2.0), -1.0 ]),
+		multiplyArray(1.0 / (2.0 * sqrt(2.0)), [1.0, 0.0, -1.0, sqrt(2.0), 0.0, -sqrt(2.0), 1.0, 0.0, -1.0]),
+		multiplyArray(1.0 / (2.0 * sqrt(2.0)), [0.0, -1.0, sqrt(2.0), 1.0, 0.0, -1.0, -sqrt(2.0), 1.0, 0.0]),
+		multiplyArray(1.0 / (2.0 * sqrt(2.0)), [sqrt(2.0), -1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0, -sqrt(2.0)]),
+		multiplyArray(1.0 / 2.0, [0.0, 1.0, 0.0, -1.0, 0.0, -1.0, 0.0, 1.0, 0.0]),
+		multiplyArray(1.0 / 2.0, [-1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0]),
+		multiplyArray(1.0 / 6.0, [1.0, -2.0, 1.0, -2.0, 4.0, -2.0, 1.0, -2.0, 1.0]),
+		multiplyArray(1.0 / 6.0, [-2.0, 1.0, -2.0, 1.0, 4.0, 1.0, -2.0, 1.0, -2.0]),
+		multiplyArray(1.0 / 3.0, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+	];
 
-		for (i = 0; i < matrices.length; i++) {
-			for (j = 0; j < matrices[i].length; j++) {
-				flatMatrices.push(matrices[i][j]);
-			}
+	for (i = 0; i < matrices.length; i++) {
+		for (j = 0; j < matrices[i].length; j++) {
+			flatMatrices.push(matrices[i][j]);
 		}
+	}
 
-		freiChenMatrixConstants = new Float32Array(flatMatrices);
+	freiChenMatrixConstants = new Float32Array(flatMatrices);
 
-		sobelMatrixConstants = new Float32Array([
-			1.0, 2.0, 1.0, 0.0, 0.0, 0.0, -1.0, -2.0, -1.0,
-			1.0, 0.0, -1.0, 2.0, 0.0, -2.0, 1.0, 0.0, -1.0
-		]);
+	sobelMatrixConstants = new Float32Array([
+		1.0, 2.0, 1.0, 0.0, 0.0, 0.0, -1.0, -2.0, -1.0,
+		1.0, 0.0, -1.0, 2.0, 0.0, -2.0, 1.0, 0.0, -1.0
+	]);
 
-		return {
-			shader: function (inputs, shaderSource) {
-				var defines;
+	Seriously.plugin('edge', {
+		shader: function (inputs, shaderSource) {
+			var defines;
 
-				if (inputs.mode === 'sobel') {
-					defines = '#define N_MATRICES 2\n' +
-					'#define SOBEL\n';
-				} else {
-					//frei-chen
-					defines = '#define N_MATRICES 9\n';
-				}
+			if (inputs.mode === 'sobel') {
+				defines = '#define N_MATRICES 2\n' +
+				'#define SOBEL\n';
+			} else {
+				//frei-chen
+				defines = '#define N_MATRICES 9\n';
+			}
 
-				shaderSource.fragment = defines +
-					'#ifdef GL_ES\n' +
-					'precision mediump float;\n' +
-					'#endif\n' +
-					'\n' +
-					'varying vec2 vTexCoord;\n' +
-					'varying vec4 vPosition;\n' +
-					'\n' +
-					'uniform sampler2D source;\n' +
-					'uniform float pixelWidth;\n' +
-					'uniform float pixelHeight;\n' +
-					'uniform mat3 G[9];\n' +
-					'\n' +
-					'void main(void) {\n' +
-					'	mat3 I;\n' +
-					'	float dp3, cnv[9];\n' +
-					'	vec3 tc;\n' +
+			shaderSource.fragment = defines +
+				'#ifdef GL_ES\n' +
+				'precision mediump float;\n' +
+				'#endif\n' +
+				'\n' +
+				'varying vec2 vTexCoord;\n' +
+				'varying vec4 vPosition;\n' +
+				'\n' +
+				'uniform sampler2D source;\n' +
+				'uniform float pixelWidth;\n' +
+				'uniform float pixelHeight;\n' +
+				'uniform mat3 G[9];\n' +
+				'\n' +
+				'void main(void) {\n' +
+				'	mat3 I;\n' +
+				'	float dp3, cnv[9];\n' +
+				'	vec3 tc;\n' +
 
-					// fetch the 3x3 neighbourhood and use the RGB vector's length as intensity value
-					'	float fi = 0.0, fj = 0.0;\n' +
-					'	for (int i = 0; i < 3; i++) {\n' +
-					'		fj = 0.0;\n' +
-					'		for (int j = 0; j < 3; j++) {\n' +
-					'			I[i][j] = length( ' +
-								'texture2D(source, ' +
-									'vTexCoord + vec2((fi - 1.0) * pixelWidth, (fj - 1.0) * pixelHeight)' +
-								').rgb );\n' +
-					'			fj += 1.0;\n' +
-					'		};\n' +
-					'		fi += 1.0;\n' +
-					'	};\n' +
+				// fetch the 3x3 neighbourhood and use the RGB vector's length as intensity value
+				'	float fi = 0.0, fj = 0.0;\n' +
+				'	for (int i = 0; i < 3; i++) {\n' +
+				'		fj = 0.0;\n' +
+				'		for (int j = 0; j < 3; j++) {\n' +
+				'			I[i][j] = length( ' +
+							'texture2D(source, ' +
+								'vTexCoord + vec2((fi - 1.0) * pixelWidth, (fj - 1.0) * pixelHeight)' +
+							').rgb );\n' +
+				'			fj += 1.0;\n' +
+				'		};\n' +
+				'		fi += 1.0;\n' +
+				'	};\n' +
 
-					// calculate the convolution values for all the masks
+				// calculate the convolution values for all the masks
 
-					'	for (int i = 0; i < N_MATRICES; i++) {\n' +
-					'		dp3 = dot(G[i][0], I[0]) + dot(G[i][1], I[1]) + dot(G[i][2], I[2]);\n' +
-					'		cnv[i] = dp3 * dp3;\n' +
-					'	};\n' +
-					'\n' +
+				'	for (int i = 0; i < N_MATRICES; i++) {\n' +
+				'		dp3 = dot(G[i][0], I[0]) + dot(G[i][1], I[1]) + dot(G[i][2], I[2]);\n' +
+				'		cnv[i] = dp3 * dp3;\n' +
+				'	};\n' +
+				'\n' +
 
-					//Sobel
-					'#ifdef SOBEL\n' +
-					'	tc = vec3(0.5 * sqrt(cnv[0]*cnv[0]+cnv[1]*cnv[1]));\n' +
-					'#else\n' +
+				//Sobel
+				'#ifdef SOBEL\n' +
+				'	tc = vec3(0.5 * sqrt(cnv[0]*cnv[0]+cnv[1]*cnv[1]));\n' +
+				'#else\n' +
 
-					//Frei-Chen
-					// Line detector
-					'	float M = (cnv[4] + cnv[5]) + (cnv[6] + cnv[7]);\n' +
-					'	float S = (cnv[0] + cnv[1]) + (cnv[2] + cnv[3]) + (cnv[4] + cnv[5]) + (cnv[6] + cnv[7]) + cnv[8];\n' +
-					'	tc = vec3(sqrt(M/S));\n' +
-					'#endif\n' +
+				//Frei-Chen
+				// Line detector
+				'	float M = (cnv[4] + cnv[5]) + (cnv[6] + cnv[7]);\n' +
+				'	float S = (cnv[0] + cnv[1]) + (cnv[2] + cnv[3]) + (cnv[4] + cnv[5]) + (cnv[6] + cnv[7]) + cnv[8];\n' +
+				'	tc = vec3(sqrt(M/S));\n' +
+				'#endif\n' +
 
-					'	gl_FragColor = vec4(tc, 1.0);\n' +
-					'}\n';
+				'	gl_FragColor = vec4(tc, 1.0);\n' +
+				'}\n';
 
-				return shaderSource;
+			return shaderSource;
+		},
+		draw: function (shader, model, uniforms, frameBuffer, parent) {
+
+			uniforms.pixelWidth = 1 / this.width;
+			uniforms.pixelHeight = 1 / this.height;
+
+			if (this.inputs.mode === 'sobel') {
+				uniforms['G[0]'] = sobelMatrixConstants;
+			} else {
+				uniforms['G[0]'] = freiChenMatrixConstants;
+			}
+
+			parent(shader, model, uniforms, frameBuffer);
+		},
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source'
 			},
-			draw: function (shader, model, uniforms, frameBuffer, parent) {
-
-				uniforms.pixelWidth = 1 / this.width;
-				uniforms.pixelHeight = 1 / this.height;
-
-				if (this.inputs.mode === 'sobel') {
-					uniforms['G[0]'] = sobelMatrixConstants;
-				} else {
-					uniforms['G[0]'] = freiChenMatrixConstants;
-				}
-
-				parent(shader, model, uniforms, frameBuffer);
-			},
-			inputs: {
-				source: {
-					type: 'image',
-					uniform: 'source'
-				},
-				mode: {
-					type: 'enum',
-					shaderDirty: true,
-					defaultValue: 'sobel',
-					options: [
-						['sobel', 'Sobel'],
-						['frei-chen', 'Frei-Chen']
-					]
-				}
-			},
-			description: 'Edge Detect',
-			title: 'Edge Detect'
-		};
-	}()));
+			mode: {
+				type: 'enum',
+				shaderDirty: true,
+				defaultValue: 'sobel',
+				options: [
+					['sobel', 'Sobel'],
+					['frei-chen', 'Frei-Chen']
+				]
+			}
+		},
+		description: 'Edge Detect',
+		title: 'Edge Detect'
+	});
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.emboss.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.emboss.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -20962,7 +24197,6 @@ require.register("forresto-seriously/effects/seriously.emboss.js", function(expo
 			uniforms.dim[1] = this.height;
 			parent(shader, model, uniforms, frameBuffer);
 		},
-		inPlace: true,
 		inputs: {
 			source: {
 				type: 'image',
@@ -20981,22 +24215,22 @@ require.register("forresto-seriously/effects/seriously.emboss.js", function(expo
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.exposure.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.exposure.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21044,7 +24278,7 @@ require.register("forresto-seriously/effects/seriously.exposure.js", function(ex
 			exposure: {
 				type: 'number',
 				uniform: 'exposure',
-				defaultValue: 0,
+				defaultValue: 0.6,
 				min: 0,
 				max: 1
 			}
@@ -21056,22 +24290,22 @@ require.register("forresto-seriously/effects/seriously.exposure.js", function(ex
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.fader.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.fader.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21109,7 +24343,7 @@ require.register("forresto-seriously/effects/seriously.fader.js", function(expor
 			amount: {
 				type: 'number',
 				uniform: 'amount',
-				defaultValue: 1,
+				defaultValue: 0.5,
 				min: 0,
 				max: 1
 			}
@@ -21120,22 +24354,248 @@ require.register("forresto-seriously/effects/seriously.fader.js", function(expor
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.hex.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.falsecolor.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	Seriously.plugin('falsecolor', {
+		shader: function (inputs, shaderSource) {
+			shaderSource.fragment = '#ifdef GL_ES\n\n' +
+				'precision mediump float;\n\n' +
+				'#endif\n\n' +
+				'\n' +
+				'varying vec2 vTexCoord;\n' +
+				'varying vec4 vPosition;\n' +
+				'\n' +
+				'uniform sampler2D source;\n' +
+				'uniform float amount;\n' +
+				'uniform vec4 dark;\n' +
+				'uniform vec4 light;\n' +
+				'const vec3 luma = vec3(0.2125, 0.7154, 0.0721);\n' +
+				'\n' +
+				'void main(void) {\n' +
+				'	vec4 pixel = texture2D(source, vTexCoord);\n' +
+				'	float luminance = dot(pixel.rgb, luma);\n' +
+				'	gl_FragColor = vec4( mix(dark.rgb, light.rgb, luminance), pixel.a);\n' +
+				'}\n';
+			return shaderSource;
+		},
+		inPlace: true,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source',
+				shaderDirty: false
+			},
+			dark: {
+				type: 'color',
+				uniform: 'dark',
+				defaultValue: [0, 0, 0.5, 1]
+			},
+			light: {
+				type: 'color',
+				uniform: 'light',
+				defaultValue: [1, 0, 0, 1]
+			}
+		},
+		title: 'False Color'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.filmgrain.js", function(exports, require, module){
+/* global define, require */
+/*
+Film Grain
+
+Shader:
+* Copyright Martins Upitis (martinsh) devlog-martinsh.blogspot.com
+* Creative Commons Attribution 3.0 Unported License
+http://devlog-martinsh.blogspot.com/2013/05/image-imperfections-and-film-grain-post.html
+
+Modified to preserve alpha
+
+*/
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	Seriously.plugin('filmgrain', {
+		shader: function (inputs, shaderSource) {
+			shaderSource.fragment = [
+				'#ifdef GL_ES',
+				'precision mediump float;',
+				'#endif',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'uniform sampler2D source;',
+				'uniform vec2 resolution;',
+				'uniform float time;',
+				'uniform float amount;',
+				'uniform bool colored;',
+
+				'float timer;',
+
+				// Perm texture texel-size
+				'const float permTexUnit = 1.0/256.0;',
+
+				// Half perm texture texel-size
+				'const float permTexUnitHalf = 0.5/256.0;',
+
+				'vec4 rnm(in vec2 tc) {',
+				'	float noise = sin(dot(tc + vec2(timer,timer),vec2(12.9898,78.233))) * 43758.5453;',
+
+				'	float noiseR = fract(noise)*2.0-1.0;',
+				'	float noiseG = fract(noise*1.2154)*2.0-1.0; ',
+				'	float noiseB = fract(noise*1.3453)*2.0-1.0;',
+				'	float noiseA = fract(noise*1.3647)*2.0-1.0;',
+				'	',
+				'	return vec4(noiseR,noiseG,noiseB,noiseA);',
+				'}',
+
+				'float fade(in float t) {',
+				'	return t*t*t*(t*(t*6.0-15.0)+10.0);',
+				'}',
+
+				'float pnoise3D(in vec3 p) {',
+					// Integer part, scaled so +1 moves permTexUnit texel
+				'	vec3 pi = permTexUnit*floor(p)+permTexUnitHalf;',
+
+				// and offset 1/2 texel to sample texel centers
+				// Fractional part for interpolation'
+				'	vec3 pf = fract(p);',
+
+				// Noise contributions from (x=0, y=0), z=0 and z=1
+				'	float perm00 = rnm(pi.xy).a ;',
+				'	vec3 grad000 = rnm(vec2(perm00, pi.z)).rgb * 4.0 - 1.0;',
+				'	float n000 = dot(grad000, pf);',
+				'	vec3 grad001 = rnm(vec2(perm00, pi.z + permTexUnit)).rgb * 4.0 - 1.0;',
+				'	float n001 = dot(grad001, pf - vec3(0.0, 0.0, 1.0));',
+
+				// Noise contributions from (x=0, y=1), z=0 and z=1
+				'	float perm01 = rnm(pi.xy + vec2(0.0, permTexUnit)).a ;',
+				'	vec3 grad010 = rnm(vec2(perm01, pi.z)).rgb * 4.0 - 1.0;',
+				'	float n010 = dot(grad010, pf - vec3(0.0, 1.0, 0.0));',
+				'	vec3 grad011 = rnm(vec2(perm01, pi.z + permTexUnit)).rgb * 4.0 - 1.0;',
+				'	float n011 = dot(grad011, pf - vec3(0.0, 1.0, 1.0));',
+
+				// Noise contributions from (x=1, y=0), z=0 and z=1
+				'	float perm10 = rnm(pi.xy + vec2(permTexUnit, 0.0)).a ;',
+				'	vec3 grad100 = rnm(vec2(perm10, pi.z)).rgb * 4.0 - 1.0;',
+				'	float n100 = dot(grad100, pf - vec3(1.0, 0.0, 0.0));',
+				'	vec3 grad101 = rnm(vec2(perm10, pi.z + permTexUnit)).rgb * 4.0 - 1.0;',
+				'	float n101 = dot(grad101, pf - vec3(1.0, 0.0, 1.0));',
+
+				// Noise contributions from (x=1, y=1), z=0 and z=1
+				'	float perm11 = rnm(pi.xy + vec2(permTexUnit, permTexUnit)).a ;',
+				'	vec3 grad110 = rnm(vec2(perm11, pi.z)).rgb * 4.0 - 1.0;',
+				'	float n110 = dot(grad110, pf - vec3(1.0, 1.0, 0.0));',
+				'	vec3 grad111 = rnm(vec2(perm11, pi.z + permTexUnit)).rgb * 4.0 - 1.0;',
+				'	float n111 = dot(grad111, pf - vec3(1.0, 1.0, 1.0));',
+
+				// Blend contributions along x
+				'	vec4 n_x = mix(vec4(n000, n001, n010, n011), vec4(n100, n101, n110, n111), fade(pf.x));',
+
+				// Blend contributions along y
+				'	vec2 n_xy = mix(n_x.xy, n_x.zw, fade(pf.y));',
+
+				//Blend contributions along z
+				'	float n_xyz = mix(n_xy.x, n_xy.y, fade(pf.z));',
+
+				'	return n_xyz;',
+				'}',
+
+				'void main(void) {',
+				'	timer = mod(time, 10000.0) / 10000.0;',
+				'	vec4 pixel = texture2D(source, vTexCoord);',
+				'	vec3 noise = vec3(pnoise3D(vec3(vTexCoord * resolution, timer + 0.0)));',
+				'	if (colored) {',
+				'		noise.g = pnoise3D(vec3(vTexCoord * resolution, timer + 1.0));',
+				'		noise.b = pnoise3D(vec3(vTexCoord * resolution, timer + 2.0));',
+				'	}',
+				'	gl_FragColor = vec4(pixel.rgb + noise * amount, pixel.a);',
+				'}'
+			].join('\n');
+			return shaderSource;
+		},
+		inPlace: true,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source',
+				shaderDirty: false
+			},
+			time: {
+				type: 'number',
+				uniform: 'time'
+			},
+			amount: {
+				type: 'number',
+				uniform: 'amount',
+				min: 0,
+				max: 1,
+				defaultValue: 0.03
+			},
+			colored: {
+				type: 'boolean',
+				uniform: 'colored',
+				defaultValue: false
+			}
+		},
+		title: 'Film Grain',
+		description: 'Don\'t over-do it.'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.hex.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21156,12 +24616,12 @@ require.register("forresto-seriously/effects/seriously.hex.js", function(exports
 				'varying vec4 vPosition;\n' +
 				'\n' +
 				'uniform sampler2D source;\n' +
-				'uniform vec3 srsSize;\n' +
+				'uniform vec2 resolution;\n' +
 				'uniform vec2 center;\n' +
 				'uniform float size;\n' +
 				'\n' +
 				'void main(void) {\n' +
-				'	vec2 aspect = normalize(srsSize.xy);\n' +
+				'	vec2 aspect = normalize(resolution);\n' +
 				'	vec2 tex = (vTexCoord * aspect - center) / size;\n' +
 				'	tex.y /= 0.866025404;\n' +
 				'	tex.x -= tex.y * 0.5;\n' +
@@ -21198,11 +24658,10 @@ require.register("forresto-seriously/effects/seriously.hex.js", function(exports
 				'	choice.y *= 0.866025404;\n' +
 				'	choice *= size / aspect;\n' +
 				'	gl_FragColor = texture2D(source, choice + center / aspect);\n' +
-				//'	gl_FragColor = vec4(1.0,0.0,0.0,1.0);\n' +
 				'}\n';
 			return shaderSource;
 		},
-		inPlace: true,
+		inPlace: false,
 		inputs: {
 			source: {
 				type: 'image',
@@ -21229,22 +24688,95 @@ require.register("forresto-seriously/effects/seriously.hex.js", function(exports
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.hue-saturation.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.highlights-shadows.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	Seriously.plugin('highlights-shadows', {
+		shader: function (inputs, shaderSource) {
+			shaderSource.fragment = '#ifdef GL_ES\n\n' +
+				'precision mediump float;\n\n' +
+				'#endif\n\n' +
+				'\n' +
+				'varying vec2 vTexCoord;\n' +
+				'varying vec4 vPosition;\n' +
+				'\n' +
+				'uniform sampler2D source;\n' +
+				'uniform float shadows;\n' +
+				'uniform float highlights;\n' +
+				'const vec3 luma = vec3(0.2125, 0.7154, 0.0721);\n' +
+				'\n' +
+				'void main(void) {\n' +
+				'	vec4 pixel = texture2D(source, vTexCoord);\n' +
+				'	float luminance = dot(pixel.rgb, luma);\n' +
+				'	float shadow = clamp((pow(luminance, 1.0 / (shadows + 1.0)) + (-0.76) * pow(luminance, 2.0 / (shadows + 1.0))) - luminance, 0.0, 1.0);\n' +
+				'	float highlight = clamp((1.0 - (pow(1.0 - luminance, 1.0 / (2.0 - highlights)) + (-0.8) * pow(1.0 - luminance, 2.0 / (2.0 - highlights)))) - luminance, -1.0, 0.0);\n' +
+				'	vec3 rgb = (luminance + shadow + highlight) * (pixel.rgb / vec3(luminance));\n' +
+				//'	vec3 rgb = vec3(0.0, 0.0, 0.0) + ((luminance + shadow + highlight) - 0.0) * ((pixel.rgb - vec3(0.0, 0.0, 0.0))/(luminance - 0.0));\n' +
+				'	gl_FragColor = vec4(rgb, pixel.a);\n' +
+				'}\n';
+			return shaderSource;
+		},
+		inPlace: true,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source',
+				shaderDirty: false
+			},
+			highlights: {
+				type: 'number',
+				uniform: 'highlights',
+				min: 0,
+				max: 1,
+				defaultValue: 1
+			},
+			shadows: {
+				type: 'number',
+				uniform: 'shadows',
+				min: 0,
+				max: 1,
+				defaultValue: 0
+			}
+		},
+		title: 'Highlights/Shadows',
+		description: 'Darken highlights, lighten shadows'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.hue-saturation.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21253,73 +24785,81 @@ require.register("forresto-seriously/effects/seriously.hue-saturation.js", funct
 
 	Seriously.plugin('hue-saturation', {
 		shader: function (inputs, shaderSource) {
-			shaderSource.vertex =  '#ifdef GL_ES\n' +
-				'precision mediump float;\n' +
-				'#endif \n' +
-				'\n' +
-				'attribute vec4 position;\n' +
-				'attribute vec2 texCoord;\n' +
-				'\n' +
-				'uniform vec3 srsSize;\n' +
-				'uniform mat4 projection;\n' +
-				'uniform mat4 transform;\n' +
-				'\n' +
-				'uniform float hue;\n' +
-				'uniform float saturation;\n' +
-				'\n' +
-				'varying vec2 vTexCoord;\n' +
-				'varying vec4 vPosition;\n' +
-				'\n' +
-				'varying vec3 weights;\n' +
-				'\n' +
-				'void main(void) {\n' +
-				'	float angle = hue * 3.14159265358979323846264;\n' +
-				'	float s = sin(angle);\n' +
-				'	float c = cos(angle);\n' +
-				'	weights = (vec3(2.0 * c, -sqrt(3.0) * s - c, sqrt(3.0) * s - c) + 1.0) / 3.0;\n' +
-				'\n' +
-				'	vec4 pos = position * vec4(srsSize.x / srsSize.y, 1.0, 1.0, 1.0);\n' +
-				'	gl_Position = transform * pos;\n' +
-				'	gl_Position.z -= srsSize.z;\n' +
-				'	gl_Position = projection * gl_Position;\n' +
-				'	gl_Position.z = 0.0;\n' + //prevent near clipping
-				'	vTexCoord = vec2(texCoord.s, texCoord.t);\n' +
-				'}\n';
-			shaderSource.fragment = '#ifdef GL_ES\n\n' +
-				'precision mediump float;\n\n' +
-				'#endif\n\n' +
-				'\n' +
-				'varying vec2 vTexCoord;\n' +
-				'varying vec4 vPosition;\n' +
-				'\n' +
-				'varying vec3 weights;\n' +
-				'\n' +
-				'uniform sampler2D source;\n' +
-				'uniform float hue;\n' +
-				'uniform float saturation;\n' +
-				'\n' +
-				'void main(void) {\n' +
-				'	vec4 color = texture2D(source, vTexCoord);\n' +
+			shaderSource.vertex = [
+				'#ifdef GL_ES',
+				'precision mediump float;',
+				'#endif ',
+
+				'attribute vec4 position;',
+				'attribute vec2 texCoord;',
+
+				'uniform vec2 resolution;',
+				'uniform mat4 projection;',
+				'uniform mat4 transform;',
+
+				'uniform float hue;',
+				'uniform float saturation;',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'varying vec3 weights;',
+
+				'void main(void) {',
+				'	float angle = hue * 3.14159265358979323846264;',
+				'	float s = sin(angle);',
+				'	float c = cos(angle);',
+				'	weights = (vec3(2.0 * c, -sqrt(3.0) * s - c, sqrt(3.0) * s - c) + 1.0) / 3.0;',
+
+				// first convert to screen space
+				'	vec4 screenPosition = vec4(position.xy * resolution / 2.0, position.z, position.w);',
+				'	screenPosition = transform * screenPosition;',
+
+				// convert back to OpenGL coords
+				'	gl_Position = screenPosition;',
+				'	gl_Position.xy = screenPosition.xy * 2.0 / resolution;',
+				'	gl_Position.z = screenPosition.z * 2.0 / (resolution.x / resolution.y);',
+				'	vTexCoord = texCoord;',
+				'	vPosition = gl_Position;',
+				'}'
+			].join('\n');
+			shaderSource.fragment = [
+				'#ifdef GL_ES\n',
+				'precision mediump float;\n',
+				'#endif\n',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'varying vec3 weights;',
+
+				'uniform sampler2D source;',
+				'uniform float hue;',
+				'uniform float saturation;',
+
+				'void main(void) {',
+				'	vec4 color = texture2D(source, vTexCoord);',
 
 				//adjust hue
-				'	float len = length(color.rgb);\n' +
+				'	float len = length(color.rgb);',
 				'	color.rgb = vec3(' +
 						'dot(color.rgb, weights.xyz), ' +
 						'dot(color.rgb, weights.zxy), ' +
 						'dot(color.rgb, weights.yzx) ' +
-				');\n' +
+				');',
 
 				//adjust saturation
-				'	vec3 adjustment = (color.r + color.g + color.b) / 3.0 - color.rgb;\n' +
-				'	if (saturation > 0.0) {\n' +
-				'		adjustment *= (1.0 - 1.0 / (1.0 - saturation));\n' +
-				'	} else {\n' +
-				'		adjustment *= (-saturation);\n' +
-				'	}\n' +
-				'	color.rgb += adjustment;\n' +
+				'	vec3 adjustment = (color.r + color.g + color.b) / 3.0 - color.rgb;',
+				'	if (saturation > 0.0) {',
+				'		adjustment *= (1.0 - 1.0 / (1.0 - saturation));',
+				'	} else {',
+				'		adjustment *= (-saturation);',
+				'	}',
+				'	color.rgb += adjustment;',
 
-				'	gl_FragColor = color;\n' +
-				'}\n';
+				'	gl_FragColor = color;',
+				'}'
+			].join('\n');
 			return shaderSource;
 		},
 		inPlace: true,
@@ -21331,7 +24871,7 @@ require.register("forresto-seriously/effects/seriously.hue-saturation.js", funct
 			hue: {
 				type: 'number',
 				uniform: 'hue',
-				defaultValue: 0,
+				defaultValue: 0.4,
 				min: -1,
 				max: 1
 			},
@@ -21349,22 +24889,22 @@ require.register("forresto-seriously/effects/seriously.hue-saturation.js", funct
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.invert.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.invert.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21400,22 +24940,419 @@ require.register("forresto-seriously/effects/seriously.invert.js", function(expo
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.lumakey.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.kaleidoscope.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	Seriously.plugin('kaleidoscope', {
+		shader: function (inputs, shaderSource) {
+			shaderSource.fragment = [
+				'#ifdef GL_ES',
+				'precision mediump float;',
+				'#endif',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'uniform sampler2D source;',
+				'uniform float segments;',
+				'uniform float offset;',
+
+				'const float PI = ' + Math.PI + ';',
+				'const float TAU = 2.0 * PI;',
+
+				'void main(void) {',
+				'	if (segments == 0.0) {',
+				'		gl_FragColor = texture2D(source, vTexCoord);',
+				'	} else {',
+				'		vec2 centered = vTexCoord - 0.5;',
+				//to polar
+				'		float r = length(centered);',
+				'		float theta = atan(centered.y, centered.x);',
+				'		theta = mod(theta, TAU / segments);',
+				'		theta = abs(theta - PI / segments);',
+				//back to cartesian
+				'		vec2 newCoords = r * vec2(cos(theta), sin(theta)) + 0.5;',
+				'		gl_FragColor = texture2D(source, mod(newCoords - offset, 1.0));',
+				'	}',
+				'}'
+			].join('\n');
+			return shaderSource;
+		},
+		inPlace: true,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source',
+				shaderDirty: false
+			},
+			segments: {
+				type: 'number',
+				uniform: 'segments',
+				defaultValue: 6
+			},
+			offset: {
+				type: 'number',
+				uniform: 'offset',
+				defaultValue: 0
+			}
+		},
+		title: 'Kaleidoscope'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.layers.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	var identity = new Float32Array([
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1
+		]),
+		intRegex = /\d+/;
+
+	Seriously.plugin('layers', function (options) {
+		var count,
+			me = this,
+			topOpts = {
+				clear: false
+			},
+			i,
+			inputs;
+
+		function update() {
+			me.resize();
+		}
+
+		if (typeof options === 'number' && options >= 2) {
+			count = options;
+		} else {
+			count = options && options.count || 4;
+			count = Math.max(2, count);
+		}
+
+		inputs = {
+			sizeMode: {
+				type: 'enum',
+				defaultValue: '0',
+				options: [
+					'union',
+					'intersection'
+				],
+				update: function () {
+					this.resize();
+				}
+			}
+		};
+
+		for (i = 0; i < count; i++) {
+			inputs.sizeMode.options.push(i.toString());
+			inputs.sizeMode.options.push('source' + i);
+
+			//source
+			inputs['source' + i] = {
+				type: 'image',
+				update: update
+			};
+
+			//opacity
+			inputs['opacity' + i] = {
+				type: 'number',
+				defaultValue: 1,
+				min: 0,
+				max: 1,
+			};
+		}
+
+		this.uniforms.layerResolution = [1, 1];
+
+		// custom resize method
+		this.resize = function () {
+			var width,
+				height,
+				mode = this.inputs.sizeMode,
+				i,
+				n,
+				source,
+				a;
+
+			if (mode === 'union') {
+				width = 0;
+				height = 0;
+				for (i = 0; i < count; i++) {
+					source = this.inputs['source' + i];
+					if (source) {
+						width = Math.max(width, source.width);
+						height = Math.max(height, source.height);
+					}
+				}
+			} else if (mode === 'intersection') {
+				width = Infinity;
+				height = Infinity;
+				for (i = 0; i < count; i++) {
+					source = this.inputs['source' + i];
+					if (source) {
+						width = Math.min(width, source.width);
+						height = Math.min(height, source.height);
+					}
+				}
+			} else {
+				width = 1;
+				height = 1;
+				n = count - 1;
+				a = intRegex.exec(this.inputs.sizeMode);
+				if (a) {
+					n = Math.min(parseInt(a[0], 10), n);
+				}
+
+				for (i = 0; i <= n; i++) {
+					source = this.inputs['source' + i];
+					if (source) {
+						width = source.width;
+						height = source.height;
+						break;
+					}
+				}
+			}
+
+			if (this.width !== width || this.height !== height) {
+				this.width = width;
+				this.height = height;
+
+				this.uniforms.resolution[0] = width;
+				this.uniforms.resolution[1] = height;
+
+				if (this.frameBuffer) {
+					this.frameBuffer.resize(width, height);
+				}
+
+				this.setDirty();
+			}
+
+			for (i = 0; i < this.targets.length; i++) {
+				this.targets[i].resize();
+			}
+		};
+
+		return {
+			shader: function (inputs, shaderSource) {
+				shaderSource.vertex = [
+					'precision mediump float;',
+
+					'attribute vec4 position;',
+					'attribute vec2 texCoord;',
+
+					'uniform vec2 resolution;',
+					'uniform vec2 layerResolution;',
+					'uniform mat4 transform;',
+
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+
+					'void main(void) {',
+					// first convert to screen space
+					'	vec4 screenPosition = vec4(position.xy * layerResolution / 2.0, position.z, position.w);',
+					'	screenPosition = transform * screenPosition;',
+
+					// convert back to OpenGL coords
+					'	gl_Position.xy = screenPosition.xy * 2.0 / layerResolution;',
+					'	gl_Position.z = screenPosition.z * 2.0 / (layerResolution.x / layerResolution.y);',
+					'	gl_Position.xy *= layerResolution / resolution;',
+					'	gl_Position.w = screenPosition.w;',
+					'	vTexCoord = texCoord;',
+					'	vPosition = gl_Position;',
+					'}\n'
+				].join('\n');
+
+				shaderSource.fragment = [
+					'precision mediump float;',
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+					'uniform sampler2D source;',
+					'uniform float opacity;',
+					'void main(void) {',
+					'	if (any(lessThan(vTexCoord, vec2(0.0))) || any(greaterThanEqual(vTexCoord, vec2(1.0)))) {',
+					'		gl_FragColor = vec4(0.0);',
+					'	} else {',
+					'		gl_FragColor = texture2D(source, vTexCoord);',
+					'		gl_FragColor.a *= opacity;',
+					'	}',
+					'}'
+				].join('\n');
+
+				return shaderSource;
+			},
+			requires: function (sourceName, inputs) {
+				var a, index = count;
+
+				a = intRegex.exec(this.inputs.sizeMode);
+				if (a) {
+					index = parseInt(a[0], 10);
+				}
+				if (index >= count) {
+					return false;
+				}
+
+				return !!(inputs[sourceName] && inputs['opacity' + index]);
+			},
+			draw: function (shader, model, uniforms, frameBuffer, draw) {
+				var i,
+					opacity,
+					source,
+					gl = this.gl;
+
+				//clear in case we have no layers to draw
+				gl.viewport(0, 0, this.width, this.height);
+				gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
+				gl.clearColor(0.0, 0.0, 0.0, 0.0);
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+				for (i = 0; i < count; i++) {
+					source = this.inputs['source' + i];
+					opacity = this.inputs['opacity' + i];
+
+					//don't draw if layer is disconnected or opacity is 0
+					if (source && opacity) {
+						uniforms.opacity = opacity;
+						uniforms.layerResolution[0] = source.width;
+						uniforms.layerResolution[1] = source.height;
+						uniforms.source = source;
+						uniforms.transform = source.cumulativeMatrix || identity;
+
+						draw(shader, model, uniforms, frameBuffer, null, topOpts);
+					}
+				}
+			},
+			inputs: inputs
+		};
+	},
+	{
+		inPlace: true,
+		description: 'Multiple layers',
+		title: 'Layers'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.linear-transfer.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	Seriously.plugin('linear-transfer', {
+		shader: function (inputs, shaderSource) {
+			shaderSource.fragment = [
+				'#ifdef GL_ES\n',
+				'precision mediump float;\n',
+				'#endif\n',
+
+				'varying vec2 vTexCoord;',
+				'varying vec4 vPosition;',
+
+				'uniform sampler2D source;',
+				'uniform vec4 slope;',
+				'uniform vec4 intercept;',
+
+				'const vec3 half3 = vec3(0.5);',
+
+				'void main(void) {',
+				'	vec4 pixel = texture2D(source, vTexCoord);',
+				'	gl_FragColor = pixel * slope + intercept;',
+				'}'
+			].join('\n');
+			return shaderSource;
+		},
+		inPlace: true,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source'
+			},
+			slope: {
+				type: 'vector',
+				dimensions: 4,
+				uniform: 'slope',
+				defaultValue: [1, 1, 1, 1]
+			},
+			intercept: {
+				type: 'vector',
+				uniform: 'intercept',
+				dimensions: 4,
+				defaultValue: [0, 0, 0, 0]
+			}
+		},
+		title: 'Linear Transfer',
+		description: 'For each color channel: [slope] * [value] + [intercept]'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.lumakey.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21434,6 +25371,7 @@ require.register("forresto-seriously/effects/seriously.lumakey.js", function(exp
 				'uniform float threshold;\n' +
 				'uniform float clipBlack;\n' +
 				'uniform float clipWhite;\n' +
+				'uniform bool invert;\n' +
 				'\n' +
 				'const vec3 lumcoeff = vec3(0.2125,0.7154,0.0721);\n' +
 				'\n' +
@@ -21441,6 +25379,7 @@ require.register("forresto-seriously/effects/seriously.lumakey.js", function(exp
 				'	vec4 pixel = texture2D(source, vTexCoord);\n' +
 				'	float luma = dot(pixel.rgb,lumcoeff);\n' +
 				'	float alpha = 1.0 - smoothstep(clipBlack, clipWhite, luma);\n' +
+				'	if (invert) alpha = 1.0 - alpha;\n' +
 				'	gl_FragColor = vec4(pixel.rgb, min(pixel.a, alpha) );\n' +
 				'\n' +
 				'} \n';
@@ -21466,6 +25405,11 @@ require.register("forresto-seriously/effects/seriously.lumakey.js", function(exp
 				defaultValue: 1,
 				min: 0,
 				max: 1
+			},
+			invert: {
+				type: 'boolean',
+				uniform: 'invert',
+				defaultValue: false
 			}
 		},
 		title: 'Luma Key',
@@ -21475,22 +25419,22 @@ require.register("forresto-seriously/effects/seriously.lumakey.js", function(exp
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.nightvision.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.nightvision.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21542,14 +25486,14 @@ require.register("forresto-seriously/effects/seriously.nightvision.js", function
 			luminanceThreshold: {
 				type: 'number',
 				uniform: 'luminanceThreshold',
-				defaultValue: 0.2,
+				defaultValue: 0.1,
 				min: 0,
 				max: 1
 			},
 			amplification: {
 				type: 'number',
 				uniform: 'amplification',
-				defaultValue: 3,
+				defaultValue: 1.4,
 				min: 0
 			},
 			color: {
@@ -21564,116 +25508,316 @@ require.register("forresto-seriously/effects/seriously.nightvision.js", function
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.noise.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.noise.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
 
-	Seriously.plugin('noise', (function () {
+	Seriously.plugin('noise', {
+		shader: function (inputs, shaderSource, utilities) {
+			var frag = '#ifdef GL_ES\n\n' +
+				'precision mediump float;\n\n' +
+				'#endif\n\n' +
+				'\n' +
+				'#define Blend(base, blend, funcf)		vec3(funcf(base.r, blend.r), funcf(base.g, blend.g), funcf(base.b, blend.b))\n' +
+				'#define BlendOverlayf(base, blend) (base < 0.5 ? (2.0 * base * blend) : (1.0 - 2.0 * (1.0 - base) * (1.0 - blend)))\n' +
+				'#define BlendOverlay(base, blend)		Blend(base, blend, BlendOverlayf)\n' +
+				'varying vec2 vTexCoord;\n' +
+				'varying vec4 vPosition;\n' +
+				'\n' +
+				'uniform sampler2D source;\n' +
+				'\n' +
+				'uniform vec2 resolution;\n' +
+				'uniform float amount;\n' +
+				'uniform float timer;\n' +
 
-		return {
-			shader: function (inputs, shaderSource, utilities) {
-				var frag;
-				frag = '#ifdef GL_ES\n\n' +
-					'precision mediump float;\n\n' +
-					'#endif\n\n' +
-					'\n' +
-					'#define Blend(base, blend, funcf)		vec3(funcf(base.r, blend.r), funcf(base.g, blend.g), funcf(base.b, blend.b))\n' +
-					'#define BlendOverlayf(base, blend) (base < 0.5 ? (2.0 * base * blend) : (1.0 - 2.0 * (1.0 - base) * (1.0 - blend)))\n' +
-					'#define BlendOverlay(base, blend)		Blend(base, blend, BlendOverlayf)\n' +
-					'varying vec2 vTexCoord;\n' +
-					'varying vec4 vPosition;\n' +
-					'\n' +
-					'uniform sampler2D source;\n' +
-					'\n' +
-					'uniform vec3 srsSize;\n' +
-					'uniform float amount;\n' +
-					'uniform float timer;\n' +
+				utilities.shader.noiseHelpers +
+				utilities.shader.snoise3d +
+				utilities.shader.random +
 
-					utilities.shader.noiseHelpers +
-					utilities.shader.snoise3d +
-					utilities.shader.random +
+				'void main(void) {\n' +
+				'	vec4 pixel = texture2D(source, vTexCoord);\n' +
+				'	float r = random(vec2(timer * vTexCoord.xy));\n' +
+				'	float noise = snoise(vec3(vTexCoord * (1024.4 + r * 512.0), timer)) * 0.5;';
 
-					'void main(void) {\n' +
-					'	vec4 pixel = texture2D(source, vTexCoord);\n' +
-					'	float r = random(vec2(timer * vTexCoord.xy));\n' +
-					'	float noise = snoise(vec3(vTexCoord * (1024.4 + r * 512.0), timer)) * 0.5;';
+			if (inputs.overlay) {
+				frag += '	vec3 overlay = BlendOverlay(pixel.rgb, vec3(noise));\n' +
+						'	pixel.rgb = mix(pixel.rgb, overlay, amount);\n';
+			} else {
+				frag += '	pixel.rgb += noise * amount;\n';
+			}
+			frag += '	gl_FragColor = pixel;\n}';
 
-				if (inputs.overlay) {
-					frag += '	vec3 overlay = BlendOverlay(pixel.rgb, vec3(noise));\n' +
-							'	pixel.rgb = mix(pixel.rgb, overlay, amount);\n';
-				} else {
-					frag += '	pixel.rgb += noise * amount;\n';
-				}
-				frag += '	gl_FragColor = pixel;\n}';
-
-				shaderSource.fragment = frag;
-				return shaderSource;
+			shaderSource.fragment = frag;
+			return shaderSource;
+		},
+		inPlace: true,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source',
+				shaderDirty: false
 			},
-			inPlace: true,
-			inputs: {
-				source: {
-					type: 'image',
-					uniform: 'source',
-					shaderDirty: false
-				},
-				overlay: {
-					type: 'boolean',
-					shaderDirty: true,
-					defaultValue: true
-				},
-				amount: {
-					type: 'number',
-					uniform: 'amount',
-					min: 0,
-					max: 1,
-					defaultValue: 1
-				},
-				timer: {
-					type: 'number',
-					uniform: 'timer',
-					defaultValue: 0,
-					step: 1
-				}
+			overlay: {
+				type: 'boolean',
+				shaderDirty: true,
+				defaultValue: true
 			},
-			title: 'Noise',
-			description: 'Add noise'
-		};
-	}()));
+			amount: {
+				type: 'number',
+				uniform: 'amount',
+				min: 0,
+				max: 1,
+				defaultValue: 1
+			},
+			timer: {
+				type: 'number',
+				uniform: 'timer',
+				defaultValue: 0,
+				step: 1
+			}
+		},
+		title: 'Noise',
+		description: 'Add noise'
+	});
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.ripple.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.repeat.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	var identity = new Float32Array([
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1
+		]),
+		mat4 = Seriously.util.mat4;
+
+	Seriously.plugin('repeat', function () {
+		var drawOpts = {
+				clear: false
+			},
+			transform = new Float32Array(16),
+			me = this;
+
+		function resize() {
+			me.resize();
+		}
+
+		// custom resize method
+		this.resize = function () {
+			var width = this.width,
+				height = this.height,
+				source = me.inputs.source,
+				i;
+
+			if (this.source) {
+				width = this.source.width;
+				height = this.source.height;
+			} else if (this.sources && this.sources.source) {
+				width = this.sources.source.width;
+				height = this.sources.source.height;
+			} else {
+				width = 1;
+				height = 1;
+			}
+
+			if (me.inputs.width) {
+				width = me.inputs.width;
+				if (me.inputs.height) {
+					height = me.inputs.height;
+				} else if (source) {
+					//match source aspect ratio
+					height = width * source.height / source.width;
+				}
+			} else if (me.inputs.height) {
+				height = me.inputs.height;
+				if (source) {
+					//match source aspect ratio
+					width = height * source.width / source.height;
+				}
+			}
+
+			if (source) {
+				this.uniforms.resolution[0] = source.width;
+				this.uniforms.resolution[1] = source.height;
+			}
+
+			if (this.width !== width || this.height !== height) {
+				this.width = width;
+				this.height = height;
+
+				this.uniforms.targetRes[0] = this.width;
+				this.uniforms.targetRes[1] = this.height;
+
+				if (this.frameBuffer) {
+					this.frameBuffer.resize(this.width, this.height);
+				}
+
+				this.setDirty();
+			}
+
+			for (i = 0; i < this.targets.length; i++) {
+				this.targets[i].resize();
+			}
+		};
+
+		this.uniforms.targetRes = [1, 1];
+
+		return {
+			initialize: function (initialize) {
+				initialize();
+				this.uniforms.transform = transform;
+			},
+			shader: function (inputs, shaderSource) {
+				shaderSource.vertex = [
+					'precision mediump float;',
+
+					'attribute vec4 position;',
+					'attribute vec2 texCoord;',
+
+					'uniform vec2 resolution;',
+					'uniform vec2 targetRes;',
+					'uniform mat4 transform;',
+
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+
+					'void main(void) {',
+					// first convert to screen space
+					'	vec4 screenPosition = vec4(position.xy * resolution / 2.0, position.z, position.w);',
+					'	screenPosition = transform * screenPosition;',
+
+					// convert back to OpenGL coords
+					'	gl_Position = screenPosition;',
+					'	gl_Position.xy = screenPosition.xy * 2.0 / resolution;',
+					'	gl_Position.z = screenPosition.z * 2.0 / (resolution.x / resolution.y);',
+					'	gl_Position.xy *= resolution / targetRes;',
+					'	vTexCoord = texCoord;',
+					'	vPosition = gl_Position;',
+					'}\n'
+				].join('\n');
+				return shaderSource;
+			},
+			draw: function (shader, model, uniforms, frameBuffer, draw) {
+				var i,
+					source = this.inputs.source,
+					transform = this.inputs.transform,
+					transformMatrix = transform && transform.cumulativeMatrix,
+					repeat = this.inputs.repeat,
+					gl = this.gl;
+
+				if (transformMatrix && transform.transformed) {
+					mat4.copy(uniforms.transform, source && source.cumulativeMatrix || identity);
+				} else {
+					repeat = Math.min(repeat, 1);
+				}
+
+				// first, clear
+				gl.viewport(0, 0, this.width, this.height);
+				gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
+				gl.clearColor(0.0, 0.0, 0.0, 0.0);
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+				for (i = repeat - 1; i >= 0; i--) {
+					draw(shader, model, uniforms, frameBuffer, null, drawOpts);
+					if (i) {
+						mat4.multiply(uniforms.transform, transformMatrix, uniforms.transform);
+					}
+				}
+			},
+			inputs: {
+				source: {
+					type: 'image',
+					uniform: 'source',
+					update: function () {
+						resize();
+						this.uniforms.transform = transform;
+					}
+				},
+				transform: {
+					type: 'image'
+				},
+				repeat: {
+					type: 'number',
+					step: 1,
+					min: 0,
+					defaultValue: 8
+				},
+				width: {
+					type: 'number',
+					min: 0,
+					step: 1,
+					update: resize,
+					defaultValue: 0
+				},
+				height: {
+					type: 'number',
+					min: 0,
+					step: 1,
+					update: resize,
+					defaultValue: 0
+				}
+			}
+		};
+	},
+	{
+		inPlace: true,
+		description: 'Draw image multiple times, transforming each time',
+		title: 'Repeat'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.ripple.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21724,7 +25868,7 @@ require.register("forresto-seriously/effects/seriously.ripple.js", function(expo
 				type: 'vector',
 				uniform: 'center',
 				dimensions: 2,
-				defaultValue: { x: 0.5, y: 0.5 }
+				defaultValue: [0.5, 0.5]
 			}
 		},
 		title: 'Ripple Distortion',
@@ -21733,22 +25877,22 @@ require.register("forresto-seriously/effects/seriously.ripple.js", function(expo
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.scanlines.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.scanlines.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21770,7 +25914,7 @@ require.register("forresto-seriously/effects/seriously.scanlines.js", function(e
 					'\n' +
 					'void main(void) {\n' +
 					'	vec4 pixel = texture2D(source, vTexCoord);\n' +
-					'	float darken = 2.0 * abs( fract(vTexCoord.y * lines) - 0.5);\n' +
+					'	float darken = 2.0 * abs( fract(vPosition.y * lines / 2.0) - 0.5);\n' +
 					'	darken = clamp(darken - width + 0.5, 0.0, 1.0);\n' +
 					'	darken = 1.0 - ((1.0 - darken) * intensity);\n' +
 					'	gl_FragColor = vec4(pixel.rgb * darken, 1.0);\n' +
@@ -21809,22 +25953,22 @@ require.register("forresto-seriously/effects/seriously.scanlines.js", function(e
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.sepia.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.sepia.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21873,22 +26017,163 @@ require.register("forresto-seriously/effects/seriously.sepia.js", function(expor
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.sketch.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.simplex.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	Seriously.plugin('simplex', function () {
+		var me = this;
+
+		function resize() {
+			me.resize();
+		}
+
+		return {
+			shader: function (inputs, shaderSource, utilities) {
+				var frequency = 1,
+					amplitude = 1,
+					i,
+					adjust = 0;
+
+				function fmtFloat(n) {
+					if (n - Math.floor(n) === 0) {
+						return n + '.0';
+					}
+					return n;
+				}
+
+				shaderSource.fragment = '#ifdef GL_ES\n\n' +
+					'precision mediump float;\n\n' +
+					'#endif\n\n' +
+					'\n' +
+					'varying vec2 vTexCoord;\n' +
+					'varying vec4 vPosition;\n' +
+					'\n' +
+					'uniform sampler2D source;\n' +
+					'\n' +
+					'uniform float amount;\n' +
+					'uniform vec2 noiseScale;\n' +
+					'uniform vec2 noiseOffset;\n' +
+					'uniform float time;\n' +
+
+					utilities.shader.noiseHelpers +
+					utilities.shader.snoise3d +
+					//utilities.shader.random +
+
+					'void main(void) {\n' +
+					'	float total = 0.0;\n' +
+					'	vec3 pos = vec3(vTexCoord.xy * noiseScale + noiseOffset, time);\n';
+
+				for (i = 0; i < inputs.octaves; i++) {
+					frequency = Math.pow(2, i);
+					amplitude = Math.pow(inputs.persistence, i);
+					adjust += amplitude;
+					shaderSource.fragment += '\ttotal += snoise(pos * ' + fmtFloat(frequency) + ') * ' + fmtFloat(amplitude) + ';\n';
+				}
+				shaderSource.fragment += '\ttotal *= amount / ' + fmtFloat(adjust) + ';\n' +
+				'	total = (total + 1.0)/ 2.0;\n' +
+				'	gl_FragColor = vec4(total, total, total, 1.0);\n' +
+				'}';
+
+				return shaderSource;
+			},
+			inputs: {
+				source: {
+					type: 'image',
+					uniform: 'source'
+				},
+				noiseScale: {
+					type: 'vector',
+					dimensions: 2,
+					uniform: 'noiseScale',
+					defaultValue: [1, 1]
+				},
+				noiseOffset: {
+					type: 'vector',
+					dimensions: 2,
+					uniform: 'noiseOffset',
+					defaultValue: [0, 0]
+				},
+				octaves: {
+					type: 'number',
+					shaderDirty: true,
+					min: 1,
+					max: 8,
+					step: 1,
+					defaultValue: 1
+				},
+				persistence: {
+					type: 'number',
+					defaultValue: 0.5,
+					min: 0,
+					max: 0.5
+				},
+				amount: {
+					type: 'number',
+					uniform: 'amount',
+					min: 0,
+					defaultValue: 1
+				},
+				time: {
+					type: 'number',
+					uniform: 'time',
+					defaultValue: 0
+				},
+				width: {
+					type: 'number',
+					min: 0,
+					step: 1,
+					update: resize,
+					defaultValue: 0
+				},
+				height: {
+					type: 'number',
+					min: 0,
+					step: 1,
+					update: resize,
+					defaultValue: 0
+				}
+			}
+		};
+	}, {
+		title: 'Simplex Noise',
+		description: 'Generate Simplex Noise'
+	});
+}));
+
+});
+require.register("forresto-noflo-seriously/vendor/effects/seriously.sketch.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -21907,12 +26192,13 @@ require.register("forresto-seriously/effects/seriously.sketch.js", function(expo
 				'varying vec4 vPosition;\n' +
 				'\n' +
 				'uniform sampler2D source;\n' +
-				'uniform float resolution;\n' +
+				'uniform vec2 resolution;\n' +
 				'\n' +
-				'float n0 = 97.0 / resolution;\n' +
-				'float n1 = 15.0 / resolution;\n' +
-				'float n2 = 97.0 / resolution;\n' +
-				'float n3 = 9.7 / resolution;\n' +
+				'float res = resolution.x;\n' +
+				'float n0 = 97.0 / res;\n' +
+				'float n1 = 15.0 / res;\n' +
+				'float n2 = 97.0 / res;\n' +
+				'float n3 = 9.7 / res;\n' +
 				'float total = n2 + ( 4.0 * n0 ) + ( 4.0 * n1 );\n' +
 				'const vec3 div3 = vec3(1.0 / 3.0);\n' +
 				'\n' +
@@ -21948,108 +26234,217 @@ require.register("forresto-seriously/effects/seriously.sketch.js", function(expo
 				'}\n';
 			return shaderSource;
 		},
-		inPlace: true,
+		inPlace: false,
 		inputs: {
 			source: {
 				type: 'image',
 				uniform: 'source',
 				shaderDirty: false
-			},
-			resolution: {
-				type: 'number',
-				uniform: 'resolution',
-				min: 1,
-				defaultValue: 640
 			}
 		},
 		title: 'Sketch',
 		description: 'Pencil/charcoal sketch'
 	});
-}))
+}));
 
 });
-require.register("forresto-seriously/effects/seriously.split.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.split.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
 
-	Seriously.plugin('split', (function () {
-		var baseShader;
+	Seriously.plugin('split', function () {
+		var baseShader,
+			resolutionA = [1, 1],
+			resolutionB = [1, 1];
+
+		// custom resize method
+		this.resize = function () {
+			var width,
+				height,
+				mode = this.inputs.sizeMode,
+				node,
+				fn,
+				i,
+				sourceA = this.inputs.sourceA,
+				sourceB = this.inputs.sourceB;
+
+			if (mode === 'a' || mode === 'b') {
+				node = mode === 'a' ? sourceA : sourceB;
+				if (node) {
+					width = node.width;
+					height = node.height;
+				} else {
+					width = 1;
+					height = 1;
+				}
+			} else {
+				if (sourceA) {
+					if (sourceB) {
+						fn = (mode === 'union' ? Math.max : Math.min);
+						width = fn(sourceA.width, sourceB.width);
+						height = fn(sourceA.height, sourceB.height);
+					} else {
+						width = sourceA.width;
+						height = sourceA.height;
+					}
+				} else if (sourceB) {
+					width = sourceB.width;
+					height = sourceB.height;
+				} else {
+					width = 1;
+					height = 1;
+				}
+			}
+
+			if (this.width !== width || this.height !== height) {
+				this.width = width;
+				this.height = height;
+
+				this.uniforms.resolution[0] = width;
+				this.uniforms.resolution[1] = height;
+
+				if (this.frameBuffer) {
+					this.frameBuffer.resize(width, height);
+				}
+
+				this.setDirty();
+			}
+
+			if (sourceA) {
+				resolutionA[0] = sourceA.width;
+				resolutionA[1] = sourceA.height;
+			}
+			if (sourceB) {
+				resolutionB[0] = sourceB.width;
+				resolutionB[1] = sourceB.height;
+			}
+
+			for (i = 0; i < this.targets.length; i++) {
+				this.targets[i].resize();
+			}
+		};
+
 		return {
-			initialize: function (parent) {
-				parent();
+			initialize: function (initialize) {
+				initialize();
+				this.uniforms.resolutionA = resolutionA;
+				this.uniforms.resolutionB = resolutionB;
 			},
 			shader: function (inputs, shaderSource) {
 				baseShader = new Seriously.util.ShaderProgram(this.gl, shaderSource.vertex, shaderSource.fragment);
 
-				shaderSource.vertex = '#ifdef GL_ES\n' +
-					'precision mediump float;\n' +
-					'#endif \n' +
-					'\n' +
-					'attribute vec4 position;\n' +
-					'attribute vec2 texCoord;\n' +
-					'\n' +
-					'uniform vec3 srsSize;\n' +
-					'uniform mat4 projection;\n' +
-					'uniform mat4 transform;\n' +
-					'\n' +
-					'varying vec2 vTexCoord;\n' +
-					'varying vec4 vPosition;\n' +
-					'\n' +
-					'uniform float angle;\n' +
-					'varying float c;\n' +
-					'varying float s;\n' +
-					'varying float t;\n' +
-					'\n' +
-					'void main(void) {\n' +
-					'   c = cos(angle);\n' +
-					'   s = sin(angle);\n' +
-					'	t = abs(c + s);\n' +
-					'\n' +
-					'	vec4 pos = position * vec4(srsSize.x / srsSize.y, 1.0, 1.0, 1.0);\n' +
-					'	gl_Position = transform * pos;\n' +
-					'	gl_Position.z -= srsSize.z;\n' +
-					'	gl_Position = projection * gl_Position;\n' +
-					'	gl_Position.z = 0.0;\n' + //prevent near clipping
-					'	vTexCoord = vec2(texCoord.s, texCoord.t);\n' +
-					'}\n';
-				shaderSource.fragment = '#ifdef GL_ES\n\n' +
-					'precision mediump float;\n\n' +
-					'#endif\n\n' +
-					'\n' +
-					'varying vec2 vTexCoord;\n' +
-					'varying vec4 vPosition;\n' +
-					'\n' +
-					'varying float c;\n' +
-					'varying float s;\n' +
-					'varying float t;\n' +
-					'\n' +
-					'uniform sampler2D sourceA;\n' +
-					'uniform sampler2D sourceB;\n' +
-					'uniform float split;\n' +
-					'uniform float angle;\n' +
-					'uniform float fuzzy;\n' +
-					'\n' +
-					'void main(void) {\n' +
-					'	vec4 pixel1 = texture2D(sourceA, vTexCoord);\n' +
-					'	vec4 pixel2 = texture2D(sourceB, vTexCoord);\n' +
-					'	gl_FragColor = mix(pixel2, pixel1, smoothstep((split - fuzzy * (1.0 - split)) * t, (split + fuzzy * split) * t, c * vTexCoord.x + s * vTexCoord.y));\n' +
-					'}\n';
+				shaderSource.vertex = [
+					'#ifdef GL_ES',
+					'precision mediump float;',
+					'#endif ',
+
+					'attribute vec4 position;',
+					'attribute vec2 texCoord;',
+
+					'uniform vec2 resolution;',
+					'uniform vec2 resolutionA;',
+					'uniform vec2 resolutionB;',
+					'uniform mat4 projection;',
+					//'uniform mat4 transform;',
+
+					'varying vec2 vTexCoord;',
+					'varying vec2 vTexCoordA;',
+					'varying vec2 vTexCoordB;',
+					'varying vec4 vPosition;',
+
+					'uniform float angle;',
+					'varying float c;',
+					'varying float s;',
+					'varying float t;',
+
+					'void main(void) {',
+					'   c = cos(angle);',
+					'   s = sin(angle);',
+					'	t = abs(c + s);',
+
+					// first convert to screen space
+					'	vec4 screenPosition = vec4(position.xy * resolution / 2.0, position.z, position.w);',
+					//'	screenPosition = transform * screenPosition;',
+
+					// convert back to OpenGL coords
+					'	gl_Position.xy = screenPosition.xy * 2.0 / resolution;',
+					'	gl_Position.z = screenPosition.z * 2.0 / (resolution.x / resolution.y);',
+					'	gl_Position.w = screenPosition.w;',
+
+					'	vec2 adjustedTexCoord = (texCoord - 0.5) * resolution;',
+					'	vTexCoordA = adjustedTexCoord / resolutionA + 0.5;',
+					'	vTexCoordB = adjustedTexCoord / resolutionB + 0.5;',
+					'	vTexCoord = texCoord;',
+
+					'	vPosition = gl_Position;',
+					'}'
+				].join('\n');
+				shaderSource.fragment = [
+					'#ifdef GL_ES\n',
+					'precision mediump float;\n',
+					'#endif\n',
+
+					'varying vec2 vTexCoord;',
+					'varying vec2 vTexCoordA;',
+					'varying vec2 vTexCoordB;',
+					'varying vec4 vPosition;',
+
+					'varying float c;',
+					'varying float s;',
+					'varying float t;',
+
+					'uniform sampler2D sourceA;',
+					'uniform sampler2D sourceB;',
+					'uniform float split;',
+					'uniform float angle;',
+					'uniform float fuzzy;',
+
+					'vec4 textureLookup(sampler2D tex, vec2 texCoord) {',
+					'	if (any(lessThan(texCoord, vec2(0.0))) || any(greaterThan(texCoord, vec2(1.0)))) {',
+					'		return vec4(0.0);',
+					'	} else {',
+					'		return texture2D(tex, texCoord);',
+					'	}',
+					'}',
+
+					'void main(void) {',
+					'	float mn = (split - fuzzy * (1.0 - split));',
+					'	float mx = (split + fuzzy * split);;',
+					'	vec2 coords = vTexCoord - vec2(0.5);',
+					'	coords = vec2(coords.x * c - coords.y * s, coords.x * s + coords.y * c);',
+					'	float scale = max(abs(c - s), abs(s + c));',
+					'	coords /= scale;',
+					'	coords += vec2(0.5);',
+					'	float x = coords.x;;',
+					'	if (x <= mn) {',
+					'		gl_FragColor = textureLookup(sourceB, vTexCoordB);',
+					'		return;',
+					'	}',
+					'	if (x >= mx) {',
+					'		gl_FragColor = textureLookup(sourceA, vTexCoordA);',
+					'		return;',
+					'	}',
+					'	vec4 pixel1 = textureLookup(sourceA, vTexCoordA);',
+					'	vec4 pixel2 = textureLookup(sourceB, vTexCoordB);',
+					'	gl_FragColor = mix(pixel2, pixel1, smoothstep(mn, mx, x));',
+					'}'
+				].join('\n');
 
 				return shaderSource;
 			},
@@ -22079,61 +26474,82 @@ require.register("forresto-seriously/effects/seriously.split.js", function(expor
 				}
 
 				return true;
-			},
-			inputs: {
-				sourceA: {
-					type: 'image',
-					uniform: 'sourceA',
-					shaderDirty: false
-				},
-				sourceB: {
-					type: 'image',
-					uniform: 'sourceB',
-					shaderDirty: false
-				},
-				split: {
-					type: 'number',
-					uniform: 'split',
-					defaultValue: 0.5,
-					min: 0,
-					max: 1
-				},
-				angle: {
-					type: 'number',
-					uniform: 'angle',
-					defaultValue: 0
-				},
-				fuzzy: {
-					type: 'number',
-					uniform: 'fuzzy',
-					defaultValue: 0,
-					min: 0,
-					max: 1
+			}
+		};
+	},
+	{
+		inputs: {
+			sourceA: {
+				type: 'image',
+				uniform: 'sourceA',
+				shaderDirty: false,
+				update: function () {
+					this.resize();
 				}
 			},
-			description: 'Split screen or wipe',
-			title: 'Split'
-		};
-	}()));
+			sourceB: {
+				type: 'image',
+				uniform: 'sourceB',
+				shaderDirty: false,
+				update: function () {
+					this.resize();
+				}
+			},
+			sizeMode: {
+				type: 'enum',
+				defaultValue: 'a',
+				options: [
+					'a',
+					'b',
+					'union',
+					'intersection'
+				],
+				update: function () {
+					this.resize();
+				}
+			},
+			split: {
+				type: 'number',
+				uniform: 'split',
+				defaultValue: 0.5,
+				min: 0,
+				max: 1
+			},
+			angle: {
+				type: 'number',
+				uniform: 'angle',
+				defaultValue: 0
+			},
+			fuzzy: {
+				type: 'number',
+				uniform: 'fuzzy',
+				defaultValue: 0,
+				min: 0,
+				max: 1
+			}
+		},
+		description: 'Split screen or wipe',
+		title: 'Split'
+	});
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.tone.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.tone.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -22202,39 +26618,53 @@ require.register("forresto-seriously/effects/seriously.tone.js", function(export
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.tvglitch.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.tvglitch.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
 
-	Seriously.plugin('tvglitch', (function () {
-		//particle parameters
-		var minVelocity = 0.2,
-			maxVelocity = 0.8,
-			minSize = 0.02,
-			maxSize = 0.3,
-			particleCount = 20;
+	//particle parameters
+	var minVelocity = 0.2,
+		maxVelocity = 0.8,
+		minSize = 0.02,
+		maxSize = 0.3,
+		particleCount = 20;
+
+	Seriously.plugin('tvglitch', function () {
+		var lastHeight,
+			lastTime,
+			particleBuffer,
+			particleShader,
+			particleFrameBuffer,
+			gl;
+
 		return {
 			initialize: function (parent) {
-				var i, sizeRange, velocityRange, gl = this.gl,
-					particleVertex, particleFragment, particles;
+				var i,
+					sizeRange,
+					velocityRange,
+					particleVertex,
+					particleFragment,
+					particles;
 
-				this.lastHeight = this.height;
+				gl = this.gl;
+
+				lastHeight = this.height;
 
 				//initialize particles
 				particles = [];
@@ -22247,11 +26677,11 @@ require.register("forresto-seriously/effects/seriously.tvglitch.js", function(ex
 					particles.push(Math.random() * 0.2); //intensity
 				}
 
-				this.particleBuffer = gl.createBuffer();
-				gl.bindBuffer(gl.ARRAY_BUFFER, this.particleBuffer);
+				particleBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(particles), gl.STATIC_DRAW);
-				this.particleBuffer.itemSize = 4;
-				this.particleBuffer.numItems = particleCount;
+				particleBuffer.itemSize = 4;
+				particleBuffer.numItems = particleCount;
 
 				particleVertex = '#ifdef GL_ES\n' +
 				'precision mediump float;\n' +
@@ -22284,9 +26714,9 @@ require.register("forresto-seriously/effects/seriously.tvglitch.js", function(ex
 				'	gl_FragColor.a = 2.0 * intensity * (1.0 - abs(gl_PointCoord.y - 0.5));\n' +
 				'}\n';
 
-				this.particleShader = new Seriously.util.ShaderProgram(gl, particleVertex, particleFragment);
+				particleShader = new Seriously.util.ShaderProgram(gl, particleVertex, particleFragment);
 
-				this.particleFrameBuffer = new Seriously.util.FrameBuffer(gl, 1, this.height / 2);
+				particleFrameBuffer = new Seriously.util.FrameBuffer(gl, 1, this.height / 2);
 				parent();
 			},
 			shader: function (inputs, shaderSource) {
@@ -22376,13 +26806,11 @@ require.register("forresto-seriously/effects/seriously.tvglitch.js", function(ex
 				return shaderSource;
 			},
 			draw: function (shader, model, uniforms, frameBuffer, parent) {
-				var doParticles = (this.lastTime !== this.inputs.time),
-					vsyncPeriod,
-					diff,
-					gl = this.gl;
+				var doParticles = (lastTime !== this.inputs.time),
+					vsyncPeriod;
 
-				if (this.lastHeight !== this.height) {
-					this.lastHeight = this.height;
+				if (lastHeight !== this.height) {
+					lastHeight = this.height;
 					//todo: adjust framebuffer height?
 					doParticles = true;
 				}
@@ -22401,143 +26829,129 @@ require.register("forresto-seriously/effects/seriously.tvglitch.js", function(ex
 				uniforms.distortion = Math.random() * this.inputs.distortion;
 
 				//render particle canvas and attach uniform
-				//todo: this is a good spot for parallel processing. RiverTrail maybe?
+				//todo: this is a good spot for parallel processing. ParallelArray maybe?
 				if (doParticles && (this.inputs.lineSync || this.inputs.bars)) {
-					diff = this.inputs.time - this.lastTime;
-
-					this.particleShader.useProgram();
+					particleShader.use();
 					gl.viewport(0, 0, 1, this.height / 2);
-					gl.bindFramebuffer(gl.FRAMEBUFFER, this.particleFrameBuffer.frameBuffer);
+					gl.bindFramebuffer(gl.FRAMEBUFFER, particleFrameBuffer.frameBuffer);
 					gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-					gl.enableVertexAttribArray(this.particleShader.location_particle);
-					gl.bindBuffer(gl.ARRAY_BUFFER, this.particleBuffer);
-					gl.vertexAttribPointer(this.particleShader.location_particle, this.particleBuffer.itemSize, gl.FLOAT, false, 0, 0);
+					gl.enableVertexAttribArray(particleShader.location.particle);
+					gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
+					gl.vertexAttribPointer(particleShader.location.particle, particleBuffer.itemSize, gl.FLOAT, false, 0, 0);
 					gl.enable(gl.BLEND);
 					gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-					this.particleShader.set_time(uniforms.time);
-					this.particleShader.set_height(this.height);
+					particleShader.time.set(uniforms.time);
+					particleShader.height.set(this.height);
 					gl.drawArrays(gl.POINTS, 0, particleCount);
 
-					this.lastTime = this.inputs.time;
+					lastTime = this.inputs.time;
 				}
-				uniforms.particles = this.particleFrameBuffer.texture;
+				uniforms.particles = particleFrameBuffer.texture;
 
 				parent(shader, model, uniforms, frameBuffer);
-				/*
-				this.particleShader.useProgram();
-				gl.viewport(0, 0, 1, 480);
-				gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
-				//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-				gl.enableVertexAttribArray(this.particleShader.location_particle);
-				gl.bindBuffer(gl.ARRAY_BUFFER, this.particleBuffer);
-				gl.vertexAttribPointer(this.particleShader.location_particle, this.particleBuffer.itemSize, gl.FLOAT, false, 0, 0);
-				gl.enable(gl.BLEND);
-				gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-				this.particleShader.set_time(uniforms.time);
-				this.particleShader.set_height(this.height);
-				gl.drawArrays(gl.POINTS, 0, particleCount);
-				*/
 			},
 			destroy: function () {
-				delete this.particleBuffer;
-				if (this.particleFrameBuffer) {
-					this.particleFrameBuffer.destroy();
+				particleBuffer = null;
+				if (particleFrameBuffer) {
+					particleFrameBuffer.destroy();
+					particleFrameBuffer = null;
 				}
-			},
-			inPlace: false,
-			inputs: {
-				source: {
-					type: 'image',
-					uniform: 'source',
-					shaderDirty: false
-				},
-				time: {
-					type: 'number',
-					defaultValue: 0
-				},
-				distortion: {
-					type: 'number',
-					defaultValue: 0.1,
-					min: 0,
-					max: 1
-				},
-				verticalSync: {
-					type: 'number',
-					defaultValue: 0.1,
-					min: 0,
-					max: 1
-				},
-				lineSync: {
-					type: 'number',
-					uniform: 'lineSync',
-					defaultValue: 0.2,
-					min: 0,
-					max: 1
-				},
-				scanlines: {
-					type: 'number',
-					uniform: 'scanlines',
-					defaultValue: 0.3,
-					min: 0,
-					max: 1
-				},
-				bars: {
-					type: 'number',
-					uniform: 'bars',
-					defaultValue: 0,
-					min: 0,
-					max: 1
-				},
-				frameShape: {
-					type: 'number',
-					uniform: 'frameShape',
-					min: 0,
-					max: 2,
-					defaultValue: 0.27
-				},
-				frameLimit: {
-					type: 'number',
-					uniform: 'frameLimit',
-					min: -1,
-					max: 1,
-					defaultValue: 0.34
-				},
-				frameSharpness: {
-					type: 'number',
-					uniform: 'frameSharpness',
-					min: 0,
-					max: 40,
-					defaultValue: 8.4
-				},
-				frameColor: {
-					type: 'color',
-					uniform: 'frameColor',
-					defaultValue: [0, 0, 0, 1]
-				}
-			},
-			description: '',
-			title: 'TV Glitch'
+			}
 		};
-	}()));
+	},
+	{
+		inPlace: false,
+		inputs: {
+			source: {
+				type: 'image',
+				uniform: 'source',
+				shaderDirty: false
+			},
+			time: {
+				type: 'number',
+				defaultValue: 0
+			},
+			distortion: {
+				type: 'number',
+				defaultValue: 0.1,
+				min: 0,
+				max: 1
+			},
+			verticalSync: {
+				type: 'number',
+				defaultValue: 0.1,
+				min: 0,
+				max: 1
+			},
+			lineSync: {
+				type: 'number',
+				uniform: 'lineSync',
+				defaultValue: 0.2,
+				min: 0,
+				max: 1
+			},
+			scanlines: {
+				type: 'number',
+				uniform: 'scanlines',
+				defaultValue: 0.3,
+				min: 0,
+				max: 1
+			},
+			bars: {
+				type: 'number',
+				uniform: 'bars',
+				defaultValue: 0,
+				min: 0,
+				max: 1
+			},
+			frameShape: {
+				type: 'number',
+				uniform: 'frameShape',
+				min: 0,
+				max: 2,
+				defaultValue: 0.27
+			},
+			frameLimit: {
+				type: 'number',
+				uniform: 'frameLimit',
+				min: -1,
+				max: 1,
+				defaultValue: 0.34
+			},
+			frameSharpness: {
+				type: 'number',
+				uniform: 'frameSharpness',
+				min: 0,
+				max: 40,
+				defaultValue: 8.4
+			},
+			frameColor: {
+				type: 'color',
+				uniform: 'frameColor',
+				defaultValue: [0, 0, 0, 1]
+			}
+		},
+		title: 'TV Glitch'
+	});
 }));
 
 });
-require.register("forresto-seriously/effects/seriously.vignette.js", function(exports, require, module){
+require.register("forresto-noflo-seriously/vendor/effects/seriously.vignette.js", function(exports, require, module){
+/* global define, require */
 (function (root, factory) {
 	'use strict';
 
 	if (typeof exports === 'object') {
 		// Node/CommonJS
-		factory(root.require('forresto-seriously'));
-	} else if (typeof root.define === 'function' && root.define.amd) {
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
 		// AMD. Register as an anonymous module.
-		root.define(['seriously'], factory);
+		define(['seriously'], factory);
 	} else {
-		var Seriously = root.Seriously;
-		if (!Seriously) {
-			Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
 		}
-		factory(Seriously);
+		factory(root.Seriously);
 	}
 }(this, function (Seriously, undefined) {
 	'use strict';
@@ -22562,7 +26976,7 @@ require.register("forresto-seriously/effects/seriously.vignette.js", function(ex
 					'}\n';
 			return shaderSource;
 		},
-		inPlace: true,
+		inPlace: false,
 		inputs: {
 			source: {
 				type: 'image',
@@ -22581,20 +26995,1263 @@ require.register("forresto-seriously/effects/seriously.vignette.js", function(ex
 }));
 
 });
-require.register("forresto-seriously/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"Seriously.js","description":"Seriously.js WebGL shader image effects","author":"Brian Chirls","repo":"forresto/Seriously.js","version":"0.1.0","keywords":["image","effect","shader","webgl"],"dependencies":{},"scripts":["index.js","seriously.js","effects/seriously.ascii.js","effects/seriously.bleach-bypass.js","effects/seriously.blend.js","effects/seriously.channels.js","effects/seriously.chroma.js","effects/seriously.color.js","effects/seriously.colorcube.js","effects/seriously.daltonize.js","effects/seriously.edge.js","effects/seriously.emboss.js","effects/seriously.exposure.js","effects/seriously.fader.js","effects/seriously.hex.js","effects/seriously.hue-saturation.js","effects/seriously.invert.js","effects/seriously.lumakey.js","effects/seriously.nightvision.js","effects/seriously.noise.js","effects/seriously.ripple.js","effects/seriously.scanlines.js","effects/seriously.sepia.js","effects/seriously.sketch.js","effects/seriously.split.js","effects/seriously.tone.js","effects/seriously.tvglitch.js","effects/seriously.vignette.js"],"json":["component.json"]}');
-});
-require.register("forresto-noflo-seriously/index.js", function(exports, require, module){
-/*
- * This file can be used for general library features of noflo-seriously.
- *
- * The library features can be made available as CommonJS modules that the
- * components in this project utilize.
- */
+require.register("forresto-noflo-seriously/vendor/effects/seriously.whitebalance.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	/*
+
+	Math references:
+	en.wikipedia.org/wiki/Color_balance
+	http://scien.stanford.edu/pages/labsite/2010/psych221/projects/2010/JasonSu/adaptation.html
+	https://github.com/ikaros-project/ikaros/blob/master/Source/Modules/VisionModules/WhiteBalance/WhiteBalance.cc
+
+	*/
+
+	var identity = new Float32Array([
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	]);
+
+	Seriously.plugin('whitebalance', function () {
+		var pyramidShader,
+			pyramidBuffers = [],
+			width,
+			height,
+			pyramidSize,
+			log2 = Math.log(2),
+			me = this,
+			//baseShader, //todo: share one with main object
+			gl,
+
+			MAX_TEXTURE_SIZE;
+
+		/*
+		todo: handle special case where node is square and power of two. save on one pyramid iteration
+		*/
+
+		function updateSize(w, h) {
+			var size, numLevels, n,
+				i;
+
+			if (width === w && height === h) {
+				return;
+			}
+
+			width = w;
+			height = h;
+
+			numLevels = Math.ceil(Math.log(Math.max(h, w)) / log2);
+			size = Math.pow(2, numLevels);
+
+			if (size > MAX_TEXTURE_SIZE) {
+				numLevels = Math.ceil(Math.log(MAX_TEXTURE_SIZE) / log2);
+				size = MAX_TEXTURE_SIZE;
+			}
+
+			numLevels++;
+			if (pyramidSize === size) {
+				return;
+			}
+
+			pyramidSize = size;
+
+			while (pyramidBuffers.length > numLevels) {
+				(pyramidBuffers.pop()).fb.destroy();
+			}
+
+			while (pyramidBuffers.length < numLevels) {
+				i = pyramidBuffers.length;
+				n = Math.pow(2, i);
+				pyramidBuffers.push({
+					fb: new Seriously.util.FrameBuffer(me.gl, n, n),//, true),
+					opts: {
+						width: n,
+						height: n
+					},
+					uniforms: {
+						level: pyramidBuffers.length,
+						offset: 0.25 / n,
+						transform: identity,
+						projection: identity,
+						resolution: [n, n]
+					}
+				});
+
+				if (i) {
+					pyramidBuffers[i - 1].uniforms.source = pyramidBuffers[i].fb.texture;
+				}
+			}
+		}
+
+
+		return {
+			initialize: function (initialize) {
+				gl = this.gl;
+
+				MAX_TEXTURE_SIZE = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+
+				if (this.inputs.auto) {
+					updateSize(this.width, this.height);
+				}
+
+				initialize();
+			},
+			shader: function (inputs, shaderSource) {
+				var auto = inputs.auto;
+				//baseShader = new Seriously.util.ShaderProgram(this.gl, shaderSource.vertex, shaderSource.fragment);
+				//todo: gl.getExtension('OES_texture_float_linear')
+
+				if (auto && !pyramidShader) {
+					pyramidShader = new Seriously.util.ShaderProgram(this.gl, shaderSource.vertex, [
+						'precision mediump float;',
+
+						'varying vec2 vTexCoord;',
+						'varying vec4 vPosition;',
+
+						'uniform sampler2D source;',
+						'uniform float offset;',
+						'uniform int level;',
+
+						'void main(void) {',
+						//gl.getExtension("OES_texture_float"), gl.getExtension("OES_texture_float_linear")
+						//'	vec4 pixel = texture2D(source, vTexCoord);',
+
+						'	vec4 pixel = texture2D(source, vTexCoord - vec2(offset)) +',
+						'		texture2D(source, vTexCoord + vec2(offset, -offset)) +',
+						'		texture2D(source, vTexCoord + vec2(offset)) +',
+						'		texture2D(source, vTexCoord + vec2(-offset, offset));',
+						'	pixel /= 4.0;',
+						'	gl_FragColor = pixel;',
+						'}'
+					].join('\n'));
+				}
+
+				shaderSource.fragment = [
+					auto ? '#define AUTO' : '',
+					'precision mediump float;',
+
+					'varying vec2 vTexCoord;',
+					'varying vec4 vPosition;',
+
+					'uniform sampler2D source;',
+					'#ifdef AUTO',
+					'uniform sampler2D whiteSource;',
+					'#else',
+					'uniform vec4 white;',
+					'#endif',
+
+					// matrices from: http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+					/*
+					raw RGB just seems to work better so let's use that until we figure Bradford out
+					'const mat3 rgbToBradford = mat3(',
+					'	0.4360747, 0.2225045, 0.0139322,',
+					'	0.3850649, 0.7168786, 0.0971045,',
+					'	0.1430804, 0.0606169, 0.7141733',
+					');',
+
+					'const mat3 bradfordToRgb = mat3(',
+					'	3.1338561, -0.9787684, 0.0719453,',
+					'	-1.6168667, 1.9161415, -0.2289914,',
+					'	-0.4906146, 0.033454, 1.4052427',
+					');',
+					*/
+
+					'const vec3 luma = vec3(0.2125, 0.7154, 0.0721);',
+
+					'void main(void) {',
+					'	vec4 pixel = texture2D(source, vTexCoord);',
+					'#ifdef AUTO',
+					'	vec4 white = texture2D(whiteSource, vTexCoord);',
+					'#endif',
+					/*
+					'	vec3 whiteBradford = rgbToBradford * white.rgb;',
+					'	vec3 targetBradford = rgbToBradford * vec3(dot(white.rgb, luma));',
+					'	vec3 colorBradford = rgbToBradford * pixel.rgb;',
+					'	pixel.rgb = clamp(bradfordToRgb * (colorBradford * targetBradford / whiteBradford), 0.0, 1.0);',
+					*/
+					'	vec3 target = vec3(dot(white.rgb, luma));',
+					'	pixel.rgb = pixel.rgb * target / white.rgb;',
+					'	gl_FragColor = pixel;',
+					'}'
+				].join('\n');
+
+				return shaderSource;
+			},
+			resize: function () {
+				if (this.gl && this.inputs.auto) {
+					updateSize(this.width, this.height);
+				}
+			},
+			draw: function (shader, model, uniforms, frameBuffer, draw) {
+				var i,
+					buf;
+
+				if (this.inputs.auto) {
+					i = pyramidBuffers.length - 1;
+					pyramidBuffers[i].uniforms.source = uniforms.source;
+					while (i >= 0) {
+						buf = pyramidBuffers[i];
+						draw(pyramidShader, model, buf.uniforms, buf.fb.frameBuffer, null, buf.opts);
+						i--;
+					}
+
+					uniforms.whiteSource = pyramidBuffers[0].fb.texture;
+				}
+
+				draw(shader, model, uniforms, frameBuffer);
+			},
+			destroy: function () {
+				while (pyramidBuffers.length) {
+					pyramidBuffers.pop().destroy();
+				}
+			},
+			inPlace: false,
+			inputs: {
+				source: {
+					type: 'image',
+					uniform: 'source',
+					shaderDirty: false
+				},
+				white: {
+					type: 'color',
+					uniform: 'white',
+					defaultValue: [1, 1, 1]
+				},
+				auto: {
+					type: 'boolean',
+					shaderDirty: true,
+					defaultValue: true
+				}
+			}
+		};
+	},
+	{
+		title: 'White Balance'
+	});
+}));
 
 });
+require.register("forresto-noflo-seriously/vendor/transforms/seriously.camerashake.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	/*
+	Camera Shake
+	- amplitude (x/y)
+	- center (x/y)
+	- rotation (degrees)
+	- frequency
+	- octaves
+	- autoScale (true/false)
+	*/
+
+
+	/*
+	Simplex Noise
+	adapted from https://github.com/jwagner/simplex-noise.js
+	*/
+
+	var mat4 = Seriously.util.mat4,
+
+		f2 = 0.5 * (Math.sqrt(3.0) - 1.0),
+		g2 = (3.0 - Math.sqrt(3.0)) / 6.0,
+
+		random = Math.random,
+		p,
+		perm,
+		permMod12,
+		grad3,
+		initialized = false;
+
+	function initializeSimplex() {
+		//initialize simplex lookup tables
+		var i;
+		if (!initialized) {
+			p = new Uint8Array(256);
+			perm = new Uint8Array(512);
+			permMod12  = new Uint8Array(512);
+			grad3 = new Float32Array([
+				1, 1, 0,
+				- 1, 1, 0,
+				1, - 1, 0,
+
+				- 1, - 1, 0,
+				1, 0, 1,
+				- 1, 0, 1,
+
+				1, 0, - 1,
+				- 1, 0, - 1,
+				0, 1, 1,
+
+				0, - 1, 1,
+				0, 1, - 1,
+				0, - 1, - 1
+			]);
+
+			for (i = 0; i < 256; i++) {
+				p[i] = random() * 256;
+			}
+			for (i = 0; i < 512; i++) {
+				perm[i] = p[i & 255];
+				permMod12[i] = perm[i] % 12;
+			}
+			initialized = true;
+		}
+	}
+
+	function noise2D(xin, yin) {
+		var n0 = 0, // Noise contributions from the three corners
+			n1 = 0, // Skew the input space to determine which simplex cell we're in
+			n2 = 0,
+
+			s = (xin + yin) * f2, // Hairy factor for 2D
+			i = Math.floor(xin + s),
+			j = Math.floor(yin + s),
+			t = (i + j) * g2,
+
+			xx0 = i - t, // Unskew the cell origin back to (x,y) space
+			yy0 = j - t,
+
+			x0 = xin - xx0,
+			y0 = yin - yy0,
+
+			/*
+			For the 2D case, the simplex shape is an equilateral triangle.
+			Determine which simplex we are in.
+
+			Offsets for second (middle) corner of simplex in (i,j) coords
+			*/
+			i1 = x0 > y0 ? 1 : 0,
+			j1 = (i1 + 1) % 2, //opposite of i1
+
+			x1 = x0 - i1 + g2,
+			y1 = y0 - j1 + g2,
+			x2 = x0 - 1 + 2 * g2,
+			y2 = y0 - 1 + 2 * g2,
+
+			ii = i & 255,
+			jj = j & 255,
+
+			t0 = 0.5 - x0 * x0 - y0 * y0,
+
+			t1,
+			t2,
+
+			gi;
+
+		if (t0 >= 0) {
+            gi = permMod12[ii + perm[jj]] * 3;
+            t0 *= t0;
+            n0 = t0 * t0 * (grad3[gi] * x0 + grad3[gi + 1] * y0); // (x,y) of grad3 used for 2D gradient
+        }
+
+        t1 = 0.5 - x1 * x1 - y1 * y1;
+		if (t1 >= 0) {
+			gi = permMod12[ii + i1 + perm[jj + j1]] * 3;
+			t1 *= t1;
+			n1 = t1 * t1 * (grad3[gi] * x1 + grad3[gi + 1] * y1);
+		}
+
+		t2 = 0.5 - x2 * x2 - y2 * y2;
+		if (t2 >= 0) {
+			gi = permMod12[ii + 1 + perm[jj + 1]] * 3;
+			t2 *= t2;
+			n2 = t2 * t2 * (grad3[gi] * x2 + grad3[gi + 1] * y2);
+		}
+
+		return 70.0 * (n0 + n1 + n2);
+	}
+
+	Seriously.transform('camerashake', function () {
+		var me = this,
+			octaves = 1,
+			time = 0,
+			amplitudeX = 0,
+			amplitudeY = 0,
+			centerX = 0,
+			centerY = 0,
+			frequency = 1,
+			rotation = 0;
+
+		function recompute() {
+			var matrix = me.matrix,
+				s, c,
+				t,
+				freq,
+				amp,
+				adjust = 0,
+				i,
+				translateX = 0,
+				translateY = 0,
+				rotationZ = 0,
+				m00,
+				m01,
+				m02,
+				m03,
+				m10,
+				m11,
+				m12,
+				m13;
+
+			function translate(x, y) {
+				matrix[12] = matrix[0] * x + matrix[4] * y + matrix[12];
+				matrix[13] = matrix[1] * x + matrix[5] * y + matrix[13];
+				matrix[14] = matrix[2] * x + matrix[6] * y + matrix[14];
+				matrix[15] = matrix[3] * x + matrix[7] * y + matrix[15];
+			}
+
+			function rotateZ() {
+				var angle;
+
+				if (!rotationZ) {
+					return;
+				}
+
+				angle = rotationZ * Math.PI / 180;
+
+				s = Math.sin(angle);
+				c = Math.cos(angle);
+
+				m00 = matrix[0];
+				m01 = matrix[1];
+				m02 = matrix[2];
+				m03 = matrix[3];
+				m10 = matrix[4];
+				m11 = matrix[5];
+				m12 = matrix[6];
+				m13 = matrix[7];
+
+				matrix[0] = m00 * c + m10 * s;
+				matrix[1] = m01 * c + m11 * s;
+				matrix[2] = m02 * c + m12 * s;
+				matrix[3] = m03 * c + m13 * s;
+				matrix[4] = m10 * c - m00 * s;
+				matrix[5] = m11 * c - m01 * s;
+				matrix[6] = m12 * c - m02 * s;
+				matrix[7] = m13 * c - m03 * s;
+			}
+
+			if (!amplitudeX &&
+					!amplitudeY &&
+					!rotation
+					) {
+				me.transformed = false;
+				return;
+			}
+
+			t = time * frequency;
+
+			for (i = 0; i < octaves; i++) {
+				freq = Math.pow(2, i);
+				amp = Math.pow(0.5, i);
+				adjust += amp;
+				if (rotation) {
+					rotationZ += noise2D(t * freq, 7 * freq) * amp;
+				}
+				if (amplitudeX) {
+					translateX += noise2D(t * freq, 11 * freq) * amp;
+				}
+				if (amplitudeY) {
+					translateY += noise2D(t * freq, 13 * freq) * amp;
+				}
+			}
+			rotationZ *= rotation / adjust;
+			translateX *= amplitudeX / adjust;
+			translateY *= amplitudeY / adjust;
+
+			//calculate transformation matrix
+			mat4.identity(matrix);
+
+			translate(translateX + centerX, translateY + centerY);
+
+			rotateZ();
+
+			/*
+			//scale
+			if (scaleX !== 1) {
+				matrix[0] *= scaleX;
+				matrix[1] *= scaleX;
+				matrix[2] *= scaleX;
+				matrix[3] *= scaleX;
+			}
+			if (scaleY !== 1) {
+				matrix[4] *= scaleY;
+				matrix[5] *= scaleY;
+				matrix[6] *= scaleY;
+				matrix[7] *= scaleY;
+			}
+			*/
+
+			translate(-centerX, -centerY);
+
+			me.transformed = true;
+		}
+
+		initializeSimplex();
+
+		return {
+			inputs: {
+				time: {
+					get: function () {
+						return time;
+					},
+					set: function (t) {
+						if (t === time) {
+							return false;
+						}
+
+						time = t;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				frequency: {
+					get: function () {
+						return frequency;
+					},
+					set: function (f) {
+						if (f === frequency) {
+							return false;
+						}
+
+						frequency = f;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				octaves: {
+					get: function () {
+						return octaves;
+					},
+					set: function (o) {
+						o = Math.max(1, o);
+						if (o === octaves) {
+							return false;
+						}
+
+						octaves = o;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				rotation: {
+					get: function () {
+						return rotation;
+					},
+					set: function (r) {
+						if (r === rotation) {
+							return false;
+						}
+
+						rotation = r;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				centerX: {
+					get: function () {
+						return centerX;
+					},
+					set: function (x) {
+						if (x === centerX) {
+							return false;
+						}
+
+						centerX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				centerY: {
+					get: function () {
+						return centerY;
+					},
+					set: function (y) {
+						if (y === centerY) {
+							return false;
+						}
+
+						centerY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				amplitudeX: {
+					get: function () {
+						return amplitudeX;
+					},
+					set: function (x) {
+						x = Math.max(0, x);
+						if (x === amplitudeX) {
+							return false;
+						}
+
+						amplitudeX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				amplitudeY: {
+					get: function () {
+						return amplitudeY;
+					},
+					set: function (y) {
+						y = Math.max(0, y);
+						if (y === amplitudeY) {
+							return false;
+						}
+
+						amplitudeY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				}
+			}
+		};
+	}, {
+		title: 'Camera Shake'
+	});
+}));
+});
+require.register("forresto-noflo-seriously/vendor/transforms/seriously.transform3d.js", function(exports, require, module){
+/* global define, require */
+(function (root, factory) {
+	'use strict';
+
+	if (typeof exports === 'object') {
+		// Node/CommonJS
+		factory(require('../seriously.js'));
+	} else if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['seriously'], factory);
+	} else {
+		if (!root.Seriously) {
+			root.Seriously = { plugin: function (name, opt) { this[name] = opt; } };
+		}
+		factory(root.Seriously);
+	}
+}(this, function (Seriously, undefined) {
+	'use strict';
+
+	var mat4 = Seriously.util.mat4;
+
+	/*
+	3D transform
+	- translate
+	- rotate (degrees)
+	- scale
+	*/
+	Seriously.transform('3d', function (options) {
+		var me = this,
+			degrees = !(options && options.radians),
+			centerX = 0,
+			centerY = 0,
+			centerZ = 0,
+			scaleX = 1,
+			scaleY = 1,
+			scaleZ = 1,
+			translateX = 0,
+			translateY = 0,
+			translateZ = 0,
+			rotationX = 0,
+			rotationY = 0,
+			rotationZ = 0,
+			rotationOrder = 'XYZ';
+
+		function recompute() {
+			var matrix = me.matrix,
+				s, c,
+				m00,
+				m01,
+				m02,
+				m03,
+				m10,
+				m11,
+				m12,
+				m13,
+				m20,
+				m21,
+				m22,
+				m23;
+
+			function translate(x, y, z) {
+				matrix[12] = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+				matrix[13] = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+				matrix[14] = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
+				matrix[15] = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+			}
+
+			function rotateX() {
+				var angle;
+
+				if (!rotationX) {
+					return;
+				}
+
+				angle = -(degrees ? rotationX * Math.PI / 180 : rotationX);
+
+				s = Math.sin(angle);
+				c = Math.cos(angle);
+
+				m10 = matrix[4];
+				m11 = matrix[5];
+				m12 = matrix[6];
+				m13 = matrix[7];
+				m20 = matrix[8];
+				m21 = matrix[9];
+				m22 = matrix[10];
+				m23 = matrix[11];
+
+				matrix[4] = m10 * c + m20 * s;
+				matrix[5] = m11 * c + m21 * s;
+				matrix[6] = m12 * c + m22 * s;
+				matrix[7] = m13 * c + m23 * s;
+				matrix[8] = m20 * c - m10 * s;
+				matrix[9] = m21 * c - m11 * s;
+				matrix[10] = m22 * c - m12 * s;
+				matrix[11] = m23 * c - m13 * s;
+			}
+
+			function rotateY() {
+				var angle;
+
+				if (!rotationY) {
+					return;
+				}
+
+				angle = -(degrees ? rotationY * Math.PI / 180 : rotationY);
+
+				s = Math.sin(angle);
+				c = Math.cos(angle);
+
+				m00 = matrix[0];
+				m01 = matrix[1];
+				m02 = matrix[2];
+				m03 = matrix[3];
+				m20 = matrix[8];
+				m21 = matrix[9];
+				m22 = matrix[10];
+				m23 = matrix[11];
+
+				matrix[0] = m00 * c - m20 * s;
+				matrix[1] = m01 * c - m21 * s;
+				matrix[2] = m02 * c - m22 * s;
+				matrix[3] = m03 * c - m23 * s;
+				matrix[8] = m00 * s + m20 * c;
+				matrix[9] = m01 * s + m21 * c;
+				matrix[10] = m02 * s + m22 * c;
+				matrix[11] = m03 * s + m23 * c;
+			}
+
+			function rotateZ() {
+				var angle;
+
+				if (!rotationZ) {
+					return;
+				}
+
+				angle = -(degrees ? rotationZ * Math.PI / 180 : rotationZ);
+
+				s = Math.sin(angle);
+				c = Math.cos(angle);
+
+				m00 = matrix[0];
+				m01 = matrix[1];
+				m02 = matrix[2];
+				m03 = matrix[3];
+				m10 = matrix[4];
+				m11 = matrix[5];
+				m12 = matrix[6];
+				m13 = matrix[7];
+
+				matrix[0] = m00 * c + m10 * s;
+				matrix[1] = m01 * c + m11 * s;
+				matrix[2] = m02 * c + m12 * s;
+				matrix[3] = m03 * c + m13 * s;
+				matrix[4] = m10 * c - m00 * s;
+				matrix[5] = m11 * c - m01 * s;
+				matrix[6] = m12 * c - m02 * s;
+				matrix[7] = m13 * c - m03 * s;
+			}
+
+			if (!translateX &&
+					!translateY &&
+					!translateZ &&
+					!rotationX &&
+					!rotationY &&
+					!rotationZ &&
+					scaleX === 1 &&
+					scaleY === 1 &&
+					scaleZ === 1
+					) {
+				me.transformed = false;
+				return;
+			}
+
+			//calculate transformation matrix
+			mat4.identity(matrix);
+
+			translate(translateX + centerX, translateY + centerY, translateZ + centerZ);
+
+			if (rotationOrder === 'XYZ') {
+				rotateX();
+				rotateY();
+				rotateZ();
+			} else if (rotationOrder === 'XZY') {
+				rotateX();
+				rotateZ();
+				rotateY();
+			} else if (rotationOrder === 'YXZ') {
+				rotateY();
+				rotateX();
+				rotateZ();
+			} else if (rotationOrder === 'YZX') {
+				rotateY();
+				rotateZ();
+				rotateX();
+			} else if (rotationOrder === 'ZXY') {
+				rotateZ();
+				rotateX();
+				rotateY();
+			} else { //ZYX
+				rotateZ();
+				rotateY();
+				rotateX();
+			}
+
+			//scale
+			if (scaleX !== 1) {
+				matrix[0] *= scaleX;
+				matrix[1] *= scaleX;
+				matrix[2] *= scaleX;
+				matrix[3] *= scaleX;
+			}
+			if (scaleY !== 1) {
+				matrix[4] *= scaleY;
+				matrix[5] *= scaleY;
+				matrix[6] *= scaleY;
+				matrix[7] *= scaleY;
+			}
+			if (scaleZ !== 1) {
+				matrix[8] *= scaleZ;
+				matrix[9] *= scaleZ;
+				matrix[10] *= scaleZ;
+				matrix[11] *= scaleZ;
+			}
+
+			translate(-centerX, -centerY, -centerZ);
+
+			me.transformed = true;
+		}
+
+		return {
+			inputs: {
+				reset: {
+					method: function () {
+						centerX = 0;
+						centerY = 0;
+						centerZ = 0;
+						scaleX = 1;
+						scaleY = 1;
+						scaleZ = 1;
+						translateX = 0;
+						translateY = 0;
+						translateZ = 0;
+						rotationX = 0;
+						rotationY = 0;
+						rotationZ = 0;
+
+						if (me.transformed) {
+							me.transformed = false;
+							return true;
+						}
+
+						return false;
+					}
+				},
+				translate: {
+					method: function (x, y, z) {
+						if (isNaN(x)) {
+							x = translateX;
+						}
+
+						if (isNaN(y)) {
+							y = translateY;
+						}
+
+						if (isNaN(z)) {
+							z = translateZ;
+						}
+
+						if (x === translateX && y === translateY && z === translateZ) {
+							return false;
+						}
+
+						translateX = x;
+						translateY = y;
+						translateZ = z;
+
+						recompute();
+						return true;
+					},
+					type: [
+						'number',
+						'number',
+						'number'
+					]
+				},
+				translateX: {
+					get: function () {
+						return translateX;
+					},
+					set: function (x) {
+						if (x === translateX) {
+							return false;
+						}
+
+						translateX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				translateY: {
+					get: function () {
+						return translateY;
+					},
+					set: function (y) {
+						if (y === translateY) {
+							return false;
+						}
+
+						translateY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				translateZ: {
+					get: function () {
+						return translateZ;
+					},
+					set: function (z) {
+						if (z === translateZ) {
+							return false;
+						}
+
+						translateZ = z;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				rotationOrder: {
+					get: function () {
+						return rotationOrder;
+					},
+					set: function (order) {
+						if (order === rotationOrder) {
+							return false;
+						}
+
+						rotationOrder = order;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				rotationX: {
+					get: function () {
+						return rotationX;
+					},
+					set: function (angle) {
+						if (angle === rotationX) {
+							return false;
+						}
+
+						//todo: fmod 360deg or Math.PI * 2 radians
+						rotationX = angle;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				rotationY: {
+					get: function () {
+						return rotationY;
+					},
+					set: function (angle) {
+						if (angle === rotationY) {
+							return false;
+						}
+
+						//todo: fmod 360deg or Math.PI * 2 radians
+						rotationY = angle;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				rotationZ: {
+					get: function () {
+						return rotationZ;
+					},
+					set: function (angle) {
+						if (angle === rotationZ) {
+							return false;
+						}
+
+						//todo: fmod 360deg or Math.PI * 2 radians
+						rotationZ = angle;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				center: {
+					method: function (x, y, z) {
+						if (isNaN(x)) {
+							x = centerX;
+						}
+
+						if (isNaN(y)) {
+							y = centerY;
+						}
+
+						if (isNaN(z)) {
+							z = centerZ;
+						}
+
+						if (x === centerX && y === centerY && z === centerZ) {
+							return false;
+						}
+
+						centerX = x;
+						centerY = y;
+						centerZ = z;
+
+						recompute();
+						return true;
+					},
+					type: [
+						'number',
+						'number',
+						'number'
+					]
+				},
+				centerX: {
+					get: function () {
+						return centerX;
+					},
+					set: function (x) {
+						if (x === centerX) {
+							return false;
+						}
+
+						centerX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				centerY: {
+					get: function () {
+						return centerY;
+					},
+					set: function (y) {
+						if (y === centerY) {
+							return false;
+						}
+
+						centerY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				centerZ: {
+					get: function () {
+						return centerZ;
+					},
+					set: function (z) {
+						if (z === centerZ) {
+							return false;
+						}
+
+						centerZ = z;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				scale: {
+					method: function (x, y, z) {
+						var newX, newY, newZ;
+
+						if (isNaN(x)) {
+							newX = scaleX;
+						} else {
+							newX = x;
+						}
+
+						/*
+						if only one value is specified, set all to the same scale
+						*/
+						if (isNaN(y)) {
+							if (!isNaN(x) && isNaN(z)) {
+								newY = newX;
+								newZ = newX;
+							} else {
+								newY = scaleY;
+							}
+						} else {
+							newY = y;
+						}
+
+						if (isNaN(z)) {
+							if (newZ === undefined) {
+								newZ = scaleZ;
+							}
+						} else {
+							newZ = z;
+						}
+
+						if (newX === scaleX && newY === scaleY && newZ === scaleZ) {
+							return false;
+						}
+
+						scaleX = newX;
+						scaleY = newY;
+						scaleZ = newZ;
+
+						recompute();
+						return true;
+					},
+					type: [
+						'number',
+						'number',
+						'number'
+					]
+				},
+				scaleX: {
+					get: function () {
+						return scaleX;
+					},
+					set: function (x) {
+						if (x === scaleX) {
+							return false;
+						}
+
+						scaleX = x;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				scaleY: {
+					get: function () {
+						return scaleY;
+					},
+					set: function (y) {
+						if (y === scaleY) {
+							return false;
+						}
+
+						scaleY = y;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				},
+				scaleZ: {
+					get: function () {
+						return scaleZ;
+					},
+					set: function (z) {
+						if (z === scaleZ) {
+							return false;
+						}
+
+						scaleZ = z;
+
+						recompute();
+						return true;
+					},
+					type: 'number'
+				}
+			}
+		};
+	}, {
+		title: '3D Transform',
+		description: 'Translate, Rotate, Scale'
+	});
+}));
+});
 require.register("forresto-noflo-seriously/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-seriously","description":"Seriously.js WebGL shader image effects for NoFlo.","author":"Forrest Oliphant and Brian Chirls <forrest@sembiki.com>","repo":"forresto/noflo-seriously","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*","forresto/seriously":"*"},"scripts":["index.js","components/SetFilterTarget.coffee","lib/SeriouslyEffect.coffee","components/FilterAscii.coffee","components/FilterBleachBypass.coffee","components/FilterBlend.coffee","components/FilterChannels.coffee","components/FilterChroma.coffee","components/FilterColor.coffee","components/FilterColorCube.coffee","components/FilterDaltonize.coffee","components/FilterEdge.coffee","components/FilterEmboss.coffee","components/FilterExposure.coffee","components/FilterFader.coffee","components/FilterHex.coffee","components/FilterHueSaturation.coffee","components/FilterInvert.coffee","components/FilterLumakey.coffee","components/FilterNightVision.coffee","components/FilterNoise.coffee","components/FilterRipple.coffee","components/FilterScanLines.coffee","components/FilterSepia.coffee","components/FilterSketch.coffee","components/FilterSplit.coffee","components/FilterTone.coffee","components/FilterTVGlitch.coffee","components/FilterVignette.coffee"],"json":["component.json"],"noflo":{"icon":"film","components":{"SetFilterTarget":"components/SetFilterTarget.coffee","FilterAscii":"components/FilterAscii.coffee","FilterBleachBypass":"components/FilterBleachBypass.coffee","FilterBlend":"components/FilterBlend.coffee","FilterChannels":"components/FilterChannels.coffee","FilterChroma":"components/FilterChroma.coffee","FilterColor":"components/FilterColor.coffee","FilterColorCube":"components/FilterColorCube.coffee","FilterDaltonize":"components/FilterDaltonize.coffee","FilterEdge":"components/FilterEdge.coffee","FilterEmboss":"components/FilterEmboss.coffee","FilterExposure":"components/FilterExposure.coffee","FilterFader":"components/FilterFader.coffee","FilterHex":"components/FilterHex.coffee","FilterHueSaturation":"components/FilterHueSaturation.coffee","FilterInvert":"components/FilterInvert.coffee","FilterLumakey":"components/FilterLumakey.coffee","FilterNightVision":"components/FilterNightVision.coffee","FilterNoise":"components/FilterNoise.coffee","FilterRipple":"components/FilterRipple.coffee","FilterScanLines":"components/FilterScanLines.coffee","FilterSepia":"components/FilterSepia.coffee","FilterSketch":"components/FilterSketch.coffee","FilterSplit":"components/FilterSplit.coffee","FilterTone":"components/FilterTone.coffee","FilterTVGlitch":"components/FilterTVGlitch.coffee","FilterVignette":"components/FilterVignette.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-seriously","description":"Seriously.js WebGL shader image effects for NoFlo.","author":"Forrest Oliphant and Brian Chirls <forrest@sembiki.com>","repo":"forresto/noflo-seriously","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["index.js","vendor/seriously.js","vendor/effects/seriously.ascii.js","vendor/effects/seriously.bleach-bypass.js","vendor/effects/seriously.blend.js","vendor/effects/seriously.blur.js","vendor/effects/seriously.brightness-contrast.js","vendor/effects/seriously.channels.js","vendor/effects/seriously.chroma.js","vendor/effects/seriously.color.js","vendor/effects/seriously.colorcomplements.js","vendor/effects/seriously.colorcube.js","vendor/effects/seriously.daltonize.js","vendor/effects/seriously.directionblur.js","vendor/effects/seriously.dither.js","vendor/effects/seriously.edge.js","vendor/effects/seriously.emboss.js","vendor/effects/seriously.exposure.js","vendor/effects/seriously.fader.js","vendor/effects/seriously.falsecolor.js","vendor/effects/seriously.filmgrain.js","vendor/effects/seriously.hex.js","vendor/effects/seriously.highlights-shadows.js","vendor/effects/seriously.hue-saturation.js","vendor/effects/seriously.invert.js","vendor/effects/seriously.kaleidoscope.js","vendor/effects/seriously.layers.js","vendor/effects/seriously.linear-transfer.js","vendor/effects/seriously.lumakey.js","vendor/effects/seriously.nightvision.js","vendor/effects/seriously.noise.js","vendor/effects/seriously.repeat.js","vendor/effects/seriously.ripple.js","vendor/effects/seriously.scanlines.js","vendor/effects/seriously.sepia.js","vendor/effects/seriously.simplex.js","vendor/effects/seriously.sketch.js","vendor/effects/seriously.split.js","vendor/effects/seriously.tone.js","vendor/effects/seriously.tvglitch.js","vendor/effects/seriously.vignette.js","vendor/effects/seriously.whitebalance.js","vendor/transforms/seriously.camerashake.js","vendor/transforms/seriously.transform3d.js","components/SetFilterTarget.coffee","lib/SeriouslyEffect.coffee","components/FilterAscii.coffee","components/FilterBleachBypass.coffee","components/FilterBlend.coffee","components/FilterChannels.coffee","components/FilterChroma.coffee","components/FilterColor.coffee","components/FilterColorCube.coffee","components/FilterDaltonize.coffee","components/FilterEdge.coffee","components/FilterEmboss.coffee","components/FilterExposure.coffee","components/FilterFader.coffee","components/FilterHex.coffee","components/FilterHueSaturation.coffee","components/FilterInvert.coffee","components/FilterLumakey.coffee","components/FilterNightVision.coffee","components/FilterNoise.coffee","components/FilterRipple.coffee","components/FilterScanLines.coffee","components/FilterSepia.coffee","components/FilterSketch.coffee","components/FilterSplit.coffee","components/FilterTone.coffee","components/FilterTVGlitch.coffee","components/FilterVignette.coffee"],"json":["component.json"],"noflo":{"icon":"film","components":{"SetTarget":"components/SetFilterTarget.coffee","Ascii":"components/FilterAscii.coffee","BleachBypass":"components/FilterBleachBypass.coffee","Blend":"components/FilterBlend.coffee","Channels":"components/FilterChannels.coffee","Chroma":"components/FilterChroma.coffee","Color":"components/FilterColor.coffee","ColorCube":"components/FilterColorCube.coffee","Daltonize":"components/FilterDaltonize.coffee","Edge":"components/FilterEdge.coffee","Emboss":"components/FilterEmboss.coffee","Exposure":"components/FilterExposure.coffee","Fader":"components/FilterFader.coffee","Hex":"components/FilterHex.coffee","HueSaturation":"components/FilterHueSaturation.coffee","Invert":"components/FilterInvert.coffee","Lumakey":"components/FilterLumakey.coffee","NightVision":"components/FilterNightVision.coffee","Noise":"components/FilterNoise.coffee","Ripple":"components/FilterRipple.coffee","ScanLines":"components/FilterScanLines.coffee","Sepia":"components/FilterSepia.coffee","Sketch":"components/FilterSketch.coffee","Split":"components/FilterSplit.coffee","Tone":"components/FilterTone.coffee","TVGlitch":"components/FilterTVGlitch.coffee","Vignette":"components/FilterVignette.coffee"}}}');
 });
 require.register("forresto-noflo-seriously/components/SetFilterTarget.js", function(exports, require, module){
 var Seriously, SetFilterTarget, noflo,
@@ -22604,7 +28261,7 @@ var Seriously, SetFilterTarget, noflo,
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
 SetFilterTarget = (function(_super) {
   __extends(SetFilterTarget, _super);
@@ -22672,41 +28329,44 @@ var Seriously, noflo,
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
 exports.SeriouslyEffect = (function(_super) {
   __extends(SeriouslyEffect, _super);
 
   function SeriouslyEffect(filterName, imageInCount) {
+    this.setParam = __bind(this.setParam, this);
     this.setSource = __bind(this.setSource, this);
     this.syncGraph = __bind(this.syncGraph, this);
-    if (imageInCount == null) {
-      imageInCount = 1;
-    }
+    var effectInfo, input, key, type, _ref, _ref1;
     if (!window.nofloSeriously) {
       window.nofloSeriously = new Seriously();
     }
     this.seriously = window.nofloSeriously;
     this.seriouslyNode = this.seriously.effect(filterName);
+    effectInfo = this.seriously.effects()[filterName];
+    if ((_ref = effectInfo.description) != null ? _ref.length : void 0) {
+      this.description = effectInfo.description;
+    }
     this.inPorts = {};
     this.outPorts = {
-      filter: new noflo.Port
+      filter: new noflo.Port('seriously')
     };
-    if (imageInCount === 1) {
-      this.inPorts = {
-        source: new noflo.Port('object')
-      };
-      this.inPorts.source.on('connect', this.syncGraph);
-      this.inPorts.source.on('data', this.setSource);
-    } else if (imageInCount === 2) {
-      this.inPorts = {
-        top: new noflo.Port('object'),
-        bottom: new noflo.Port('object')
-      };
-      this.inPorts.top.on('connect', this.syncGraph);
-      this.inPorts.bottom.on('connect', this.syncGraph);
-    } else {
-      throw new Error('Seriously effects should have one or two image inputs.');
+    _ref1 = effectInfo.inputs;
+    for (key in _ref1) {
+      if (!__hasProp.call(_ref1, key)) continue;
+      input = _ref1[key];
+      type = input.type;
+      if (type === 'image') {
+        type = 'seriously';
+      }
+      this.inPorts[key] = new noflo.Port(type);
+      if (type === 'seriously') {
+        this.inPorts[key].on('connect', this.syncGraph);
+        this.inPorts[key].on('data', this.setSource);
+      } else {
+        this.inPorts[key].on('data', this.setParam);
+      }
     }
   }
 
@@ -22714,7 +28374,7 @@ exports.SeriouslyEffect = (function(_super) {
     var upstream;
     upstream = event.from.process.component.seriouslyNode;
     if (upstream) {
-      this.seriouslyNode.source = upstream;
+      this.seriouslyNode[event.to.port] = upstream;
       if (this.outPorts.filter.isAttached()) {
         return this.outPorts.filter.connect();
       }
@@ -22722,11 +28382,14 @@ exports.SeriouslyEffect = (function(_super) {
   };
 
   SeriouslyEffect.prototype.setSource = function(data) {
+    console.log("source", data);
     this.seriouslyNode.source = data;
     if (this.outPorts.filter.isAttached() && !this.outPorts.filter.isConnected()) {
       return this.outPorts.filter.connect();
     }
   };
+
+  SeriouslyEffect.prototype.setParam = function(key, data) {};
 
   return SeriouslyEffect;
 
@@ -22734,15 +28397,15 @@ exports.SeriouslyEffect = (function(_super) {
 
 });
 require.register("forresto-noflo-seriously/components/FilterAscii.js", function(exports, require, module){
-var FilterAscii, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterAscii, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.ascii.js');
+Effect = require('../vendor/effects/seriously.ascii.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22763,15 +28426,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterBleachBypass.js", function(exports, require, module){
-var FilterBleachBypass, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterBleachBypass, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.bleach-bypass.js');
+Effect = require('../vendor/effects/seriously.bleach-bypass.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22792,15 +28455,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterBlend.js", function(exports, require, module){
-var FilterBlend, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterBlend, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.blend.js');
+Effect = require('../vendor/effects/seriously.blend.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22821,15 +28484,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterChannels.js", function(exports, require, module){
-var FilterChannels, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterChannels, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.channels.js');
+Effect = require('../vendor/effects/seriously.channels.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22850,15 +28513,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterChroma.js", function(exports, require, module){
-var FilterChroma, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterChroma, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.chroma.js');
+Effect = require('../vendor/effects/seriously.chroma.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22879,15 +28542,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterColor.js", function(exports, require, module){
-var FilterColor, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterColor, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.color.js');
+Effect = require('../vendor/effects/seriously.color.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22908,15 +28571,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterColorCube.js", function(exports, require, module){
-var FilterColorCube, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterColorCube, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.colorcube.js');
+Effect = require('../vendor/effects/seriously.colorcube.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22937,15 +28600,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterDaltonize.js", function(exports, require, module){
-var FilterDaltonize, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterDaltonize, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.daltonize.js');
+Effect = require('../vendor/effects/seriously.daltonize.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22966,15 +28629,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterEdge.js", function(exports, require, module){
-var FilterEdge, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterEdge, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.edge.js');
+Effect = require('../vendor/effects/seriously.edge.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -22995,15 +28658,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterEmboss.js", function(exports, require, module){
-var FilterEmboss, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterEmboss, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.emboss.js');
+Effect = require('../vendor/effects/seriously.emboss.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23024,15 +28687,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterExposure.js", function(exports, require, module){
-var FilterExposure, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterExposure, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.exposure.js');
+Effect = require('../vendor/effects/seriously.exposure.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23053,15 +28716,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterFader.js", function(exports, require, module){
-var FilterFader, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterFader, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.fader.js');
+Effect = require('../vendor/effects/seriously.fader.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23082,15 +28745,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterHex.js", function(exports, require, module){
-var FilterHex, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterHex, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.hex.js');
+Effect = require('../vendor/effects/seriously.hex.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23111,15 +28774,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterHueSaturation.js", function(exports, require, module){
-var FilterHueSaturation, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterHueSaturation, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.hue-saturation.js');
+Effect = require('../vendor/effects/seriously.hue-saturation.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23140,15 +28803,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterInvert.js", function(exports, require, module){
-var FilterInvert, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterInvert, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.invert.js');
+Effect = require('../vendor/effects/seriously.invert.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23169,15 +28832,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterLumakey.js", function(exports, require, module){
-var FilterLumakey, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterLumakey, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.lumakey.js');
+Effect = require('../vendor/effects/seriously.lumakey.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23198,15 +28861,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterNightVision.js", function(exports, require, module){
-var FilterNightVision, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterNightVision, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.nightvision.js');
+Effect = require('../vendor/effects/seriously.nightvision.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23227,15 +28890,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterNoise.js", function(exports, require, module){
-var FilterNoise, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterNoise, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.noise.js');
+Effect = require('../vendor/effects/seriously.noise.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23256,15 +28919,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterRipple.js", function(exports, require, module){
-var FilterScanlines, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterScanlines, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.scanlines.js');
+Effect = require('../vendor/effects/seriously.scanlines.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23285,15 +28948,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterScanLines.js", function(exports, require, module){
-var FilterScanLines, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterScanLines, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.scanlines.js');
+Effect = require('../vendor/effects/seriously.scanlines.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23314,15 +28977,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterSepia.js", function(exports, require, module){
-var FilterSepia, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterSepia, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.sepia.js');
+Effect = require('../vendor/effects/seriously.sepia.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23343,15 +29006,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterSketch.js", function(exports, require, module){
-var FilterSketch, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterSketch, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.sketch.js');
+Effect = require('../vendor/effects/seriously.sketch.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23372,15 +29035,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterSplit.js", function(exports, require, module){
-var FilterSplit, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterSplit, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.split.js');
+Effect = require('../vendor/effects/seriously.split.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23401,15 +29064,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterTone.js", function(exports, require, module){
-var FilterTone, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterTone, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.tone.js');
+Effect = require('../vendor/effects/seriously.tone.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23430,15 +29093,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterTVGlitch.js", function(exports, require, module){
-var FilterTVGlitch, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterTVGlitch, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.tvglitch.js');
+Effect = require('../vendor/effects/seriously.tvglitch.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23459,15 +29122,15 @@ exports.getComponent = function() {
 
 });
 require.register("forresto-noflo-seriously/components/FilterVignette.js", function(exports, require, module){
-var FilterVignette, Seriously, SeriouslyEffect, noflo, seriouslyEdge,
+var Effect, FilterVignette, Seriously, SeriouslyEffect, noflo,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 noflo = require('noflo');
 
-Seriously = require('/forresto-seriously');
+Seriously = require('../vendor/seriously.js');
 
-seriouslyEdge = require('/forresto-seriously/effects/seriously.vignette.js');
+Effect = require('../vendor/effects/seriously.vignette.js');
 
 SeriouslyEffect = require('../lib/SeriouslyEffect').SeriouslyEffect;
 
@@ -23488,8 +29151,9 @@ exports.getComponent = function() {
 
 });
 require.register("noflo-ui-preview/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-ui-preview","description":"NoFlo runtime environment for client-side previews","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","keywords":[],"dependencies":{"noflo/noflo":"*","noflo/noflo-runtime-iframe":"*","noflo/noflo-ajax":"*","noflo/noflo-core":"*","noflo/noflo-css":"*","noflo/noflo-dom":"*","noflo/noflo-flow":"*","noflo/noflo-gestures":"*","noflo/noflo-groups":"*","noflo/noflo-interaction":"*","noflo/noflo-localstorage":"*","noflo/noflo-math":"*","noflo/noflo-objects":"*","noflo/noflo-packets":"*","noflo/noflo-physics":"*","noflo/noflo-routers":"*","noflo/noflo-strings":"*","noflo/noflo-websocket":"*","d4tocchini/noflo-draggabilly":"*","forresto/noflo-gum":"*","forresto/noflo-seriously":"*"},"json":["component.json"],"files":["iframe.html"]}');
+module.exports = JSON.parse('{"name":"noflo-ui-preview","description":"NoFlo runtime environment for client-side previews","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","keywords":[],"dependencies":{"noflo/noflo":"*","noflo/noflo-runtime-iframe":"*","noflo/noflo-ajax":"*","noflo/noflo-core":"*","noflo/noflo-css":"*","noflo/noflo-dom":"*","noflo/noflo-flow":"*","noflo/noflo-gestures":"*","noflo/noflo-groups":"*","noflo/noflo-interaction":"*","noflo/noflo-localstorage":"*","noflo/noflo-math":"*","noflo/noflo-objects":"*","noflo/noflo-packets":"*","noflo/noflo-physics":"*","noflo/noflo-routers":"*","noflo/noflo-strings":"*","noflo/noflo-websocket":"*","noflo/noflo-indexeddb":"*","d4tocchini/noflo-draggabilly":"*","forresto/noflo-gum":"*","forresto/noflo-seriously":"*"},"json":["component.json"],"files":["iframe.html"]}');
 });
+
 
 
 
@@ -24506,6 +30170,48 @@ require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
 require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
 require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("noflo-noflo-indexeddb/index.js", "noflo-ui-preview/deps/noflo-indexeddb/index.js");
+require.alias("noflo-noflo-indexeddb/component.json", "noflo-ui-preview/deps/noflo-indexeddb/component.json");
+require.alias("noflo-noflo-indexeddb/components/Open.js", "noflo-ui-preview/deps/noflo-indexeddb/components/Open.js");
+require.alias("noflo-noflo-indexeddb/components/Close.js", "noflo-ui-preview/deps/noflo-indexeddb/components/Close.js");
+require.alias("noflo-noflo-indexeddb/components/DeleteDatabase.js", "noflo-ui-preview/deps/noflo-indexeddb/components/DeleteDatabase.js");
+require.alias("noflo-noflo-indexeddb/components/CreateStore.js", "noflo-ui-preview/deps/noflo-indexeddb/components/CreateStore.js");
+require.alias("noflo-noflo-indexeddb/components/CreateIndex.js", "noflo-ui-preview/deps/noflo-indexeddb/components/CreateIndex.js");
+require.alias("noflo-noflo-indexeddb/components/DeleteStore.js", "noflo-ui-preview/deps/noflo-indexeddb/components/DeleteStore.js");
+require.alias("noflo-noflo-indexeddb/components/UpgradeRouter.js", "noflo-ui-preview/deps/noflo-indexeddb/components/UpgradeRouter.js");
+require.alias("noflo-noflo-indexeddb/components/BeginTransaction.js", "noflo-ui-preview/deps/noflo-indexeddb/components/BeginTransaction.js");
+require.alias("noflo-noflo-indexeddb/components/AbortTransaction.js", "noflo-ui-preview/deps/noflo-indexeddb/components/AbortTransaction.js");
+require.alias("noflo-noflo-indexeddb/components/GetStore.js", "noflo-ui-preview/deps/noflo-indexeddb/components/GetStore.js");
+require.alias("noflo-noflo-indexeddb/components/GetIndex.js", "noflo-ui-preview/deps/noflo-indexeddb/components/GetIndex.js");
+require.alias("noflo-noflo-indexeddb/components/Query.js", "noflo-ui-preview/deps/noflo-indexeddb/components/Query.js");
+require.alias("noflo-noflo-indexeddb/components/QueryOnly.js", "noflo-ui-preview/deps/noflo-indexeddb/components/QueryOnly.js");
+require.alias("noflo-noflo-indexeddb/components/QueryFrom.js", "noflo-ui-preview/deps/noflo-indexeddb/components/QueryFrom.js");
+require.alias("noflo-noflo-indexeddb/components/QueryTo.js", "noflo-ui-preview/deps/noflo-indexeddb/components/QueryTo.js");
+require.alias("noflo-noflo-indexeddb/components/Put.js", "noflo-ui-preview/deps/noflo-indexeddb/components/Put.js");
+require.alias("noflo-noflo-indexeddb/components/Get.js", "noflo-ui-preview/deps/noflo-indexeddb/components/Get.js");
+require.alias("noflo-noflo-indexeddb/components/Delete.js", "noflo-ui-preview/deps/noflo-indexeddb/components/Delete.js");
+require.alias("noflo-noflo-indexeddb/index.js", "noflo-indexeddb/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-indexeddb/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-indexeddb/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-indexeddb/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
 require.alias("d4tocchini-noflo-draggabilly/index.js", "noflo-ui-preview/deps/noflo-draggabilly/index.js");
 require.alias("d4tocchini-noflo-draggabilly/component.json", "noflo-ui-preview/deps/noflo-draggabilly/component.json");
 require.alias("d4tocchini-noflo-draggabilly/components/Draggabilly.js", "noflo-ui-preview/deps/noflo-draggabilly/components/Draggabilly.js");
@@ -24557,6 +30263,49 @@ require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
 require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
 require.alias("forresto-noflo-seriously/index.js", "noflo-ui-preview/deps/noflo-seriously/index.js");
+require.alias("forresto-noflo-seriously/vendor/seriously.js", "noflo-ui-preview/deps/noflo-seriously/vendor/seriously.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.ascii.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.ascii.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.bleach-bypass.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.bleach-bypass.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.blend.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.blend.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.blur.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.blur.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.brightness-contrast.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.brightness-contrast.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.channels.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.channels.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.chroma.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.chroma.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.color.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.color.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.colorcomplements.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.colorcomplements.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.colorcube.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.colorcube.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.daltonize.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.daltonize.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.directionblur.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.directionblur.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.dither.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.dither.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.edge.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.edge.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.emboss.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.emboss.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.exposure.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.exposure.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.fader.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.fader.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.falsecolor.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.falsecolor.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.filmgrain.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.filmgrain.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.hex.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.hex.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.highlights-shadows.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.highlights-shadows.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.hue-saturation.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.hue-saturation.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.invert.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.invert.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.kaleidoscope.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.kaleidoscope.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.layers.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.layers.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.linear-transfer.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.linear-transfer.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.lumakey.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.lumakey.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.nightvision.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.nightvision.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.noise.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.noise.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.repeat.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.repeat.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.ripple.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.ripple.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.scanlines.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.scanlines.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.sepia.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.sepia.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.simplex.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.simplex.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.sketch.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.sketch.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.split.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.split.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.tone.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.tone.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.tvglitch.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.tvglitch.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.vignette.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.vignette.js");
+require.alias("forresto-noflo-seriously/vendor/effects/seriously.whitebalance.js", "noflo-ui-preview/deps/noflo-seriously/vendor/effects/seriously.whitebalance.js");
+require.alias("forresto-noflo-seriously/vendor/transforms/seriously.camerashake.js", "noflo-ui-preview/deps/noflo-seriously/vendor/transforms/seriously.camerashake.js");
+require.alias("forresto-noflo-seriously/vendor/transforms/seriously.transform3d.js", "noflo-ui-preview/deps/noflo-seriously/vendor/transforms/seriously.transform3d.js");
 require.alias("forresto-noflo-seriously/component.json", "noflo-ui-preview/deps/noflo-seriously/component.json");
 require.alias("forresto-noflo-seriously/components/SetFilterTarget.js", "noflo-ui-preview/deps/noflo-seriously/components/SetFilterTarget.js");
 require.alias("forresto-noflo-seriously/lib/SeriouslyEffect.js", "noflo-ui-preview/deps/noflo-seriously/lib/SeriouslyEffect.js");
@@ -24608,32 +30357,3 @@ require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
 require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
 require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
-require.alias("forresto-seriously/index.js", "forresto-noflo-seriously/deps/Seriously.js/index.js");
-require.alias("forresto-seriously/seriously.js", "forresto-noflo-seriously/deps/Seriously.js/seriously.js");
-require.alias("forresto-seriously/effects/seriously.ascii.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.ascii.js");
-require.alias("forresto-seriously/effects/seriously.bleach-bypass.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.bleach-bypass.js");
-require.alias("forresto-seriously/effects/seriously.blend.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.blend.js");
-require.alias("forresto-seriously/effects/seriously.channels.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.channels.js");
-require.alias("forresto-seriously/effects/seriously.chroma.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.chroma.js");
-require.alias("forresto-seriously/effects/seriously.color.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.color.js");
-require.alias("forresto-seriously/effects/seriously.colorcube.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.colorcube.js");
-require.alias("forresto-seriously/effects/seriously.daltonize.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.daltonize.js");
-require.alias("forresto-seriously/effects/seriously.edge.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.edge.js");
-require.alias("forresto-seriously/effects/seriously.emboss.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.emboss.js");
-require.alias("forresto-seriously/effects/seriously.exposure.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.exposure.js");
-require.alias("forresto-seriously/effects/seriously.fader.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.fader.js");
-require.alias("forresto-seriously/effects/seriously.hex.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.hex.js");
-require.alias("forresto-seriously/effects/seriously.hue-saturation.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.hue-saturation.js");
-require.alias("forresto-seriously/effects/seriously.invert.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.invert.js");
-require.alias("forresto-seriously/effects/seriously.lumakey.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.lumakey.js");
-require.alias("forresto-seriously/effects/seriously.nightvision.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.nightvision.js");
-require.alias("forresto-seriously/effects/seriously.noise.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.noise.js");
-require.alias("forresto-seriously/effects/seriously.ripple.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.ripple.js");
-require.alias("forresto-seriously/effects/seriously.scanlines.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.scanlines.js");
-require.alias("forresto-seriously/effects/seriously.sepia.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.sepia.js");
-require.alias("forresto-seriously/effects/seriously.sketch.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.sketch.js");
-require.alias("forresto-seriously/effects/seriously.split.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.split.js");
-require.alias("forresto-seriously/effects/seriously.tone.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.tone.js");
-require.alias("forresto-seriously/effects/seriously.tvglitch.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.tvglitch.js");
-require.alias("forresto-seriously/effects/seriously.vignette.js", "forresto-noflo-seriously/deps/Seriously.js/effects/seriously.vignette.js");
-require.alias("forresto-seriously/component.json", "forresto-noflo-seriously/deps/Seriously.js/component.json");

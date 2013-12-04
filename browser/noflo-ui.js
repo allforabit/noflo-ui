@@ -11489,6 +11489,7 @@ module.exports = function(name, inports, outports) {
       this.element = null;
       this.eventHandlers = {};
       this.inPorts = {
+        selector: new noflo.Port('string'),
         element: new noflo.Port('object')
       };
       inports.forEach(function(inport) {
@@ -11527,7 +11528,8 @@ module.exports = function(name, inports, outports) {
         });
       });
       this.outPorts = {
-        element: new noflo.Port('object')
+        element: new noflo.Port('object'),
+        error: new noflo.Port('object')
       };
       outports.forEach(function(outport) {
         _this.outPorts[outport] = new noflo.ArrayPort('all');
@@ -11537,6 +11539,23 @@ module.exports = function(name, inports, outports) {
           }
           return _this.outPorts[outport].send(event.detail);
         };
+      });
+      this.inPorts.selector.on('data', function(selector) {
+        _this.element = document.querySelector(selector);
+        if (!_this.element) {
+          _this.error("No element matching '" + selector + "' found");
+          return;
+        }
+        outports.forEach(function(outport) {
+          if (outport === 'element') {
+            return;
+          }
+          return _this.element.addEventListener(outport, _this.eventHandlers[outport], false);
+        });
+        if (_this.outPorts.element.isAttached()) {
+          _this.outPorts.element.send(_this.element);
+          return _this.outPorts.element.disconnect();
+        }
       });
       this.inPorts.element.on('data', function(element) {
         _this.element = element;
@@ -11569,6 +11588,1069 @@ module.exports = function(name, inports, outports) {
 
   })(noflo.Component);
   return PolymerComponent;
+};
+
+});
+require.register("noflo-noflo-indexeddb/index.js", function(exports, require, module){
+/*
+ * This file can be used for general library features of noflo-indexeddb.
+ *
+ * The library features can be made available as CommonJS modules that the
+ * components in this project utilize.
+ */
+
+});
+require.register("noflo-noflo-indexeddb/component.json", function(exports, require, module){
+module.exports = JSON.parse('{"name":"noflo-indexeddb","description":"IndexedDB components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-indexeddb","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/Open.coffee","components/Close.coffee","components/DeleteDatabase.coffee","components/CreateStore.coffee","components/CreateIndex.coffee","components/DeleteStore.coffee","components/UpgradeRouter.coffee","components/BeginTransaction.coffee","components/AbortTransaction.coffee","components/GetStore.coffee","components/GetIndex.coffee","components/Query.coffee","components/QueryOnly.coffee","components/QueryFrom.coffee","components/QueryTo.coffee","components/Put.coffee","components/Get.coffee","components/Delete.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"bitbucket","components":{"Open":"components/Open.coffee","Close":"components/Close.coffee","DeleteDatabase":"components/DeleteDatabase.coffee","CreateStore":"components/CreateStore.coffee","CreateIndex":"components/CreateIndex.coffee","DeleteStore":"components/DeleteStore.coffee","UpgradeRouter":"components/UpgradeRouter.coffee","BeginTransaction":"components/BeginTransaction.coffee","AbortTransaction":"components/AbortTransaction.coffee","GetStore":"components/GetStore.coffee","GetIndex":"components/GetIndex.coffee","Query":"components/Query.coffee","QueryOnly":"components/QueryOnly.coffee","QueryFrom":"components/QueryFrom.coffee","QueryTo":"components/QueryTo.coffee","Put":"components/Put.coffee","Get":"components/Get.coffee","Delete":"components/Delete.coffee"}}}');
+});
+require.register("noflo-noflo-indexeddb/components/Open.js", function(exports, require, module){
+var Open, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Open = (function(_super) {
+  __extends(Open, _super);
+
+  function Open() {
+    var _this = this;
+    this.name = null;
+    this.version = null;
+    this.inPorts = {
+      name: new noflo.Port('name'),
+      version: new noflo.Port('number')
+    };
+    this.outPorts = {
+      upgrade: new noflo.Port('object'),
+      db: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.open();
+    });
+    this.inPorts.version.on('data', function(version) {
+      _this.version = version;
+      return _this.open();
+    });
+  }
+
+  Open.prototype.open = function() {
+    var req, version,
+      _this = this;
+    if (!(this.name && this.version)) {
+      return;
+    }
+    req = indexedDB.open(this.name, this.version);
+    this.name = null;
+    version = this.version;
+    this.version = null;
+    req.onupgradeneeded = function(e) {
+      _this.outPorts.upgrade.beginGroup(_this.name);
+      _this.outPorts.upgrade.send({
+        oldVersion: e.oldVersion,
+        newVersion: version,
+        db: e.target.result
+      });
+      _this.outPorts.upgrade.endGroup();
+      return _this.outPorts.upgrade.disconnect();
+    };
+    req.onsuccess = function(e) {
+      _this.outPorts.db.beginGroup(_this.name);
+      _this.outPorts.db.send(e.target.result);
+      _this.outPorts.db.endGroup();
+      return _this.outPorts.db.disconnect();
+    };
+    return req.onerror = this.error.bind(this);
+  };
+
+  return Open;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Open;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Close.js", function(exports, require, module){
+var Close, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Close = (function(_super) {
+  __extends(Close, _super);
+
+  function Close() {
+    this.inPorts = {
+      db: new noflo.Port('object')
+    };
+    this.inPorts.db.on('data', function(db) {
+      return db.close();
+    });
+  }
+
+  return Close;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Close;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/DeleteDatabase.js", function(exports, require, module){
+var DeleteDatabase, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+DeleteDatabase = (function(_super) {
+  __extends(DeleteDatabase, _super);
+
+  function DeleteDatabase() {
+    var _this = this;
+    this.inPorts = {
+      name: new noflo.Port('string')
+    };
+    this.outPorts = {
+      deleted: new noflo.Port('bang'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.name.on('data', function(name) {
+      return _this.deleteDb(name);
+    });
+  }
+
+  DeleteDatabase.prototype.deleteDb = function(name) {
+    var req,
+      _this = this;
+    req = indexedDB.deleteDatabase(name);
+    req.onsuccess = function() {
+      _this.outPorts.deleted.send(true);
+      return _this.outPorts.deleted.disconnect();
+    };
+    return req.onerror = this.error;
+  };
+
+  return DeleteDatabase;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new DeleteDatabase;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/CreateStore.js", function(exports, require, module){
+var CreateStore, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+CreateStore = (function(_super) {
+  __extends(CreateStore, _super);
+
+  function CreateStore() {
+    var _this = this;
+    this.name = null;
+    this.db = null;
+    this.keyPath = '';
+    this.autoIncrement = false;
+    this.inPorts = {
+      name: new noflo.Port('name'),
+      db: new noflo.Port('object'),
+      keypath: new noflo.Port('name'),
+      autoincrement: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      db: new noflo.Port('object'),
+      error: new noflo.Port('error')
+    };
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.create();
+    });
+    this.inPorts.db.on('data', function(db) {
+      _this.db = db;
+      return _this.create();
+    });
+    this.inPorts.keypath.on('data', function(keyPath) {
+      _this.keyPath = keyPath;
+    });
+    this.inPorts.autoincrement.on('data', function(autoIncrement) {
+      _this.autoIncrement = autoIncrement;
+    });
+  }
+
+  CreateStore.prototype.create = function() {
+    var store;
+    if (!(this.name && this.db)) {
+      return;
+    }
+    this.db.transaction.onerror = this.error;
+    store = this.db.createObjectStore(this.name, {
+      keyPath: this.keyPath,
+      autoIncrement: this.autoIncrement
+    });
+    if (store && this.outPorts.store.isAttached()) {
+      this.outPorts.store.beginGroup(this.name);
+      this.outPorts.store.send(store);
+      this.outPorts.store.endGroup();
+      this.outPorts.store.disconnect();
+    }
+    this.db.transaction.onerror = null;
+    if (this.outPorts.db.isAttached()) {
+      this.outPorts.db.send(this.db);
+      this.outPorts.db.disconnect();
+    }
+    this.db = null;
+    return this.name = null;
+  };
+
+  return CreateStore;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new CreateStore;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/CreateIndex.js", function(exports, require, module){
+var CreateIndex, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+CreateIndex = (function(_super) {
+  __extends(CreateIndex, _super);
+
+  function CreateIndex() {
+    var _this = this;
+    this.store = null;
+    this.name = null;
+    this.keyPath = null;
+    this.unique = false;
+    this.multiEntry = false;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      name: new noflo.Port('string'),
+      keypath: new noflo.Port('string'),
+      unique: new noflo.Port('boolean'),
+      multientry: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      index: new noflo.Port('object'),
+      store: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.create();
+    });
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.create();
+    });
+    this.inPorts.keypath.on('data', function(keyPath) {
+      _this.keyPath = keyPath;
+      return _this.create();
+    });
+    this.inPorts.unique.on('data', function(unique) {
+      _this.unique = unique;
+    });
+    this.inPorts.multientry.on('data', function(multiEntry) {
+      _this.multiEntry = multiEntry;
+    });
+  }
+
+  CreateIndex.prototype.create = function() {
+    var index;
+    if (!(this.store && this.name && this.keyPath)) {
+      return;
+    }
+    this.store.onerror = this.error.bind(this);
+    index = this.store.createIndex(this.name, this.keyPath, {
+      unique: this.unique,
+      multiEntry: this.multiEntry
+    });
+    this.store.onerror = null;
+    this.name = null;
+    this.keyPath = null;
+    if (this.outPorts.index.isAttached()) {
+      this.outPorts.index.beginGroup(index.name);
+      this.outPorts.index.send(index);
+      this.outPorts.index.endGroup();
+      this.outPorts.index.disconnect();
+    }
+    if (this.outPorts.store.isAttached()) {
+      this.outPorts.store.send(this.store);
+      this.outPorts.store.disconnect();
+    }
+    return this.store = null;
+  };
+
+  return CreateIndex;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new CreateIndex;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/DeleteStore.js", function(exports, require, module){
+var DeleteStore, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+DeleteStore = (function(_super) {
+  __extends(DeleteStore, _super);
+
+  function DeleteStore() {
+    var _this = this;
+    this.name = null;
+    this.db = null;
+    this.inPorts = {
+      name: new noflo.Port('name'),
+      db: new noflo.Port('object')
+    };
+    this.outPorts = {
+      db: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.deleteStore();
+    });
+    this.inPorts.db.on('data', function(db) {
+      _this.db = db;
+      return _this.deleteStore();
+    });
+  }
+
+  DeleteStore.prototype.deleteStore = function() {
+    if (!(this.name && this.db)) {
+      return;
+    }
+    this.db.transaction.onerror = this.error;
+    this.db.deleteObjectStore(this.name);
+    this.db.transaction.onerror = null;
+    if (this.outPorts.db.isAttached()) {
+      this.outPorts.db.send(this.db);
+      this.outPorts.db.disconnect();
+    }
+    this.db = null;
+    return this.name = null;
+  };
+
+  return DeleteStore;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new DeleteStore;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/UpgradeRouter.js", function(exports, require, module){
+var UpgradeRouter, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+UpgradeRouter = (function(_super) {
+  __extends(UpgradeRouter, _super);
+
+  function UpgradeRouter() {
+    var _this = this;
+    this.groups = [];
+    this.inPorts = {
+      upgrade: new noflo.Port('object')
+    };
+    this.outPorts = {
+      versions: new noflo.ArrayPort('object'),
+      missed: new noflo.Port('object')
+    };
+    this.inPorts.upgrade.on('begingroup', function(group) {
+      return _this.groups.push(group);
+    });
+    this.inPorts.upgrade.on('data', function(upgrade) {
+      return _this.route(upgrade);
+    });
+    this.inPorts.upgrade.on('endgroup', function() {
+      return _this.groups.pop();
+    });
+    this.inPorts.upgrade.on('disconnect', function() {
+      return _this.groups = [];
+    });
+  }
+
+  UpgradeRouter.prototype.route = function(upgrade) {
+    var group, migration, upgraded, _i, _j, _k, _l, _len, _len1, _len2, _len3, _ref, _ref1, _ref2, _ref3;
+    migration = upgrade.oldVersion;
+    upgraded = false;
+    while (migration < upgrade.newVersion) {
+      if (!this.outPorts.versions.isAttached(migration)) {
+        continue;
+      }
+      _ref = this.groups;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        group = _ref[_i];
+        this.outPorts.versions.beginGroup(group);
+      }
+      this.outPorts.versions.send(upgrade.db);
+      _ref1 = this.groups;
+      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+        group = _ref1[_j];
+        this.outPorts.versions.endGroup();
+      }
+      this.outPorts.versions.disconnect();
+      upgraded = true;
+      migration++;
+    }
+    if (upgraded) {
+      return;
+    }
+    if (!this.outPorts.missed.isAttached()) {
+      return;
+    }
+    _ref2 = this.groups;
+    for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+      group = _ref2[_k];
+      this.outPorts.missed.beginGroup(group);
+    }
+    this.outPorts.missed.send(upgrade.db);
+    _ref3 = this.groups;
+    for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
+      group = _ref3[_l];
+      this.outPorts.missed.endGroup();
+    }
+    return this.outPorts.missed.disconnect();
+  };
+
+  return UpgradeRouter;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new UpgradeRouter;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/BeginTransaction.js", function(exports, require, module){
+var BeginTransaction, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+BeginTransaction = (function(_super) {
+  __extends(BeginTransaction, _super);
+
+  function BeginTransaction() {
+    var _this = this;
+    this.stores = null;
+    this.db = null;
+    this.mode = 'readwrite';
+    this.inPorts = {
+      stores: new noflo.Port('string'),
+      db: new noflo.Port('object'),
+      mode: new noflo.Port('string')
+    };
+    this.outPorts = {
+      transaction: new noflo.Port('object'),
+      db: new noflo.Port('object'),
+      error: new noflo.Port('error')
+    };
+    this.inPorts.stores.on('data', function(data) {
+      _this.stores = data.split(',');
+      return _this.begin();
+    });
+    this.inPorts.db.on('data', function(db) {
+      _this.db = db;
+      return _this.begin();
+    });
+    this.inPorts.mode.on('data', function(mode) {
+      _this.mode = mode;
+    });
+  }
+
+  BeginTransaction.prototype.begin = function() {
+    var transaction,
+      _this = this;
+    if (!(this.db && this.stores)) {
+      return;
+    }
+    transaction = this.db.transaction(this.stores, this.mode);
+    transaction.oncomplete = function() {
+      transaction.onerror = null;
+      return transaction.oncomplete = null;
+    };
+    transaction.onerror = this.error.bind(this);
+    this.outPorts.transaction.send(transaction);
+    this.outPorts.transaction.disconnect();
+    if (this.outPorts.db.isAttached()) {
+      this.outPorts.db.send(this.db);
+      this.outPorts.db.disconnect();
+    }
+    return this.stores = null;
+  };
+
+  return BeginTransaction;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new BeginTransaction;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/AbortTransaction.js", function(exports, require, module){
+var AbortTransaction, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+AbortTransaction = (function(_super) {
+  __extends(AbortTransaction, _super);
+
+  function AbortTransaction() {
+    var _this = this;
+    this.inPorts = {
+      transaction: new noflo.Port('object')
+    };
+    this.outPorts = {
+      error: new noflo.Port('object')
+    };
+    this.inPorts.transaction.on('data', function(transaction) {
+      transaction.onerror = _this.error.bind(_this);
+      return transaction.abort();
+    });
+  }
+
+  return AbortTransaction;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new AbortTransaction;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/GetStore.js", function(exports, require, module){
+var GetStore, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+GetStore = (function(_super) {
+  __extends(GetStore, _super);
+
+  function GetStore() {
+    var _this = this;
+    this.transaction = null;
+    this.name = null;
+    this.inPorts = {
+      name: new noflo.Port('string'),
+      transaction: new noflo.Port('object')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      transaction: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.get();
+    });
+    this.inPorts.transaction.on('data', function(transaction) {
+      _this.transaction = transaction;
+      return _this.get();
+    });
+  }
+
+  GetStore.prototype.get = function() {
+    var store;
+    if (!(this.name && this.transaction)) {
+      return;
+    }
+    this.transaction.onerror = this.error;
+    store = this.transaction.objectStore(this.name);
+    this.transaction.onerror = null;
+    this.outPorts.store.beginGroup(this.name);
+    this.outPorts.store.send(store);
+    this.outPorts.store.endGroup();
+    this.outPorts.store.disconnect();
+    if (this.outPorts.transaction.isAttached()) {
+      this.outPorts.transaction.send(this.transaction);
+      this.outPorts.transaction.disconnect();
+    }
+    this.transaction = null;
+    return this.name = null;
+  };
+
+  return GetStore;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new GetStore;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/GetIndex.js", function(exports, require, module){
+var GetIndex, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+GetIndex = (function(_super) {
+  __extends(GetIndex, _super);
+
+  function GetIndex() {
+    var _this = this;
+    this.store = null;
+    this.name = null;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      name: new noflo.Port('string')
+    };
+    this.outPorts = {
+      index: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.get();
+    });
+    this.inPorts.name.on('data', function(name) {
+      _this.name = name;
+      return _this.get();
+    });
+  }
+
+  GetIndex.prototype.get = function() {
+    var index;
+    if (!(this.store && this.name)) {
+      return;
+    }
+    this.store.onerror = this.error;
+    index = this.store.index(this.name);
+    this.store.onerror = null;
+    this.outPorts.index.beginGroup(this.name);
+    this.outPorts.index.send(index);
+    this.outPorts.index.endGroup();
+    this.outPorts.index.disconnect();
+    this.store = null;
+    return this.name = null;
+  };
+
+  return GetIndex;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new GetIndex;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Query.js", function(exports, require, module){
+var Query, noflo,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Query = (function(_super) {
+  __extends(Query, _super);
+
+  function Query() {
+    this.step = __bind(this.step, this);
+    var _this = this;
+    this.store = null;
+    this.range = null;
+    this.all = false;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      range: new noflo.Port('object'),
+      all: new noflo.Port('bang')
+    };
+    this.outPorts = {
+      item: new noflo.Port('all'),
+      range: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.query();
+    });
+    this.inPorts.range.on('data', function(range) {
+      _this.range = range;
+      return _this.query();
+    });
+    this.inPorts.all.on('data', function() {
+      _this.all = true;
+      return _this.query();
+    });
+  }
+
+  Query.prototype.query = function() {
+    var req;
+    if (!this.store) {
+      return;
+    }
+    if (this.all) {
+      req = this.store.openCursor();
+      this.store = null;
+      this.all = false;
+      req.onsuccess = this.step;
+      req.onerror = this.error;
+      return;
+    }
+    if (this.range) {
+      req = this.store.openCursor(this.range);
+      this.store = null;
+      if (this.outPorts.range.isAttached()) {
+        this.outPorts.range.send(this.range);
+        this.outPorts.range.disconnect();
+      }
+      this.range = null;
+      req.onsuccess = this.step;
+      return req.onerror = this.error;
+    }
+  };
+
+  Query.prototype.step = function(e) {
+    var cursor;
+    cursor = e.target.result;
+    if (!cursor) {
+      this.outPorts.item.disconnect();
+      return;
+    }
+    this.outPorts.item.beginGroup(cursor.key);
+    this.outPorts.item.send(cursor.value);
+    this.outPorts.item.endGroup();
+    return cursor["continue"]();
+  };
+
+  return Query;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Query;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/QueryOnly.js", function(exports, require, module){
+var QueryOnly, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+QueryOnly = (function(_super) {
+  __extends(QueryOnly, _super);
+
+  function QueryOnly() {
+    var _this = this;
+    this.inPorts = {
+      value: new noflo.Port('all')
+    };
+    this.outPorts = {
+      range: new noflo.Port('object')
+    };
+    this.inPorts.value.on('data', function(value) {
+      _this.outPorts.range.send(IDBKeyRange.only(value));
+      return _this.outPorts.range.disconnect();
+    });
+  }
+
+  return QueryOnly;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new QueryOnly;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/QueryFrom.js", function(exports, require, module){
+var QueryFrom, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+QueryFrom = (function(_super) {
+  __extends(QueryFrom, _super);
+
+  function QueryFrom() {
+    var _this = this;
+    this.including = false;
+    this.inPorts = {
+      value: new noflo.Port('all'),
+      including: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      range: new noflo.Port('object')
+    };
+    this.inPorts.value.on('data', function(value) {
+      _this.outPorts.range.send(IDBKeyRange.lowerBound(value, _this.including));
+      return _this.outPorts.range.disconnect();
+    });
+    this.inPorts.including.on('data', function(including) {
+      _this.including = including;
+    });
+  }
+
+  return QueryFrom;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new QueryFrom;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/QueryTo.js", function(exports, require, module){
+var QueryTo, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+QueryTo = (function(_super) {
+  __extends(QueryTo, _super);
+
+  function QueryTo() {
+    var _this = this;
+    this.including = false;
+    this.inPorts = {
+      value: new noflo.Port('all'),
+      including: new noflo.Port('boolean')
+    };
+    this.outPorts = {
+      range: new noflo.Port('object')
+    };
+    this.inPorts.value.on('data', function(value) {
+      _this.outPorts.range.send(IDBKeyRange.upperBound(value, _this.including));
+      return _this.outPorts.range.disconnect();
+    });
+    this.inPorts.including.on('data', function(including) {
+      _this.including = including;
+    });
+  }
+
+  return QueryTo;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new QueryTo;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Put.js", function(exports, require, module){
+var Put, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Put = (function(_super) {
+  __extends(Put, _super);
+
+  function Put() {
+    var _this = this;
+    this.store = null;
+    this.value = null;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      value: new noflo.Port('all')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      key: new noflo.Port('all'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.put();
+    });
+    this.inPorts.value.on('data', function(value) {
+      _this.value = value;
+      return _this.put();
+    });
+  }
+
+  Put.prototype.put = function() {
+    var req,
+      _this = this;
+    if (!(this.store && this.value)) {
+      return;
+    }
+    req = this.store.put(this.value);
+    this.value = null;
+    if (this.outPorts.store.isAttached()) {
+      this.outPorts.store.send(this.store);
+      this.outPorts.store.disconnect();
+    }
+    this.store = null;
+    req.onsuccess = function(e) {
+      if (_this.outPorts.key.isAttached()) {
+        _this.outPorts.key.send(e.target.result);
+        return _this.outPorts.key.disconnect();
+      }
+    };
+    return req.onerror = this.error.bind(this);
+  };
+
+  return Put;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Put;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Get.js", function(exports, require, module){
+var Get, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Get = (function(_super) {
+  __extends(Get, _super);
+
+  function Get() {
+    var _this = this;
+    this.store = null;
+    this.key = null;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      key: new noflo.Port('string')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      item: new noflo.Port('all'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.get();
+    });
+    this.inPorts.key.on('data', function(key) {
+      _this.key = key;
+      return _this.get();
+    });
+  }
+
+  Get.prototype.get = function() {
+    var req,
+      _this = this;
+    if (!(this.store && this.key)) {
+      return;
+    }
+    req = this.store.get(this.key);
+    if (this.outPorts.store.isAttached()) {
+      this.outPorts.store.send(this.store);
+      this.outPorts.store.disconnect();
+    }
+    this.store = null;
+    req.onsuccess = function(e) {
+      _this.outPorts.item.beginGroup(_this.key);
+      _this.outPorts.item.send(e.target.result);
+      _this.outPorts.item.endGroup();
+      _this.outPorts.item.disconnect();
+      return _this.key = null;
+    };
+    return req.onerror = this.error.bind(this);
+  };
+
+  return Get;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Get;
+};
+
+});
+require.register("noflo-noflo-indexeddb/components/Delete.js", function(exports, require, module){
+var Delete, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Delete = (function(_super) {
+  __extends(Delete, _super);
+
+  function Delete() {
+    var _this = this;
+    this.store = null;
+    this.key = null;
+    this.inPorts = {
+      store: new noflo.Port('object'),
+      key: new noflo.Port('string')
+    };
+    this.outPorts = {
+      store: new noflo.Port('object'),
+      error: new noflo.Port('object')
+    };
+    this.inPorts.store.on('data', function(store) {
+      _this.store = store;
+      return _this.get();
+    });
+    this.inPorts.key.on('data', function(key) {
+      _this.key = key;
+      return _this.get();
+    });
+  }
+
+  Delete.prototype.get = function() {
+    var req,
+      _this = this;
+    if (!(this.store && this.key)) {
+      return;
+    }
+    req = this.store["delete"](this.key);
+    req.onsuccess = function(e) {
+      if (_this.outPorts.store.isAttached()) {
+        _this.outPorts.store.send(_this.store);
+        _this.outPorts.store.disconnect();
+      }
+      _this.key = null;
+      return _this.store = null;
+    };
+    return req.onerror = this.error;
+  };
+
+  return Delete;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new Delete;
 };
 
 });
@@ -11965,7 +13047,7 @@ require.register("noflo-ui/index.js", function(exports, require, module){
 
 });
 require.register("noflo-ui/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-ui","description":"NoFlo Development Environment","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","version":"0.1.0","keywords":["fbp","noflo","graph","visual","dataflow"],"dependencies":{"component/emitter":"*","noflo/noflo":"*","noflo/noflo-strings":"*","noflo/noflo-ajax":"*","noflo/noflo-localstorage":"*","noflo/noflo-interaction":"*","noflo/noflo-objects":"*","noflo/noflo-groups":"*","noflo/noflo-dom":"*","noflo/noflo-core":"*","noflo/noflo-polymer":"*","noflo/noflo-runtime-iframe":"*"},"noflo":{"components":{"AppendTo":"components/AppendTo.coffee","ConnectRuntime":"components/ConnectRuntime.coffee","CreateGraph":"components/CreateGraph.coffee","GenerateId":"components/GenerateId.coffee","LoadGraphEditor":"components/LoadGraphEditor.coffee","LoadRuntime":"components/LoadRuntime.coffee","DetermineRuntime":"components/DetermineRuntime.coffee","Router":"components/Router.coffee"}},"main":"index.js","scripts":["index.js","src/plugins/source.coffee","src/runtimes/base.coffee","src/runtimes/iframe.coffee","src/runtimes/websocket.coffee","components/AppendTo.coffee","components/ConnectRuntime.coffee","components/CreateGraph.coffee","components/GenerateId.coffee","components/LoadGraphEditor.coffee","components/LoadRuntime.coffee","components/DetermineRuntime.coffee","components/Router.coffee"],"json":["component.json"],"files":["css/noflo-ui.css","preview/iframe.html","preview/package.json","preview/component.json","index.html","favicon.ico","noflo.png","examples.json"]}');
+module.exports = JSON.parse('{"name":"noflo-ui","description":"NoFlo Development Environment","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","version":"0.1.0","keywords":["fbp","noflo","graph","visual","dataflow"],"dependencies":{"component/emitter":"*","noflo/noflo":"*","noflo/noflo-strings":"*","noflo/noflo-ajax":"*","noflo/noflo-localstorage":"*","noflo/noflo-interaction":"*","noflo/noflo-objects":"*","noflo/noflo-groups":"*","noflo/noflo-dom":"*","noflo/noflo-core":"*","noflo/noflo-polymer":"*","noflo/noflo-indexeddb":"*","noflo/noflo-runtime-iframe":"*"},"noflo":{"components":{"AppendTo":"components/AppendTo.coffee","ConnectRuntime":"components/ConnectRuntime.coffee","CreateGraph":"components/CreateGraph.coffee","GenerateId":"components/GenerateId.coffee","LoadGraphEditor":"components/LoadGraphEditor.coffee","LoadRuntime":"components/LoadRuntime.coffee","DetermineRuntime":"components/DetermineRuntime.coffee","Router":"components/Router.coffee","MigrateLocalStorage":"components/MigrateLocalStorage.coffee"}},"main":"index.js","scripts":["index.js","src/plugins/source.coffee","src/runtimes/base.coffee","src/runtimes/iframe.coffee","src/runtimes/websocket.coffee","components/AppendTo.coffee","components/ConnectRuntime.coffee","components/CreateGraph.coffee","components/GenerateId.coffee","components/LoadGraphEditor.coffee","components/LoadRuntime.coffee","components/DetermineRuntime.coffee","components/Router.coffee","components/MigrateLocalStorage.coffee"],"json":["component.json"],"files":["css/noflo-ui.css","preview/iframe.html","preview/package.json","preview/component.json","index.html","favicon.ico","noflo.png","examples.json"]}');
 });
 require.register("noflo-ui/src/plugins/source.js", function(exports, require, module){
 var GraphSource,
@@ -12472,6 +13554,9 @@ ConnectRuntime = (function(_super) {
       }
     });
     this.inPorts.runtime.on('data', function(runtime) {
+      if (_this.runtime) {
+        _this.runtime.stop();
+      }
       _this.runtime = runtime;
       return _this.connect(_this.editor, _this.runtime);
     });
@@ -12623,7 +13708,8 @@ ConnectRuntime = (function(_super) {
   };
 
   ConnectRuntime.prototype.connect = function(editor, runtime) {
-    var _this = this;
+    var edges,
+      _this = this;
     if (!(editor && runtime)) {
       return;
     }
@@ -12664,6 +13750,30 @@ ConnectRuntime = (function(_super) {
         });
       }
       return editor.registerComponent(definition);
+    });
+    edges = {};
+    runtime.on('network', function(_arg) {
+      var command, edge, id, payload;
+      command = _arg.command, payload = _arg.payload;
+      if (command === 'error') {
+        return;
+      }
+      if (!(payload.to && payload.from)) {
+        return;
+      }
+      id = "" + payload.from.node + payload.from.port + payload.to.node + payload.to.port;
+      if (!edges[id]) {
+        edges[id] = editor.querySelector("the-graph-edge[source=\"" + payload.from.node + "." + payload.from.port + "\"][target=\"" + payload.to.node + "." + payload.to.port + "\"]");
+      }
+      edge = edges[id];
+      if (!(edge && edge.log)) {
+        return;
+      }
+      return edge.log.push({
+        type: command,
+        group: payload.group != null ? payload.group : '',
+        data: payload.data != null ? payload.data : ''
+      });
     });
     runtime.setParentElement(editor.parentNode);
     return runtime.connect(editor.graph.properties.environment);
@@ -12953,16 +14063,16 @@ Router = (function(_super) {
   function Router() {
     var _this = this;
     this.inPorts = {
-      url: new noflo.Port('string')
+      url: new noflo.ArrayPort('string')
     };
     this.outPorts = {
       route: new noflo.ArrayPort('bang'),
       main: new noflo.Port('string'),
       project: new noflo.Port('string'),
       graph: new noflo.Port('string'),
+      component: new noflo.Port('string'),
       example: new noflo.Port('string'),
-      missed: new noflo.Port('string'),
-      clear: new noflo.Port('boolean')
+      missed: new noflo.Port('string')
     };
     this.inPorts.url.on('data', function(url) {
       var part, parts, remainder, _i, _len;
@@ -12971,8 +14081,6 @@ Router = (function(_super) {
         _this.outPorts.route.disconnect();
       }
       if (url === '') {
-        _this.outPorts.clear.send(true);
-        _this.outPorts.clear.disconnect();
         _this.outPorts.main.send(url);
         _this.outPorts.main.disconnect();
         return;
@@ -12982,6 +14090,11 @@ Router = (function(_super) {
         parts = remainder.split('/');
         _this.outPorts.project.send(parts.shift());
         _this.outPorts.project.disconnect();
+        if (parts[0] === 'component' && parts.length === 2) {
+          _this.outPorts.component.send(parts[1]);
+          _this.outPorts.component.disconnect();
+          return;
+        }
         for (_i = 0, _len = parts.length; _i < _len; _i++) {
           part = parts[_i];
           _this.outPorts.graph.send(part);
@@ -13015,6 +14128,88 @@ exports.getComponent = function() {
 };
 
 });
+require.register("noflo-ui/components/MigrateLocalStorage.js", function(exports, require, module){
+var MigrateLocalStorage, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+MigrateLocalStorage = (function(_super) {
+  __extends(MigrateLocalStorage, _super);
+
+  function MigrateLocalStorage() {
+    var _this = this;
+    this.inPorts = {
+      graphstore: new noflo.Port('object')
+    };
+    this.inPorts.graphstore.on('data', function(store) {
+      return _this.migrateGraphs(store);
+    });
+  }
+
+  MigrateLocalStorage.prototype.getGraphs = function() {
+    var graph, graphIds, graphs, id, ids, _i, _len;
+    graphIds = localStorage.getItem('noflo-ui-graphs');
+    graphs = [];
+    if (!graphIds) {
+      return graphs;
+    }
+    ids = graphIds.split(',');
+    for (_i = 0, _len = ids.length; _i < _len; _i++) {
+      id = ids[_i];
+      graph = this.getGraph(id);
+      if (!graph) {
+        continue;
+      }
+      graphs.push(graph);
+    }
+    return graphs;
+  };
+
+  MigrateLocalStorage.prototype.getGraph = function(id) {
+    var graph, json;
+    json = localStorage.getItem(id);
+    if (!json) {
+      return;
+    }
+    graph = JSON.parse(json);
+    graph.id = id;
+    graph.project = '';
+    return graph;
+  };
+
+  MigrateLocalStorage.prototype.migrateGraphs = function(store) {
+    var graphs, succeeded, success,
+      _this = this;
+    graphs = this.getGraphs();
+    if (graphs.length === 0) {
+      return;
+    }
+    succeeded = 0;
+    success = function() {
+      succeeded++;
+      if (succeeded !== graphs.length) {
+
+      }
+    };
+    return graphs.forEach(function(graph) {
+      var req;
+      req = store.put(graph);
+      return req.onsuccess = success;
+    });
+  };
+
+  return MigrateLocalStorage;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new MigrateLocalStorage;
+};
+
+});
+
 
 
 
@@ -13364,6 +14559,48 @@ require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-polymer/deps/noflo/sr
 require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-polymer/deps/noflo/src/lib/Network.js");
 require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-polymer/deps/noflo/src/components/Graph.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-polymer/deps/noflo/index.js");
+require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
+
+require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
+
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/lib/fbp.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-noflo/deps/fbp/index.js");
+require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
+require.alias("noflo-noflo-indexeddb/index.js", "noflo-ui/deps/noflo-indexeddb/index.js");
+require.alias("noflo-noflo-indexeddb/component.json", "noflo-ui/deps/noflo-indexeddb/component.json");
+require.alias("noflo-noflo-indexeddb/components/Open.js", "noflo-ui/deps/noflo-indexeddb/components/Open.js");
+require.alias("noflo-noflo-indexeddb/components/Close.js", "noflo-ui/deps/noflo-indexeddb/components/Close.js");
+require.alias("noflo-noflo-indexeddb/components/DeleteDatabase.js", "noflo-ui/deps/noflo-indexeddb/components/DeleteDatabase.js");
+require.alias("noflo-noflo-indexeddb/components/CreateStore.js", "noflo-ui/deps/noflo-indexeddb/components/CreateStore.js");
+require.alias("noflo-noflo-indexeddb/components/CreateIndex.js", "noflo-ui/deps/noflo-indexeddb/components/CreateIndex.js");
+require.alias("noflo-noflo-indexeddb/components/DeleteStore.js", "noflo-ui/deps/noflo-indexeddb/components/DeleteStore.js");
+require.alias("noflo-noflo-indexeddb/components/UpgradeRouter.js", "noflo-ui/deps/noflo-indexeddb/components/UpgradeRouter.js");
+require.alias("noflo-noflo-indexeddb/components/BeginTransaction.js", "noflo-ui/deps/noflo-indexeddb/components/BeginTransaction.js");
+require.alias("noflo-noflo-indexeddb/components/AbortTransaction.js", "noflo-ui/deps/noflo-indexeddb/components/AbortTransaction.js");
+require.alias("noflo-noflo-indexeddb/components/GetStore.js", "noflo-ui/deps/noflo-indexeddb/components/GetStore.js");
+require.alias("noflo-noflo-indexeddb/components/GetIndex.js", "noflo-ui/deps/noflo-indexeddb/components/GetIndex.js");
+require.alias("noflo-noflo-indexeddb/components/Query.js", "noflo-ui/deps/noflo-indexeddb/components/Query.js");
+require.alias("noflo-noflo-indexeddb/components/QueryOnly.js", "noflo-ui/deps/noflo-indexeddb/components/QueryOnly.js");
+require.alias("noflo-noflo-indexeddb/components/QueryFrom.js", "noflo-ui/deps/noflo-indexeddb/components/QueryFrom.js");
+require.alias("noflo-noflo-indexeddb/components/QueryTo.js", "noflo-ui/deps/noflo-indexeddb/components/QueryTo.js");
+require.alias("noflo-noflo-indexeddb/components/Put.js", "noflo-ui/deps/noflo-indexeddb/components/Put.js");
+require.alias("noflo-noflo-indexeddb/components/Get.js", "noflo-ui/deps/noflo-indexeddb/components/Get.js");
+require.alias("noflo-noflo-indexeddb/components/Delete.js", "noflo-ui/deps/noflo-indexeddb/components/Delete.js");
+require.alias("noflo-noflo-indexeddb/index.js", "noflo-indexeddb/index.js");
+require.alias("noflo-noflo/component.json", "noflo-noflo-indexeddb/deps/noflo/component.json");
+require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/Graph.js");
+require.alias("noflo-noflo/src/lib/InternalSocket.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/InternalSocket.js");
+require.alias("noflo-noflo/src/lib/Port.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/Port.js");
+require.alias("noflo-noflo/src/lib/ArrayPort.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/ArrayPort.js");
+require.alias("noflo-noflo/src/lib/Component.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/Component.js");
+require.alias("noflo-noflo/src/lib/AsyncComponent.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/AsyncComponent.js");
+require.alias("noflo-noflo/src/lib/LoggingComponent.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/LoggingComponent.js");
+require.alias("noflo-noflo/src/lib/ComponentLoader.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/ComponentLoader.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/NoFlo.js");
+require.alias("noflo-noflo/src/lib/Network.js", "noflo-noflo-indexeddb/deps/noflo/src/lib/Network.js");
+require.alias("noflo-noflo/src/components/Graph.js", "noflo-noflo-indexeddb/deps/noflo/src/components/Graph.js");
+require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo-indexeddb/deps/noflo/index.js");
 require.alias("component-emitter/index.js", "noflo-noflo/deps/emitter/index.js");
 
 require.alias("component-underscore/index.js", "noflo-noflo/deps/underscore/index.js");
