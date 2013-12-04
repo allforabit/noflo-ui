@@ -1,3 +1,8 @@
+button {
+  padding:0;
+}
+
+
 /*
  * Colors:
  *
@@ -6,6 +11,15 @@
  * Darker elements: hsl(189, 11%, 26%)
  * Lighter elements: white
  * Default grid is 35x35
+ *
+ * z-indexes:
+ *
+ * Modal dialogs: 5
+ * Main screen: 4
+ * Project panel: 3
+ * Tool & context panels: 2
+ * Workspace chrome: 1
+ * Workspace: 0
  */
 @font-face {
   font-family: "SourceCodePro";
@@ -17,29 +31,22 @@
   font-weight: bold;
 }
 
-body {
-  background-color: hsl(187, 45%, 8%);
+body, button {
+  background-color: hsl(187, 45%, 5%);
   color: #ffffff;
   font-family: "SourceCodePro",Helvetica,Arial,sans-serif;
   margin: 0;
   padding: 0;
 }
 
-body.main the-panel,
-body.main noflo-search,
-body.main noflo-breadcrumb,
-body.main noflo-runtime {
-  display: none;
-}
 the-panel {
-  background-color: hsl(187, 45%, 8%);
+  background-color: hsl(190, 30%, 6%);
   z-index: 2;
   transition: left 0.3s ease-in-out, bottom 0.3s ease-in-out, right 0.3s ease-in-out, top 0.3s ease-in-out;
 }
 the-panel#account {
-  border-right: 1px solid hsl(189, 11%, 26%);
   top: 0px;
-  z-index: 4;
+  z-index: 3;
 }
 the-panel#account:before {
   font-family: FontAwesome;
@@ -106,14 +113,14 @@ the-panel#account main ul li noflo-account .toolbar a {
   font-size: 16px;
   line-height: 35px;
 }
-the-panel#context {
-  border-right: 1px solid hsl(189, 11%, 26%);
-  padding-top: 35px;
-  margin-left: 35px;
+#context {
+  position: fixed;
+  left: 35px;
+  top: 35px;
+  width: 245px;
+  z-index: 2;
 }
 the-panel#fixed {
-  border-left: 1px solid hsl(189, 11%, 26%);
-  z-index: 4;
 }
 the-panel#fixed:before {
   font-family: FontAwesome;
@@ -133,23 +140,38 @@ the-panel#fixed:not([open]):before {
   opacity: 1;
 }
 
-the-panel the-card {
+the-card {
   display: block;
   margin: 0px;
-  padding: 8px 8px;
-  border-bottom: 1px rgb(71, 71, 71) solid;
-  width: 264px;
+  padding: 10px 10px 10px;
+  -webkit-box-sizing: border-box;
+     -moz-box-sizing: border-box;
+          box-sizing: border-box;
+  border-bottom: 1px hsla(190, 100%, 30%, 0.1) solid;
+  border-right: 1px hsla(190, 100%, 30%, 0.1) solid;
+  background-color: hsla(190, 30%, 6%, 0.95);
+  width: 280px;
   max-height: 280px;
   overflow-x: hidden;
   overflow-y: auto;
+  position: relative;
 }
-the-panel the-card[type="noflo-runtime-preview"] {
+the-card[type="noflo-runtime-preview"] {
   padding: 0px;
   width: 280px;
   overflow: hidden;
 }
 
-the-panel the-card button,
+html the-card-stack[type="edge-menu"] the-card, html the-card-stack[type="node-menu"] the-card {
+  background-color: hsla(190, 30%, 9%, 0.98) !important;
+}
+
+html the-card-stack[type="edge-menu"] the-card h1, html the-card-stack[type="node-menu"] the-card h1 {
+  background-color: hsla(190, 30%, 9%, 0.98) !important;
+  font-size:15px;
+}
+
+the-card button,
 noflo-search button,
 noflo-runtime button {
   width: 35px;
@@ -161,82 +183,128 @@ noflo-runtime button {
   text-align: center;
 }
 
-the-panel the-card h1 {
+the-card h1 {
+  font-size: 12px;
+  line-height: 35px;
   margin: 0px;
-  font-size: 12pt;
-}
-the-panel the-card h2 {
-  margin: 0px;
-  font-size: 10pt;
+  margin-bottom: 0px;
+  text-shadow: 0 1px hsl(0, 0%, 0%);  
+  text-align: left;
 }
 
-the-panel the-card ul {
+the-card header h1 {
+  display: block;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 179px;
+  height: 35px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+the-card header h2 {
+  line-height: 35px;
+  width: 80px;
+  height: 35px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  margin: 0px;
+  text-align: right;
+  font-size: 10px;
+  color: hsla(190, 100%, 80%, 0.8);
+  display: block;
+}
+the-card header {
+  height: 35px;
+}
+
+the-card ul {
   margin: 0px;
   padding: 0px;
   list-style: none;
 }
 
-the-panel the-card textarea {
+the-card textarea {
   width: 100%;
   min-height: 100px;
   max-height: 260px;
 }
 
-the-panel the-card ul li {
+the-card ul li {
   display: block;
-  clear: left;
   padding: 0px;
   margin: 0px;
-  margin-bottom: 17px;
 }
-the-panel the-card ul.toolbar li {
-  display: inline;
+the-card ul.toolbar2right {
+  width: 170px;
+  display:block;
+  position: absolute;
+  right: 10px;
+  top: 10px;
+}
+the-card ul.toolbar li {
+  float: left;
+  display: block;
+  width: calc(100%/2);  
+  height: 35px;
+  text-align: center;
   margin: 0px;
-  margin-right: 8px;
+  margin-right: 0px;
 }
-the-panel the-card ul.routes {
-  margin-left: -8px;
-  margin-right: -8px;
+the-card ul.toolbar li * {
+  line-height: 35px;
 }
-the-panel the-card ul.routes li {
-  display: inline;
-  margin: 0px;
-  width: 23px;
-  height: 23px;
+the-card ul.toolbar li button {
+  width:100%;
+  height:100%;
 }
-the-panel the-card ul.routes li button {
-  width: 23px;
-  height: 23px;
+.red-button {
+  background-color: hsla(0, 100%, 20%, 0.2);
+  color: hsl(0, 100%, 65%);
+}
+.blue-button {
+  background-color: hsla(190, 100%, 20%, 0.2);
+  color: hsl(190, 100%, 65%);
 }
 
-the-panel the-card ul li h2 {
+
+
+the-card ul li h2 {
   font-size: 10pt;
   margin: 0px;
 }
-the-panel the-card ul li i {
-  float: left;
-  margin-right: 8px;
+the-card ul li i {
+  /*display: none !important;*/
+  margin-right: 5px;
 }
-the-panel the-card ul li p {
+the-card ul li p {
   margin: 0px;
-  margin-top: 8px;
+  margin-top: 10px;
   padding: 0px;
   font-size: 8pt;
 }
 
 noflo-main {
+  background-color: hsl(187, 45%, 8%);
+  display: block;
+  z-index: 4;
+  position: fixed;
+  overflow-y: scroll;
+  height: 100%;
+  width: 100%;
+  transition: opacity 0.3s ease-in-out;
+}
+noflo-main section {
   background-image: radial-gradient(circle 0.5px at 1px 1px, hsl(189, 11%, 10%) 0px, hsl(189, 11%, 12%) 1px, transparent 2px);
   background-size: 35px 35px;
   background-position: calc(50% - 19px) 4px;
   display: block;
-}
-noflo-main section {
-  clear: left;
-  display: block;
-  width: 60%;
-  max-width: 700px;
-  margin-left: auto;
-  margin-right: auto;
+  width: 70%;
+  padding-left: 15%;
+  padding-right: 15%;
 }
 noflo-main section > h2 {
   font-size: 17px;
@@ -263,7 +331,7 @@ noflo-main ul li {
   width: 210px;
   height: 105px;
   overflow: hidden;
-  float: left;
+  display: inline-block;
   text-align: center;
   background-color: hsl(189, 47%, 6%);
   border-radius: 3px;
@@ -381,33 +449,31 @@ noflo-main noflo-account .toolbar a {
 }
 
 noflo-search {
-  background-color: hsl(187, 45%, 8%);
+  background-color: hsl(187, 45%, 5%);
   border-bottom: 1px solid hsl(189, 11%, 26%);
-  border-right: 1px solid hsl(189, 11%, 26%);
   position: fixed;
   left: 35px;
   top: 0;
   color: white;
-  z-index: 3;
+  z-index: 2;
   width: 280px;
   height: 35px;
   font-size: 10px;
   white-space: nowrap;
 }
 noflo-search input {
-  background-color: hsl(187, 45%, 8%);
+  background-color: hsl(187, 45%, 5%);
   font-family: "SourceCodePro",Helvetica,Arial,sans-serif;
   border: none;
   padding: 0px;
-  padding-right: 8px;
-  padding-left: 8px;
+  padding-right: 10px;
+  padding-left: 10px;
   color: white;
   width: 245px;
   height: 35px;
   display: inline;
 }
 noflo-search button {
-  border-left: 1px solid hsl(189, 11%, 26%);
   width: 35px;
   height: 35px;
   margin: 0px;
@@ -433,64 +499,64 @@ noflo-new-component {
 
 noflo-breadcrumb {
   position: fixed;
-  left: 316px;
+  left: 315px;
   top: 0;
   color: rgb(71, 71, 71);
   padding: 0px;
-  z-index: 3;
-  width: 210px;
-  height: 70px;
-  padding: 35px;
-  background-color: hsla(189, 47%, 6%, .9);
+  z-index: 1;
+  width: 350px;
+  height: 35px;
+  background-color: hsl(187, 45%, 5%);
+  border-bottom: 1px solid hsl(189, 11%, 26%);
 }
 noflo-breadcrumb h1 {
-  height: 27px;
-  border-top: 1px solid hsl(189, 11%, 26%);
-  padding-top: 8px;
+  line-height: 35px;
+  width: 210px;
+  overflow: hidden;
+  position: absolute;
+  right: 17px;
 }
 noflo-breadcrumb h2 {
-  height: 27px;
+  line-height: 35px;
   width: 105px;
-  border-top: 1px solid hsl(189, 11%, 26%);
-  padding-top: 8px;
+  overflow: hidden;
+  position: absolute;
+  left: 17px;
 }
 
 noflo-runtime {
   position: fixed;
-  right: 0;
+  right: 35px;
   top: 0;
   color: rgb(71, 71, 71);
-  padding: 0px;
-  z-index: 3;
-  width: 210px;
-  height: 70px;
-  padding: 35px;
-  background-color: hsla(189, 47%, 6%, .9);
+  z-index: 1;
+  width: 350px;
+  height: 35px;
+  background-color: hsl(187, 45%, 5%);
+  border-bottom: 1px solid hsl(189, 11%, 26%);
 }
 noflo-runtime .status {
-  height: 27px;
-  border-top: 1px solid hsl(189, 11%, 26%);
-  padding-top: 8px;
+  line-height: 35px;
+  position: absolute;
+  left: 17px;
+  width: 158px;
 }
 noflo-runtime .status button {
-  position: absolute;
-  border-left: 1px solid hsl(189, 11%, 26%);
-  right: 35px;
-  top: 35px;
   height: 35px;
+  width: 35px;
   text-align: center;
 }
 noflo-runtime .runcontrol {
-  padding-top: 8px;
-  border-top: 1px solid hsl(189, 11%, 26%);
-  height: 27px;
+  line-height: 35px;
+  position: absolute;
+  right: 17px;
+  width: 158px;
 }
 noflo-runtime .runcontrol button {
+  height: 35px;
+  width: 35px;
+  text-align: center;
   color: rgb(71, 71, 71);
-  border-left: 1px solid hsl(189, 11%, 26%);
-  position: absolute;
-  right: 35px;
-  top: 70px;
 }
 
 noflo-runtime .online, noflo-runtime .online button {
@@ -506,7 +572,7 @@ noflo-runtime .offline, noflo-runtime .offline button {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 1;
+  z-index: 0;
 }
 
 #preview-iframe {
@@ -552,6 +618,40 @@ the-graph-nav the-graph-map {
 #zoomout {
   position: fixed;
   bottom: 210px;
+}
+
+noflo-component-editor {
+  display: block;
+  position: absolute;
+  top: 35px;
+  left: 35px;
+  right: 35px;
+  height: calc(100% - 70px);
+}
+.CodeMirror {
+  height: 100%;
+}
+.CodeMirror-scroll {
+  height: 100%;
+}
+noflo-component-editor #code,
+noflo-component-editor #tests {
+  display: block;
+  background: hsl(186,31%,6%);
+  width: 50%;
+  height: 100%;
+  position: absolute;
+  left: 0px;
+  top: 0px;
+}
+noflo-component-editor #tests {
+  left: auto;
+  right: 0px;
+}
+noflo-component-editor #code h1,
+noflo-component-editor #tests h1 {
+  line-height: 35px;
+  padding-left: 35px;
 }
 
 ::-webkit-scrollbar {

@@ -41,7 +41,7 @@
         this.menuCard = document.createElement('the-card');
         this.menuCard.type = 'noflo-menu';
         this.menuCard.appendChild(menu);
-        this.menuCard.addTo(this.contextBar.getMain(), true);
+        this.menuCard.addTo(this.contextBar, true);
       },
       searchChanged: function () {
         event.preventDefault();
@@ -55,6 +55,9 @@
         }
         while (this.results.length) {
           this.results.pop();
+        }
+        if (this.resultsCard) {
+          this.resultsCard.getElementsByTagName('noflo-search-results')[0].search = this.search;
         }
         this.fire('search', this.search);
       },
@@ -79,7 +82,7 @@
         this.resultsCard = document.createElement('the-card');
         this.resultsCard.type = 'noflo-search-results';
         this.resultsCard.appendChild(results);
-        this.resultsCard.addTo(this.contextBar.getMain(), true);
+        this.resultsCard.addTo(this.contextBar, true);
       }
     });
   </script>

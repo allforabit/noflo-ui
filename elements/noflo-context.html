@@ -2,8 +2,18 @@
 <link rel="import" href="noflo-node-inspector.html">
 <link rel="import" href="noflo-graph-inspector.html">
 <link rel="import" href="noflo-edge-menu.html">
+<link rel="import" href="noflo-edge-inspector.html">
 <link rel="import" href="../bower_components/the-card/the-card/the-card.html">
-<polymer-element name="noflo-context" attributes="project graphs component node edge search clear">
+<link rel="import" href="../bower_components/the-panel/the-panel/the-panel.html">
+<polymer-element name="noflo-context" attributes="project graphs component node edge search" lightdom>
+  <template>
+    <section id="context"></section>
+    <the-panel id="fixed" edge="right" size="280" handle="35" automatic="false">
+      <header></header>
+      <main></main>
+      <footer></footer>
+    </the-panel>
+  </template>
   <script>
     Polymer('noflo-context', {
       project: null,
@@ -14,12 +24,25 @@
       node: null,
       edge: null,
       component: '',
-      clear: false,
       enteredView: function () {
         this.graphObserver = new ArrayObserver(this.graphs, this.graphsModified.bind(this));
         this.nodeObserver = new ArrayObserver(this.nodes, this.nodesModified.bind(this));
         this.edgeObserver = new ArrayObserver(this.edges, this.edgesModified.bind(this));
-        this.contextBar = document.getElementById('context');
+        this.contextBar = this.$.context;
+        window.addEventListener('keyup', function (e) {
+          if (e.keyCode === 27) {
+            var edge, node;
+            // Clear selections on Esc
+            while (this.edges.length) {
+              edge = this.edges.pop();
+              edge.selected = false;
+            }
+            while (this.nodes.length) {
+              node = this.nodes.pop();
+              node.selected = false;
+            }
+          }
+        }.bind(this));
       },
       nodeChanged: function () {
         if (!this.node) {
@@ -27,12 +50,12 @@
         }
         if (this.nodes.indexOf(this.node) !== -1) {
           this.nodes.splice(this.nodes.indexOf(this.node), 1);
-          this.node.classList.remove('selected');
+          this.node.selected = false;
           this.node = null;
           return;
         }
         this.nodes.push(this.node);
-        this.node.classList.add('selected');
+        this.node.selected = true;
         this.node = null;
       },
       edgeChanged: function () {
@@ -41,12 +64,12 @@
         }
         if (this.edges.indexOf(this.edge) !== -1) {
           this.edges.splice(this.edges.indexOf(this.edge), 1);
-          this.edge.pathTouch.classList.remove('selected');
+          this.edge.selected = false;
           this.edge = null;
           return;
         }
-        this.edges.push(this.edge);
-        this.edge.pathTouch.classList.add('selected');
+        this.edges.push(this.edge);        
+        this.edge.selected = true;
         this.edge = null;
       },
       projectChanged: function () {
@@ -74,7 +97,7 @@
           this.nodeMenu = document.createElement('the-card');
           this.nodeMenu.type = 'node-menu';
           this.nodeMenu.appendChild(menu);
-          this.nodeMenu.addTo(this.contextBar.getMain());
+          this.nodeMenu.addTo(this.contextBar);
         }
 
         this.nodes.forEach(function (node) {
@@ -88,7 +111,7 @@
           this.nodeInspectors[id] = document.createElement('the-card');
           this.nodeInspectors[id].type = 'node-inspector';
           this.nodeInspectors[id].appendChild(inspector);
-          this.nodeInspectors[id].addTo(this.contextBar.getMain());
+          this.nodeInspectors[id].addTo(this.contextBar);
         }.bind(this));
 
         var found;
@@ -124,36 +147,63 @@
           this.hideEdgeCards();
         }
       },
+      edgeInspectors: {},
       showEdgeCards: function () {
-        if (this.edgeMenu) {
-          return;
+        if (!this.edgeMenu) {
+          var menu = document.createElement('noflo-edge-menu');
+          menu.edges = this.edges;
+          this.edgeMenu = document.createElement('the-card');
+          this.edgeMenu.type = 'edge-menu';
+          this.edgeMenu.appendChild(menu);
+          this.edgeMenu.addTo(this.contextBar);
         }
-        var menu = document.createElement('noflo-edge-menu');
-        menu.edges = this.edges;
-        this.edgeMenu = document.createElement('the-card');
-        this.edgeMenu.type = 'edge-menu';
-        this.edgeMenu.appendChild(menu);
-        this.edgeMenu.addTo(this.contextBar.getMain());
+
+        this.edges.forEach(function (edge) {
+          var id = edge.pathId;
+          if (this.edgeInspectors[id]) {
+            return;
+          }
+          var inspector = document.createElement('noflo-edge-inspector');
+          inspector.edge = edge;
+          inspector.graph = graph;
+          this.edgeInspectors[id] = document.createElement('the-card');
+          this.edgeInspectors[id].type = 'edge-inspector';
+          this.edgeInspectors[id].appendChild(inspector);
+          this.edgeInspectors[id].addTo(this.contextBar);
+        }.bind(this));
+
+        var found;
+        for (var id in this.edgeInspectors) {
+          found = false;
+          this.edges.forEach(function (edge) {
+            if (edge.pathId === id) {
+              found = true;
+            }
+          });
+          if (!found) {
+            this.edgeInspectors[id].parentNode.removeChild(this.edgeInspectors[id]);
+            delete this.edgeInspectors[id];
+          }
+        }
       },
       hideEdgeCards: function () {
-        if (!this.edgeMenu) {
-          return;
+        if (this.edgeMenu) {
+          this.edgeMenu.parentNode.removeChild(this.edgeMenu);
+          this.edgeMenu = null;
         }
-        this.edgeMenu.parentNode.removeChild(this.edgeMenu);
-        this.edgeMenu = null;
+        for (var id in this.edgeInspectors) {
+          this.edgeInspectors[id].parentNode.removeChild(this.edgeInspectors[id]);
+          delete this.edgeInspectors[id];
+        }
       },
       componentChanged: function () {
         this.fire('component', this.component);
       },
-      clearChanged: function () {
-        if (!this.clear) {
-          return;
-        }
+      clear: function () {
         this.project = null;
         this.graphs.splice(0, this.graphs.length);
         this.nodes.splice(0, this.nodes.length);
         this.edges.splice(0, this.edges.length);
-        this.clear = false;
       },
       buttons: function () {
         if (this.graphs.length === 0) {
@@ -185,7 +235,7 @@
         this.graphInspector = document.createElement('the-card');
         this.graphInspector.type = 'graph-inspector';
         this.graphInspector.appendChild(inspector);
-        this.graphInspector.addTo(this.contextBar.getMain());
+        this.graphInspector.addTo(this.contextBar);
       }
     });
   </script>
