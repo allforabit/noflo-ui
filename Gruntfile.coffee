@@ -18,10 +18,15 @@ module.exports = ->
     exec:
       nuke_main:
         command: 'rm -rf ./components/*/'
+      nuke_main_built:
+        command: 'rm -rf ./browser'
       nuke_bower:
         command: 'rm -rf ./bower_components/*'
       nuke_preview:
         command: 'rm -rf ./components/*/'
+        cwd: 'preview'
+      nuke_preview_built:
+        command: 'rm -rf ./browser'
         cwd: 'preview'
       bower_install:
         command: './node_modules/.bin/bower install'
@@ -147,6 +152,14 @@ module.exports = ->
         'spec/*.coffee'
       ]
 
+    inlinelint:
+      options:
+        strict: false,
+        newcap: false,
+        "globals": { "Polymer": true }
+      all:
+        src: ['elements/*.html']
+
 
   # Grunt plugins used for building
   @loadNpmTasks 'grunt-contrib-coffee'
@@ -161,15 +174,17 @@ module.exports = ->
   @loadNpmTasks 'grunt-contrib-watch'
   #@loadNpmTasks 'grunt-mocha-phantomjs'
   @loadNpmTasks 'grunt-coffeelint'
+  @loadNpmTasks 'grunt-lint-inline'
 
   # Our local tasks
-  @registerTask 'nuke', ['exec:nuke_main', 'exec:nuke_bower', 'exec:nuke_preview']
+  @registerTask 'nuke', ['exec:nuke_main', 'exec:nuke_bower', 'exec:nuke_preview', 'exec:nuke_main_built', 'exec:nuke_preview_built']
   @registerTask 'build', ['exec:main_install', 'exec:bower_install', 'exec:main_build', 'exec:preview_install', 'exec:preview_build']
   @registerTask 'main_build', ['exec:main_install', 'exec:bower_install', 'exec:main_build']
   @registerTask 'main_rebuild', ['exec:nuke_main', 'exec:nuke_bower', 'main_build']
   @registerTask 'preview_build', ['exec:preview_install', 'exec:preview_build']
   @registerTask 'preview_rebuild', ['exec:nuke_preview', 'preview_build']
   @registerTask 'rebuild', ['main_rebuild', 'preview_rebuild']
-  @registerTask 'test', ['coffeelint', 'build', 'coffee', 'mocha_phantomjs']
+  # @registerTask 'test', ['coffeelint', 'build', 'coffee', 'mocha_phantomjs']
+  @registerTask 'test', ['coffeelint', 'inlinelint']
   @registerTask 'app', ['build', 'compress', 'phonegap-build']
   @registerTask 'default', ['test']

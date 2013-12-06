@@ -1,6 +1,5 @@
 <link rel="import" href="noflo-node-menu.html">
 <link rel="import" href="noflo-node-inspector.html">
-<link rel="import" href="noflo-graph-inspector.html">
 <link rel="import" href="noflo-edge-menu.html">
 <link rel="import" href="noflo-edge-inspector.html">
 <link rel="import" href="../bower_components/the-card/the-card/the-card.html">
@@ -8,7 +7,7 @@
 <polymer-element name="noflo-context" attributes="project graphs component node edge search" lightdom>
   <template>
     <section id="context"></section>
-    <the-panel id="fixed" edge="right" size="280" handle="35" automatic="false">
+    <the-panel id="fixed" edge="right" size="324" handle="36" automatic="false">
       <header></header>
       <main></main>
       <footer></footer>
@@ -79,7 +78,6 @@
         this.fire('graphs', this.graphs);
         this.fire('currentgraph', this.graphs[this.graphs.length - 1]);
         this.search = '';
-        this.searchChanged();
       },
       nodesModified: function () {
         this.fire('nodes', this.nodes);
@@ -115,7 +113,7 @@
         }.bind(this));
 
         var found;
-        for (var id in this.nodeInspectors) {
+        Object.keys(this.nodeInspectors).forEach(function (id) {
           found = false;
           this.nodes.forEach(function (node) {
             if (node.getAttribute('name') === id) {
@@ -126,7 +124,7 @@
             this.nodeInspectors[id].parentNode.removeChild(this.nodeInspectors[id]);
             delete this.nodeInspectors[id];
           }
-        }
+        }.bind(this));
       },
       hideNodeCards: function () {
         if (this.nodeMenu) {
@@ -173,7 +171,7 @@
         }.bind(this));
 
         var found;
-        for (var id in this.edgeInspectors) {
+        Object.keys(this.edgeInspectors).forEach(function (id) {
           found = false;
           this.edges.forEach(function (edge) {
             if (edge.pathId === id) {
@@ -184,7 +182,7 @@
             this.edgeInspectors[id].parentNode.removeChild(this.edgeInspectors[id]);
             delete this.edgeInspectors[id];
           }
-        }
+        }.bind(this));
       },
       hideEdgeCards: function () {
         if (this.edgeMenu) {
@@ -204,38 +202,6 @@
         this.graphs.splice(0, this.graphs.length);
         this.nodes.splice(0, this.nodes.length);
         this.edges.splice(0, this.edges.length);
-      },
-      buttons: function () {
-        if (this.graphs.length === 0) {
-          return;
-        }
-        this.fire('button', {
-          id: 'graph-inspector',
-          icon: 'gear',
-          label: 'Graph settings',
-          search: 'graph settings'
-        });
-      },
-      searchChanged: function () {
-        if (this.search === 'graph settings') {
-          this.showGraphInspector();
-          return;
-        }
-        if (this.graphInspector) {
-          this.graphInspector.parentNode.removeChild(this.graphInspector);
-          this.graphInspector = null;
-        }
-      },
-      showGraphInspector: function () {
-        if (this.graphs.length === 0) {
-          return;
-        }
-        var inspector = document.createElement('noflo-graph-inspector');
-        inspector.graph = this.graphs[this.graphs.length - 1];
-        this.graphInspector = document.createElement('the-card');
-        this.graphInspector.type = 'graph-inspector';
-        this.graphInspector.appendChild(inspector);
-        this.graphInspector.addTo(this.contextBar);
       }
     });
   </script>
