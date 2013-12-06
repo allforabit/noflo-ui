@@ -21,11 +21,11 @@
     "tools"
   ],
   "homepage": "https://github.com/the-grid/the-graph",
-  "_release": "496765805a",
+  "_release": "9fa6a69c9b",
   "_resolution": {
     "type": "branch",
     "branch": "master",
-    "commit": "496765805a2a6a68342c8aa3b016c3001f064ced"
+    "commit": "9fa6a69c9bdcb914e4427551c7fbfa121a26dceb"
   },
   "_source": "git://github.com/the-grid/the-graph.git",
   "_target": "master",

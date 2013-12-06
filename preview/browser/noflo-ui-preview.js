@@ -13999,7 +13999,127 @@ require.register("noflo-noflo-routers/index.js", function(exports, require, modu
 
 });
 require.register("noflo-noflo-routers/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-routers","description":"Routing Packets in NoFlo","keywords":["noflo","routing"],"author":"Kenneth Kan <kenhkan@gmail.com>","version":"0.1.0","dependencies":{"noflo/noflo":"*","component/underscore":"*"},"scripts":["components/PacketRouter.coffee","components/RegexpRouter.coffee","components/SplitInSequence.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"code-fork","components":{"PacketRouter":"components/PacketRouter.coffee","RegexpRouter":"components/RegexpRouter.coffee","SplitInSequence":"components/SplitInSequence.coffee"}},"repo":"https://raw.github.com/noflo/noflo-routers"}');
+module.exports = JSON.parse('{"name":"noflo-routers","description":"Routing Packets in NoFlo","keywords":["noflo","routing"],"author":"Kenneth Kan <kenhkan@gmail.com>","version":"0.1.0","dependencies":{"noflo/noflo":"*","component/underscore":"*"},"scripts":["components/ControlledSequence.coffee","components/KickRouter.coffee","components/PacketRouter.coffee","components/RegexpRouter.coffee","components/SplitInSequence.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"code-fork","components":{"ControlledSequence":"components/ControlledSequence.coffee","KickRouter":"components/KickRouter.coffee","PacketRouter":"components/PacketRouter.coffee","RegexpRouter":"components/RegexpRouter.coffee","SplitInSequence":"components/SplitInSequence.coffee"}},"repo":"https://raw.github.com/noflo/noflo-routers"}');
+});
+require.register("noflo-noflo-routers/components/ControlledSequence.js", function(exports, require, module){
+var ControlledSequence, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ControlledSequence = (function(_super) {
+  __extends(ControlledSequence, _super);
+
+  function ControlledSequence() {
+    var _this = this;
+    this.current = 0;
+    this.inPorts = {
+      "in": new noflo.Port('all'),
+      next: new noflo.Port('bang')
+    };
+    this.outPorts = {
+      out: new noflo.ArrayPort('all')
+    };
+    this.inPorts["in"].on('begingroup', function(group) {
+      return _this.outPorts.out.beginGroup(group, _this.current);
+    });
+    this.inPorts["in"].on('data', function(data) {
+      return _this.outPorts.out.send(data, _this.current);
+    });
+    this.inPorts["in"].on('endgroup', function() {
+      return _this.outPorts.out.endGroup(_this.current);
+    });
+    this.inPorts["in"].on('disconnect', function() {
+      return _this.outPorts.out.disconnect(_this.current);
+    });
+    this.inPorts.next.on('data', function() {
+      _this.outPorts.out.disconnect(_this.current);
+      if (_this.current < _this.outPorts.out.sockets.length - 1) {
+        _this.current++;
+        return;
+      }
+      return _this.current = 0;
+    });
+  }
+
+  return ControlledSequence;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ControlledSequence;
+};
+
+});
+require.register("noflo-noflo-routers/components/KickRouter.js", function(exports, require, module){
+var KickRouter, noflo,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+KickRouter = (function(_super) {
+  __extends(KickRouter, _super);
+
+  KickRouter.prototype.description = "Holds an IP and send it to a specified port or previous/next";
+
+  function KickRouter() {
+    this.sendToIndex = __bind(this.sendToIndex, this);
+    var _this = this;
+    this.data = null;
+    this.current = 0;
+    this.inPorts = {
+      "in": new noflo.Port('all'),
+      index: new noflo.Port('int'),
+      prev: new noflo.Port('bang'),
+      next: new noflo.Port('bang')
+    };
+    this.outPorts = {
+      out: new noflo.ArrayPort('all')
+    };
+    this.inPorts["in"].on('data', function(data) {
+      return _this.data = data;
+    });
+    this.inPorts.index.on('data', function(index) {
+      return _this.sendToIndex(_this.data, index);
+    });
+    this.inPorts.prev.on('data', function() {
+      _this.outPorts.out.disconnect(_this.current);
+      if (_this.current > 0) {
+        _this.current--;
+      } else {
+        _this.current = _this.outPorts.out.sockets.length - 1;
+      }
+      return _this.sendToIndex(_this.data, _this.current);
+    });
+    this.inPorts.next.on('data', function() {
+      _this.outPorts.out.disconnect(_this.current);
+      if (_this.current < _this.outPorts.out.sockets.length - 1) {
+        _this.current++;
+      } else {
+        _this.current = 0;
+      }
+      return _this.sendToIndex(_this.data, _this.current);
+    });
+  }
+
+  KickRouter.prototype.sendToIndex = function(data, index) {
+    if (this.outPorts.out.isAttached(index)) {
+      this.current = index;
+      return this.outPorts.out.send(data, index);
+    }
+  };
+
+  return KickRouter;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new KickRouter;
+};
+
 });
 require.register("noflo-noflo-routers/components/PacketRouter.js", function(exports, require, module){
 var PacketRouter, noflo,
@@ -14928,7 +15048,7 @@ require.register("noflo-noflo-indexeddb/index.js", function(exports, require, mo
 
 });
 require.register("noflo-noflo-indexeddb/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-indexeddb","description":"IndexedDB components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-indexeddb","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/Open.coffee","components/Close.coffee","components/DeleteDatabase.coffee","components/CreateStore.coffee","components/CreateIndex.coffee","components/DeleteStore.coffee","components/UpgradeRouter.coffee","components/BeginTransaction.coffee","components/AbortTransaction.coffee","components/GetStore.coffee","components/GetIndex.coffee","components/Query.coffee","components/QueryOnly.coffee","components/QueryFrom.coffee","components/QueryTo.coffee","components/Put.coffee","components/Get.coffee","components/Delete.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"bitbucket","components":{"Open":"components/Open.coffee","Close":"components/Close.coffee","DeleteDatabase":"components/DeleteDatabase.coffee","CreateStore":"components/CreateStore.coffee","CreateIndex":"components/CreateIndex.coffee","DeleteStore":"components/DeleteStore.coffee","UpgradeRouter":"components/UpgradeRouter.coffee","BeginTransaction":"components/BeginTransaction.coffee","AbortTransaction":"components/AbortTransaction.coffee","GetStore":"components/GetStore.coffee","GetIndex":"components/GetIndex.coffee","Query":"components/Query.coffee","QueryOnly":"components/QueryOnly.coffee","QueryFrom":"components/QueryFrom.coffee","QueryTo":"components/QueryTo.coffee","Put":"components/Put.coffee","Get":"components/Get.coffee","Delete":"components/Delete.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-indexeddb","description":"IndexedDB components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-indexeddb","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/Open.coffee","components/Close.coffee","components/DeleteDatabase.coffee","components/CreateStore.coffee","components/CreateIndex.coffee","components/DeleteStore.coffee","components/UpgradeRouter.coffee","components/BeginTransaction.coffee","components/AbortTransaction.coffee","components/GetStore.coffee","components/GetIndex.coffee","components/Query.coffee","components/QueryOnly.coffee","components/QueryFrom.coffee","components/QueryTo.coffee","components/Put.coffee","components/Get.coffee","components/Delete.coffee","index.js"],"json":["component.json"],"files":["vendor/IndexedDBShim.min.js"],"noflo":{"icon":"bitbucket","components":{"Open":"components/Open.coffee","Close":"components/Close.coffee","DeleteDatabase":"components/DeleteDatabase.coffee","CreateStore":"components/CreateStore.coffee","CreateIndex":"components/CreateIndex.coffee","DeleteStore":"components/DeleteStore.coffee","UpgradeRouter":"components/UpgradeRouter.coffee","BeginTransaction":"components/BeginTransaction.coffee","AbortTransaction":"components/AbortTransaction.coffee","GetStore":"components/GetStore.coffee","GetIndex":"components/GetIndex.coffee","Query":"components/Query.coffee","QueryOnly":"components/QueryOnly.coffee","QueryFrom":"components/QueryFrom.coffee","QueryTo":"components/QueryTo.coffee","Put":"components/Put.coffee","Get":"components/Get.coffee","Delete":"components/Delete.coffee"}}}');
 });
 require.register("noflo-noflo-indexeddb/components/Open.js", function(exports, require, module){
 var Open, noflo,
@@ -28251,7 +28371,50 @@ require.register("forresto-noflo-seriously/vendor/transforms/seriously.transform
 }));
 });
 require.register("forresto-noflo-seriously/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-seriously","description":"Seriously.js WebGL shader image effects for NoFlo.","author":"Forrest Oliphant and Brian Chirls <forrest@sembiki.com>","repo":"forresto/noflo-seriously","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["index.js","vendor/seriously.js","vendor/effects/seriously.ascii.js","vendor/effects/seriously.bleach-bypass.js","vendor/effects/seriously.blend.js","vendor/effects/seriously.blur.js","vendor/effects/seriously.brightness-contrast.js","vendor/effects/seriously.channels.js","vendor/effects/seriously.chroma.js","vendor/effects/seriously.color.js","vendor/effects/seriously.colorcomplements.js","vendor/effects/seriously.colorcube.js","vendor/effects/seriously.daltonize.js","vendor/effects/seriously.directionblur.js","vendor/effects/seriously.dither.js","vendor/effects/seriously.edge.js","vendor/effects/seriously.emboss.js","vendor/effects/seriously.exposure.js","vendor/effects/seriously.fader.js","vendor/effects/seriously.falsecolor.js","vendor/effects/seriously.filmgrain.js","vendor/effects/seriously.hex.js","vendor/effects/seriously.highlights-shadows.js","vendor/effects/seriously.hue-saturation.js","vendor/effects/seriously.invert.js","vendor/effects/seriously.kaleidoscope.js","vendor/effects/seriously.layers.js","vendor/effects/seriously.linear-transfer.js","vendor/effects/seriously.lumakey.js","vendor/effects/seriously.nightvision.js","vendor/effects/seriously.noise.js","vendor/effects/seriously.repeat.js","vendor/effects/seriously.ripple.js","vendor/effects/seriously.scanlines.js","vendor/effects/seriously.sepia.js","vendor/effects/seriously.simplex.js","vendor/effects/seriously.sketch.js","vendor/effects/seriously.split.js","vendor/effects/seriously.tone.js","vendor/effects/seriously.tvglitch.js","vendor/effects/seriously.vignette.js","vendor/effects/seriously.whitebalance.js","vendor/transforms/seriously.camerashake.js","vendor/transforms/seriously.transform3d.js","components/SetFilterTarget.coffee","lib/SeriouslyEffect.coffee","components/FilterAscii.coffee","components/FilterBleachBypass.coffee","components/FilterBlend.coffee","components/FilterChannels.coffee","components/FilterChroma.coffee","components/FilterColor.coffee","components/FilterColorCube.coffee","components/FilterDaltonize.coffee","components/FilterEdge.coffee","components/FilterEmboss.coffee","components/FilterExposure.coffee","components/FilterFader.coffee","components/FilterHex.coffee","components/FilterHueSaturation.coffee","components/FilterInvert.coffee","components/FilterLumakey.coffee","components/FilterNightVision.coffee","components/FilterNoise.coffee","components/FilterRipple.coffee","components/FilterScanLines.coffee","components/FilterSepia.coffee","components/FilterSketch.coffee","components/FilterSplit.coffee","components/FilterTone.coffee","components/FilterTVGlitch.coffee","components/FilterVignette.coffee"],"json":["component.json"],"noflo":{"icon":"film","components":{"SetTarget":"components/SetFilterTarget.coffee","Ascii":"components/FilterAscii.coffee","BleachBypass":"components/FilterBleachBypass.coffee","Blend":"components/FilterBlend.coffee","Channels":"components/FilterChannels.coffee","Chroma":"components/FilterChroma.coffee","Color":"components/FilterColor.coffee","ColorCube":"components/FilterColorCube.coffee","Daltonize":"components/FilterDaltonize.coffee","Edge":"components/FilterEdge.coffee","Emboss":"components/FilterEmboss.coffee","Exposure":"components/FilterExposure.coffee","Fader":"components/FilterFader.coffee","Hex":"components/FilterHex.coffee","HueSaturation":"components/FilterHueSaturation.coffee","Invert":"components/FilterInvert.coffee","Lumakey":"components/FilterLumakey.coffee","NightVision":"components/FilterNightVision.coffee","Noise":"components/FilterNoise.coffee","Ripple":"components/FilterRipple.coffee","ScanLines":"components/FilterScanLines.coffee","Sepia":"components/FilterSepia.coffee","Sketch":"components/FilterSketch.coffee","Split":"components/FilterSplit.coffee","Tone":"components/FilterTone.coffee","TVGlitch":"components/FilterTVGlitch.coffee","Vignette":"components/FilterVignette.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-seriously","description":"Seriously.js WebGL shader image effects for NoFlo.","author":"Forrest Oliphant and Brian Chirls <forrest@sembiki.com>","repo":"forresto/noflo-seriously","version":"0.1.0","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["index.js","vendor/seriously.js","vendor/effects/seriously.ascii.js","vendor/effects/seriously.bleach-bypass.js","vendor/effects/seriously.blend.js","vendor/effects/seriously.blur.js","vendor/effects/seriously.brightness-contrast.js","vendor/effects/seriously.channels.js","vendor/effects/seriously.chroma.js","vendor/effects/seriously.color.js","vendor/effects/seriously.colorcomplements.js","vendor/effects/seriously.colorcube.js","vendor/effects/seriously.daltonize.js","vendor/effects/seriously.directionblur.js","vendor/effects/seriously.dither.js","vendor/effects/seriously.edge.js","vendor/effects/seriously.emboss.js","vendor/effects/seriously.exposure.js","vendor/effects/seriously.fader.js","vendor/effects/seriously.falsecolor.js","vendor/effects/seriously.filmgrain.js","vendor/effects/seriously.hex.js","vendor/effects/seriously.highlights-shadows.js","vendor/effects/seriously.hue-saturation.js","vendor/effects/seriously.invert.js","vendor/effects/seriously.kaleidoscope.js","vendor/effects/seriously.layers.js","vendor/effects/seriously.linear-transfer.js","vendor/effects/seriously.lumakey.js","vendor/effects/seriously.nightvision.js","vendor/effects/seriously.noise.js","vendor/effects/seriously.repeat.js","vendor/effects/seriously.ripple.js","vendor/effects/seriously.scanlines.js","vendor/effects/seriously.sepia.js","vendor/effects/seriously.simplex.js","vendor/effects/seriously.sketch.js","vendor/effects/seriously.split.js","vendor/effects/seriously.tone.js","vendor/effects/seriously.tvglitch.js","vendor/effects/seriously.vignette.js","vendor/effects/seriously.whitebalance.js","vendor/transforms/seriously.camerashake.js","vendor/transforms/seriously.transform3d.js","components/SetFilterSource.coffee","components/SetFilterTarget.coffee","lib/SeriouslyEffect.coffee","components/FilterAscii.coffee","components/FilterBleachBypass.coffee","components/FilterBlend.coffee","components/FilterChannels.coffee","components/FilterChroma.coffee","components/FilterColor.coffee","components/FilterColorCube.coffee","components/FilterDaltonize.coffee","components/FilterEdge.coffee","components/FilterEmboss.coffee","components/FilterExposure.coffee","components/FilterFader.coffee","components/FilterHex.coffee","components/FilterHueSaturation.coffee","components/FilterInvert.coffee","components/FilterLumakey.coffee","components/FilterNightVision.coffee","components/FilterNoise.coffee","components/FilterRipple.coffee","components/FilterScanLines.coffee","components/FilterSepia.coffee","components/FilterSketch.coffee","components/FilterSplit.coffee","components/FilterTone.coffee","components/FilterTVGlitch.coffee","components/FilterVignette.coffee"],"json":["component.json"],"noflo":{"icon":"film","components":{"SetSource":"components/SetFilterSource.coffee","SetTarget":"components/SetFilterTarget.coffee","Ascii":"components/FilterAscii.coffee","BleachBypass":"components/FilterBleachBypass.coffee","Blend":"components/FilterBlend.coffee","Channels":"components/FilterChannels.coffee","Chroma":"components/FilterChroma.coffee","Color":"components/FilterColor.coffee","ColorCube":"components/FilterColorCube.coffee","Daltonize":"components/FilterDaltonize.coffee","Edge":"components/FilterEdge.coffee","Emboss":"components/FilterEmboss.coffee","Exposure":"components/FilterExposure.coffee","Fader":"components/FilterFader.coffee","Hex":"components/FilterHex.coffee","HueSaturation":"components/FilterHueSaturation.coffee","Invert":"components/FilterInvert.coffee","Lumakey":"components/FilterLumakey.coffee","NightVision":"components/FilterNightVision.coffee","Noise":"components/FilterNoise.coffee","Ripple":"components/FilterRipple.coffee","ScanLines":"components/FilterScanLines.coffee","Sepia":"components/FilterSepia.coffee","Sketch":"components/FilterSketch.coffee","Split":"components/FilterSplit.coffee","Tone":"components/FilterTone.coffee","TVGlitch":"components/FilterTVGlitch.coffee","Vignette":"components/FilterVignette.coffee"}}}');
+});
+require.register("forresto-noflo-seriously/components/SetFilterSource.js", function(exports, require, module){
+var Seriously, SetFilterSource, noflo,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+Seriously = require('../vendor/seriously.js');
+
+SetFilterSource = (function(_super) {
+  __extends(SetFilterSource, _super);
+
+  function SetFilterSource() {
+    this.setSource = __bind(this.setSource, this);
+    if (!window.nofloSeriously) {
+      window.nofloSeriously = new Seriously();
+    }
+    this.seriously = window.nofloSeriously;
+    this.inPorts = {
+      source: new noflo.Port('object')
+    };
+    this.outPorts = {
+      out: new noflo.ArrayPort('object')
+    };
+    this.inPorts.source.on('data', this.setSource);
+  }
+
+  SetFilterSource.prototype.setSource = function(data) {
+    if (this.outPorts.out.isAttached()) {
+      return this.outPorts.out.send(this.seriously.source(data));
+    }
+  };
+
+  return SetFilterSource;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new SetFilterSource;
+};
+
 });
 require.register("forresto-noflo-seriously/components/SetFilterTarget.js", function(exports, require, module){
 var Seriously, SetFilterTarget, noflo,
@@ -28269,22 +28432,22 @@ SetFilterTarget = (function(_super) {
   function SetFilterTarget() {
     this.seriouslyGo = __bind(this.seriouslyGo, this);
     this.setTarget = __bind(this.setTarget, this);
+    this.unsyncSource = __bind(this.unsyncSource, this);
     this.syncSource = __bind(this.syncSource, this);
     if (!window.nofloSeriously) {
       window.nofloSeriously = new Seriously();
     }
     this.seriously = window.nofloSeriously;
     this.inPorts = {
-      source: new noflo.Port('object'),
+      source: new noflo.ArrayPort('object'),
       target: new noflo.Port('object')
     };
-    this.inPorts.source.on('connect', this.syncSource);
+    this.inPorts.source.on('data', this.syncSource);
+    this.inPorts.source.on('disconnect', this.unsyncSource);
     this.inPorts.target.on('data', this.setTarget);
   }
 
-  SetFilterTarget.prototype.syncSource = function(event) {
-    var upstream;
-    upstream = event.from.process.component.seriouslyNode;
+  SetFilterTarget.prototype.syncSource = function(upstream) {
     if (!upstream) {
       return;
     }
@@ -28293,6 +28456,13 @@ SetFilterTarget = (function(_super) {
       return this.seriouslyGo();
     } else {
       return this.upstream = upstream;
+    }
+  };
+
+  SetFilterTarget.prototype.unsyncSource = function(event) {
+    if (this.seriouslyStarted) {
+      this.seriously.stop();
+      return this.seriouslyStarted = false;
     }
   };
 
@@ -28323,7 +28493,6 @@ exports.getComponent = function() {
 });
 require.register("forresto-noflo-seriously/lib/SeriouslyEffect.js", function(exports, require, module){
 var Seriously, noflo,
-  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
@@ -28335,14 +28504,12 @@ exports.SeriouslyEffect = (function(_super) {
   __extends(SeriouslyEffect, _super);
 
   function SeriouslyEffect(filterName, imageInCount) {
-    this.setParam = __bind(this.setParam, this);
-    this.setSource = __bind(this.setSource, this);
-    this.syncGraph = __bind(this.syncGraph, this);
     var effectInfo, input, key, type, _ref, _ref1;
     if (!window.nofloSeriously) {
       window.nofloSeriously = new Seriously();
     }
     this.seriously = window.nofloSeriously;
+    this.sources = {};
     this.seriouslyNode = this.seriously.effect(filterName);
     effectInfo = this.seriously.effects()[filterName];
     if ((_ref = effectInfo.description) != null ? _ref.length : void 0) {
@@ -28350,7 +28517,7 @@ exports.SeriouslyEffect = (function(_super) {
     }
     this.inPorts = {};
     this.outPorts = {
-      filter: new noflo.Port('seriously')
+      out: new noflo.ArrayPort('object')
     };
     _ref1 = effectInfo.inputs;
     for (key in _ref1) {
@@ -28358,38 +28525,49 @@ exports.SeriouslyEffect = (function(_super) {
       input = _ref1[key];
       type = input.type;
       if (type === 'image') {
-        type = 'seriously';
-      }
-      this.inPorts[key] = new noflo.Port(type);
-      if (type === 'seriously') {
-        this.inPorts[key].on('connect', this.syncGraph);
-        this.inPorts[key].on('data', this.setSource);
+        this.inPorts[key] = new noflo.Port('object');
+        this.inPorts[key].on('data', this.syncGraph.bind(this, key));
+        this.inPorts[key].on('disconnect', this.unsyncGraph.bind(this, key));
       } else {
-        this.inPorts[key].on('data', this.setParam);
+        this.inPorts[key] = new noflo.Port(type);
+        this.inPorts[key].on('data', this.setParam.bind(this, key));
       }
     }
   }
 
-  SeriouslyEffect.prototype.syncGraph = function(event) {
-    var upstream;
-    upstream = event.from.process.component.seriouslyNode;
-    if (upstream) {
-      this.seriouslyNode[event.to.port] = upstream;
-      if (this.outPorts.filter.isAttached()) {
-        return this.outPorts.filter.connect();
-      }
+  SeriouslyEffect.prototype.syncGraph = function(inport, upstream) {
+    if (!upstream) {
+      return;
+    }
+    this.sources[inport] = upstream;
+    this.seriouslyNode[inport] = upstream;
+    if (this.outPorts.out.isAttached()) {
+      return this.outPorts.out.send(this.seriouslyNode);
     }
   };
 
-  SeriouslyEffect.prototype.setSource = function(data) {
-    console.log("source", data);
-    this.seriouslyNode.source = data;
-    if (this.outPorts.filter.isAttached() && !this.outPorts.filter.isConnected()) {
-      return this.outPorts.filter.connect();
+  SeriouslyEffect.prototype.unsyncGraph = function(inport) {
+    this.seriouslyNode[inport] = null;
+    delete this.sources[inport];
+    if (this.outPorts.out.isAttached()) {
+      return this.outPorts.out.disconnect();
     }
   };
 
-  SeriouslyEffect.prototype.setParam = function(key, data) {};
+  SeriouslyEffect.prototype.setParam = function(key, data) {
+    return this.seriouslyNode[key] = data;
+  };
+
+  SeriouslyEffect.prototype.shutdown = function() {
+    var key, val, _ref, _results;
+    _ref = this.sources;
+    _results = [];
+    for (key in _ref) {
+      val = _ref[key];
+      _results.push(this.unsyncGraph(key));
+    }
+    return _results;
+  };
 
   return SeriouslyEffect;
 
@@ -30082,6 +30260,8 @@ require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
 require.alias("noflo-noflo-routers/index.js", "noflo-ui-preview/deps/noflo-routers/index.js");
 require.alias("noflo-noflo-routers/component.json", "noflo-ui-preview/deps/noflo-routers/component.json");
+require.alias("noflo-noflo-routers/components/ControlledSequence.js", "noflo-ui-preview/deps/noflo-routers/components/ControlledSequence.js");
+require.alias("noflo-noflo-routers/components/KickRouter.js", "noflo-ui-preview/deps/noflo-routers/components/KickRouter.js");
 require.alias("noflo-noflo-routers/components/PacketRouter.js", "noflo-ui-preview/deps/noflo-routers/components/PacketRouter.js");
 require.alias("noflo-noflo-routers/components/RegexpRouter.js", "noflo-ui-preview/deps/noflo-routers/components/RegexpRouter.js");
 require.alias("noflo-noflo-routers/components/SplitInSequence.js", "noflo-ui-preview/deps/noflo-routers/components/SplitInSequence.js");
@@ -30307,6 +30487,7 @@ require.alias("forresto-noflo-seriously/vendor/effects/seriously.whitebalance.js
 require.alias("forresto-noflo-seriously/vendor/transforms/seriously.camerashake.js", "noflo-ui-preview/deps/noflo-seriously/vendor/transforms/seriously.camerashake.js");
 require.alias("forresto-noflo-seriously/vendor/transforms/seriously.transform3d.js", "noflo-ui-preview/deps/noflo-seriously/vendor/transforms/seriously.transform3d.js");
 require.alias("forresto-noflo-seriously/component.json", "noflo-ui-preview/deps/noflo-seriously/component.json");
+require.alias("forresto-noflo-seriously/components/SetFilterSource.js", "noflo-ui-preview/deps/noflo-seriously/components/SetFilterSource.js");
 require.alias("forresto-noflo-seriously/components/SetFilterTarget.js", "noflo-ui-preview/deps/noflo-seriously/components/SetFilterTarget.js");
 require.alias("forresto-noflo-seriously/lib/SeriouslyEffect.js", "noflo-ui-preview/deps/noflo-seriously/lib/SeriouslyEffect.js");
 require.alias("forresto-noflo-seriously/components/FilterAscii.js", "noflo-ui-preview/deps/noflo-seriously/components/FilterAscii.js");
