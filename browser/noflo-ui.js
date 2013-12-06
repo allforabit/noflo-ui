@@ -12672,11 +12672,13 @@ BaseTransport = (function() {
     this.graph = new protocols.Graph(this);
     this.network = new protocols.Network(this);
     this.component = new protocols.Component(this);
+    this.context = null;
   }
 
   BaseTransport.prototype.send = function(protocol, topic, payload, context) {};
 
   BaseTransport.prototype.receive = function(protocol, topic, payload, context) {
+    this.context = context;
     switch (protocol) {
       case 'graph':
         return this.graph.receive(topic, payload, context);
