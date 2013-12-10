@@ -13047,55 +13047,7 @@ require.register("noflo-ui/index.js", function(exports, require, module){
 
 });
 require.register("noflo-ui/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-ui","description":"NoFlo Development Environment","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","version":"0.1.0","keywords":["fbp","noflo","graph","visual","dataflow"],"dependencies":{"component/emitter":"*","noflo/noflo":"*","noflo/noflo-strings":"*","noflo/noflo-ajax":"*","noflo/noflo-localstorage":"*","noflo/noflo-interaction":"*","noflo/noflo-objects":"*","noflo/noflo-groups":"*","noflo/noflo-dom":"*","noflo/noflo-core":"*","noflo/noflo-polymer":"*","noflo/noflo-indexeddb":"*","noflo/noflo-runtime-iframe":"*"},"noflo":{"components":{"AppendTo":"components/AppendTo.coffee","ConnectRuntime":"components/ConnectRuntime.coffee","CreateGraph":"components/CreateGraph.coffee","GenerateId":"components/GenerateId.coffee","LoadGraphEditor":"components/LoadGraphEditor.coffee","LoadRuntime":"components/LoadRuntime.coffee","DetermineRuntime":"components/DetermineRuntime.coffee","Router":"components/Router.coffee","MigrateLocalStorage":"components/MigrateLocalStorage.coffee"}},"main":"index.js","scripts":["index.js","src/plugins/source.coffee","src/runtimes/base.coffee","src/runtimes/iframe.coffee","src/runtimes/websocket.coffee","components/AppendTo.coffee","components/ConnectRuntime.coffee","components/CreateGraph.coffee","components/GenerateId.coffee","components/LoadGraphEditor.coffee","components/LoadRuntime.coffee","components/DetermineRuntime.coffee","components/Router.coffee","components/MigrateLocalStorage.coffee"],"json":["component.json"],"files":["css/noflo-ui.css","preview/iframe.html","preview/package.json","preview/component.json","index.html","favicon.ico","noflo.png","examples.json"]}');
-});
-require.register("noflo-ui/src/plugins/source.js", function(exports, require, module){
-var GraphSource,
-  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
-
-GraphSource = (function() {
-  GraphSource.prototype.getMenuButtons = function() {
-    return [
-      {
-        id: 'view-source',
-        label: 'view source',
-        icon: 'code',
-        action: this.showCard
-      }
-    ];
-  };
-
-  function GraphSource() {
-    this.showCard = __bind(this.showCard, this);
-    this.graph = null;
-  }
-
-  GraphSource.prototype.showCard = function(container) {
-    var card;
-    if (container.querySelector('#viewSource')) {
-      return;
-    }
-    card = document.createElement('the-card');
-    card.setAttribute('id', 'viewSource');
-    card.innerHTML = "<h1>Graph source</h1>\n<textarea></textarea>";
-    card.getElementsByTagName('textarea')[0].value = JSON.stringify(this.graph.toJSON(), null, 4);
-    return container.appendChild(card);
-  };
-
-  GraphSource.prototype.register = function(instance) {
-    return this.graph = instance;
-  };
-
-  GraphSource.prototype.unregister = function(instance) {
-    return this.graph = null;
-  };
-
-  return GraphSource;
-
-})();
-
-module.exports = GraphSource;
-
+module.exports = JSON.parse('{"name":"noflo-ui","description":"NoFlo Development Environment","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-ui","version":"0.1.0","keywords":["fbp","noflo","graph","visual","dataflow"],"dependencies":{"component/emitter":"*","noflo/noflo":"*","noflo/noflo-strings":"*","noflo/noflo-ajax":"*","noflo/noflo-localstorage":"*","noflo/noflo-interaction":"*","noflo/noflo-objects":"*","noflo/noflo-groups":"*","noflo/noflo-dom":"*","noflo/noflo-core":"*","noflo/noflo-polymer":"*","noflo/noflo-indexeddb":"*","noflo/noflo-runtime-iframe":"*"},"noflo":{"components":{"AppendTo":"components/AppendTo.coffee","ConnectRuntime":"components/ConnectRuntime.coffee","DropExamples":"components/DropExamples.coffee","CreateGraph":"components/CreateGraph.coffee","GenerateId":"components/GenerateId.coffee","LoadGraphEditor":"components/LoadGraphEditor.coffee","LoadRuntime":"components/LoadRuntime.coffee","DetermineRuntime":"components/DetermineRuntime.coffee","Router":"components/Router.coffee","MigrateLocalStorage":"components/MigrateLocalStorage.coffee"}},"main":"index.js","scripts":["index.js","src/runtimes/base.coffee","src/runtimes/iframe.coffee","src/runtimes/websocket.coffee","components/AppendTo.coffee","components/ConnectRuntime.coffee","components/DropExamples.coffee","components/CreateGraph.coffee","components/GenerateId.coffee","components/LoadGraphEditor.coffee","components/LoadRuntime.coffee","components/DetermineRuntime.coffee","components/Router.coffee","components/MigrateLocalStorage.coffee"],"json":["component.json"],"files":["css/noflo-ui.css","preview/iframe.html","preview/package.json","preview/component.json","index.html","favicon.ico","app/noflo.png","examples.json"]}');
 });
 require.register("noflo-ui/src/runtimes/base.js", function(exports, require, module){
 var BaseRuntime, EventEmitter,
@@ -13256,7 +13208,7 @@ IframeRuntime = (function(_super) {
       preview = {};
     }
     if (!preview.src) {
-      preview.src = './preview/iframe.html';
+      preview.src = 'preview/iframe.html';
     }
     if (!preview.width) {
       preview.width = 300;
@@ -13293,9 +13245,22 @@ IframeRuntime = (function(_super) {
   };
 
   IframeRuntime.prototype.send = function(protocol, command, payload) {
-    var w;
+    var e, w;
     w = this.iframe.contentWindow;
-    if (!w || w.location.href === 'about:blank') {
+    if (!w) {
+      return;
+    }
+    try {
+      if (w.location.href === 'about:blank') {
+        return;
+      }
+    } catch (_error) {
+      e = _error;
+      w.postMessage({
+        protocol: protocol,
+        command: command,
+        payload: payload
+      }, '*');
       return;
     }
     return w.postMessage({
@@ -13722,6 +13687,9 @@ ConnectRuntime = (function(_super) {
     this.subscribeEditor(editor, runtime);
     runtime.on('component', function(message) {
       var definition, port, _i, _j, _len, _len1, _ref, _ref1;
+      if (message.payload.name === 'Graph' || message.payload.name === 'ReadDocument') {
+        return;
+      }
       definition = {
         name: message.payload.name,
         description: message.payload.description,
@@ -13783,6 +13751,50 @@ ConnectRuntime = (function(_super) {
 
 exports.getComponent = function() {
   return new ConnectRuntime;
+};
+
+});
+require.register("noflo-ui/components/DropExamples.js", function(exports, require, module){
+var DropExamples, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+DropExamples = (function(_super) {
+  __extends(DropExamples, _super);
+
+  function DropExamples() {
+    var _this = this;
+    this.inPorts = {
+      "in": new noflo.Port('object')
+    };
+    this.outPorts = {
+      out: new noflo.Port('object')
+    };
+    this.inPorts["in"].on('begingroup', function(group) {
+      return _this.outPorts.out.beginGroup(group);
+    });
+    this.inPorts["in"].on('data', function(data) {
+      if (!data.id) {
+        return;
+      }
+      return _this.outPorts.out.send(data);
+    });
+    this.inPorts["in"].on('endgroup', function() {
+      return _this.outPorts.out.endGroup();
+    });
+    this.inPorts["in"].on('disconnect', function() {
+      return _this.outPorts.out.disconnect();
+    });
+  }
+
+  return DropExamples;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new DropExamples;
 };
 
 });
@@ -14178,8 +14190,14 @@ MigrateLocalStorage = (function(_super) {
   };
 
   MigrateLocalStorage.prototype.migrateGraphs = function(store) {
-    var graphs, succeeded, success,
+    var e, graphs, succeeded, success,
       _this = this;
+    try {
+      localStorage;
+    } catch (_error) {
+      e = _error;
+      return;
+    }
     graphs = this.getGraphs();
     if (graphs.length === 0) {
       return;

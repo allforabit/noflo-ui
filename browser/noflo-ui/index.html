@@ -159,7 +159,8 @@
       EXPORT=MERGE.IN:ITEM
       EXPORT=HOLDDB.DATA:DB
       EXPORT=PUTGRAPH.KEY:KEY
-      Merge(core/Merge) OUT -> IN Disc(core/DisconnectAfterPacket) OUT -> IN SplitGraph(core/Split)
+      Merge(core/Merge) OUT -> IN DropExamples(ui/DropExamples)
+      DropExamples OUT -> IN Disc(core/DisconnectAfterPacket) OUT -> IN SplitGraph(core/Split)
       SplitGraph OUT -> IN HoldDb(core/Kick) OUT -> DB Read(indexeddb/BeginTransaction)
       'readwrite' -> DATA HoldMode(core/Kick) OUT -> MODE Read
       SplitGraph OUT -> IN HoldMode
@@ -255,6 +256,25 @@
       SplitStore OUT -> NAME Store(indexeddb/GetStore)
       Read TRANSACTION -> TRANSACTION Store STORE -> STORE Put(indexeddb/Put)
       Split OUT -> VALUE Put
+    </script>
+    <script type="application/fbp" id="LoadExample">
+      EXPORT=SPLITGIST.IN:GIST
+      EXPORT=PARSEEXAMPLE.OUT:GRAPH
+      EXPORT=ERRORS.OUT:ERROR
+      'https://api.github.com/gists' -> STRING GistPrefix(strings/SendString)
+      '/' -> DELIMITER CreateUrl(strings/CompileString)
+      SplitGist(core/Split) OUT -> IN GistPrefix
+      GistPrefix OUT -> IN CreateUrl
+      SplitGist OUT -> IN CreateUrl
+      CreateUrl OUT -> URL GetGist(ajax/GetJsonP)
+      'data' -> KEY GetData(objects/GetObjectKey)
+      'files' -> KEY GetFiles(objects/GetObjectKey)
+      'noflo.json' -> KEY GetFile(objects/GetObjectKey)
+      'content' -> KEY GetFileContent(objects/GetObjectKey)
+      GetGist OUT -> IN GetData
+      GetData OUT -> IN GetFiles OUT -> IN GetFile OUT -> IN GetFileContent
+      GetFiles MISSED -> IN Errors
+      GetFileContent OUT -> IN ParseExample(strings/ParseJson)
     </script>
     <script type="application/fbp" id="GenerateId">
       EXPORT=SPLITITEM.IN:IN
@@ -355,6 +375,7 @@
       # Prepare the main view
       'noflo-main' -> SELECTOR Main(polymer/noflo-main)
       Storage DB -> DB LoadData(local/LoadData)
+      Storage ERROR -> IN ShowErrors(core/Output)
       '' -> LOAD LoadData
       LoadData PROJECTS -> PROJECTS Main
       LoadData SKETCHES -> SKETCHES Main
@@ -380,9 +401,14 @@
       Storage DB -> DB StoreComponent(local/StoreComponent)
       Context COMPONENTCHANGED -> ITEM StoreComponent
       Storage DB -> DB StoreGraph(local/StoreGraph)
+      'id' -> KEY CheckGraphID(objects/GetObjectKey)
       Context GRAPHCHANGED -> ITEM StoreGraph
       Context NEWGRAPH -> IN NewProjectGraphId(local/GenerateId) OUT -> ITEM StoreGraph
       Context NEWCOMPONENT -> IN NewProjectComponentId(local/GenerateId) OUT -> ITEM StoreComponent
+
+      # Example handling
+      Router EXAMPLE -> GIST LoadExample(local/LoadExample)
+      LoadExample GRAPH -> GRAPHS Context
 
       # Show/hide main widget
       'true' -> DATA ShowMain(core/Kick) OUT -> OPEN Main
@@ -399,34 +425,6 @@
       ListenHash INITIAL -> URL Router
       ListenHash CHANGE -> URL Router
     </script>
-    <script>
-    window.addEventListener('WebComponentsReady', function() { 
-      var noflo = require('noflo');
-      var graphs = {};
-      var fbps = Array.prototype.slice.call(document.querySelectorAll('script[type="application/fbp"]'));
-      fbps.forEach(function (fbp) {
-        var fbpString = (fbp.innerText || fbp.textContent).trim();
-        var fbpId = fbp.getAttribute('id');
-        noflo.graph.loadFBP(fbpString, function (graph) {
-          graphs[fbpId] = graph;
-          graph.name = fbpId;
-          graph.baseDir = '/noflo-ui';
-          if (fbpId === 'main') {
-            noflo.createNetwork(graph, function (network) {
-              for (var component in graphs) {
-                if (component === 'main') {
-                  continue;
-                }
-                network.loader.registerComponent('local', component, graphs[component]);
-              }
-              network.connect(function () {
-                network.start();
-              });
-            }, true);
-          }
-        });
-      });
-    });
-    </script>
+    <script src="app/noflo.js"></script>
   </body>
 </html>

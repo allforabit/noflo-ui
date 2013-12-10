@@ -22,6 +22,13 @@ input:focus, textarea:focus, button:focus, h1, h2, h3, div, a, p, div {
   outline:none;
 }
 
+/* fucking bullshit... can't change input selection colors in Chrome?
+*::selection {
+  background-color: black;
+  background: black;
+  color:red;
+}
+*/
 
 h1, h2, h3 {
   font-weight: normal;
@@ -156,6 +163,7 @@ the-panel#fixed {
   padding-left: 36px;
   padding-top: 72px;
   box-sizing: border-box;
+  top: 0px;
   z-index: 2;
 }
 the-panel#fixed:before {
@@ -258,6 +266,7 @@ the-card header h1 {
   height: 36px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 the-card header h2 {
   line-height: 36px;
@@ -265,6 +274,7 @@ the-card header h2 {
   height: 36px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   position: absolute;
   top: 10px;
   right: 10px;
@@ -296,7 +306,7 @@ the-card ul li {
   margin: 0px;
 }
 the-card ul.toolbar2right {
-  width: 170px;
+  width: 180px;
   display:block;
   position: absolute;
   right: 10px;
@@ -349,6 +359,7 @@ noflo-main {
   display: block;
   z-index: 4;
   position: fixed;
+  top: 0px;
   -webkit-transform: translateZ(0px);
   
   overflow-y: scroll;
