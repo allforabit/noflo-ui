@@ -6196,24 +6196,22 @@ MakeFunction = (function(_super) {
           _this.error('Error creating function: ' + data);
         }
       }
-      if (_this.f) {
-        try {
-          _this.f(true);
-          if (_this.outPorts["function"].isAttached()) {
-            return _this.outPorts["function"].send(_this.f);
-          }
-        } catch (_error) {
-          error = _error;
-          return _this.error('Error evaluating function: ' + data);
-        }
+      if (_this.f && _this.outPorts["function"].isAttached()) {
+        return _this.outPorts["function"].send(_this.f);
       }
     });
     this.inPorts["in"].on('data', function(data) {
+      var error;
       if (!_this.f) {
         _this.error('No function defined');
         return;
       }
-      return _this.outPorts.out.send(_this.f(data));
+      try {
+        return _this.outPorts.out.send(_this.f(data));
+      } catch (_error) {
+        error = _error;
+        return _this.error('Error evaluating function.');
+      }
     });
   }
 
@@ -28506,7 +28504,7 @@ exports.SeriouslyEffect = (function(_super) {
   __extends(SeriouslyEffect, _super);
 
   function SeriouslyEffect(filterName, imageInCount) {
-    var effectInfo, input, key, type, _ref, _ref1;
+    var effectInfo, input, key, nofloPort, seriouslyPort, type, _ref, _ref1;
     if (!window.nofloSeriously) {
       window.nofloSeriously = new Seriously();
     }
@@ -28525,39 +28523,41 @@ exports.SeriouslyEffect = (function(_super) {
     for (key in _ref1) {
       if (!__hasProp.call(_ref1, key)) continue;
       input = _ref1[key];
+      seriouslyPort = key;
+      nofloPort = seriouslyPort.toLowerCase();
       type = input.type;
       if (type === 'image') {
-        this.inPorts[key] = new noflo.Port('object');
-        this.inPorts[key].on('data', this.syncGraph.bind(this, key));
-        this.inPorts[key].on('disconnect', this.unsyncGraph.bind(this, key));
+        this.inPorts[nofloPort] = new noflo.Port('object');
+        this.inPorts[nofloPort].on('data', this.syncGraph.bind(this, nofloPort, seriouslyPort));
+        this.inPorts[nofloPort].on('disconnect', this.unsyncGraph.bind(this, nofloPort, seriouslyPort));
       } else {
-        this.inPorts[key] = new noflo.Port(type);
-        this.inPorts[key].on('data', this.setParam.bind(this, key));
+        this.inPorts[nofloPort] = new noflo.Port(type);
+        this.inPorts[nofloPort].on('data', this.setParam.bind(this, nofloPort, seriouslyPort));
       }
     }
   }
 
-  SeriouslyEffect.prototype.syncGraph = function(inport, upstream) {
+  SeriouslyEffect.prototype.syncGraph = function(nofloPort, seriouslyPort, upstream) {
     if (!upstream) {
       return;
     }
-    this.sources[inport] = upstream;
-    this.seriouslyNode[inport] = upstream;
+    this.sources[nofloPort] = upstream;
+    this.seriouslyNode[seriouslyPort] = upstream;
     if (this.outPorts.out.isAttached()) {
       return this.outPorts.out.send(this.seriouslyNode);
     }
   };
 
-  SeriouslyEffect.prototype.unsyncGraph = function(inport) {
-    this.seriouslyNode[inport] = null;
-    delete this.sources[inport];
+  SeriouslyEffect.prototype.unsyncGraph = function(nofloPort, seriouslyPort) {
+    this.seriouslyNode[seriouslyPort] = null;
+    delete this.sources[nofloPort];
     if (this.outPorts.out.isAttached()) {
       return this.outPorts.out.disconnect();
     }
   };
 
-  SeriouslyEffect.prototype.setParam = function(key, data) {
-    return this.seriouslyNode[key] = data;
+  SeriouslyEffect.prototype.setParam = function(nofloPort, seriouslyPort, data) {
+    return this.seriouslyNode[seriouslyPort] = data;
   };
 
   SeriouslyEffect.prototype.shutdown = function() {

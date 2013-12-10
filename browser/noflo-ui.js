@@ -11395,24 +11395,22 @@ MakeFunction = (function(_super) {
           _this.error('Error creating function: ' + data);
         }
       }
-      if (_this.f) {
-        try {
-          _this.f(true);
-          if (_this.outPorts["function"].isAttached()) {
-            return _this.outPorts["function"].send(_this.f);
-          }
-        } catch (_error) {
-          error = _error;
-          return _this.error('Error evaluating function: ' + data);
-        }
+      if (_this.f && _this.outPorts["function"].isAttached()) {
+        return _this.outPorts["function"].send(_this.f);
       }
     });
     this.inPorts["in"].on('data', function(data) {
+      var error;
       if (!_this.f) {
         _this.error('No function defined');
         return;
       }
-      return _this.outPorts.out.send(_this.f(data));
+      try {
+        return _this.outPorts.out.send(_this.f(data));
+      } catch (_error) {
+        error = _error;
+        return _this.error('Error evaluating function.');
+      }
     });
   }
 
