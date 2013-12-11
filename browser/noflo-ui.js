@@ -11640,7 +11640,7 @@ Open = (function(_super) {
     if (!(this.name && this.version)) {
       return;
     }
-    req = indexedDB.open(this.name, this.version);
+    req = indexedDB.open(this.name, parseInt(this.version));
     this.name = null;
     version = this.version;
     this.version = null;
