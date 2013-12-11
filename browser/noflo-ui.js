@@ -5985,7 +5985,57 @@ require.register("noflo-noflo-interaction/index.js", function(exports, require, 
 
 });
 require.register("noflo-noflo-interaction/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-interaction","description":"User interaction components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-interaction","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/ListenDrag.coffee","components/ListenHash.coffee","components/ListenKeyboard.coffee","components/ListenMouse.coffee","components/ListenPointer.coffee","components/ListenScroll.coffee","components/ListenSpeech.coffee","components/ListenTouch.coffee","components/SetHash.coffee","components/ReadCoordinates.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"user","components":{"ListenDrag":"components/ListenDrag.coffee","ListenHash":"components/ListenHash.coffee","ListenKeyboard":"components/ListenKeyboard.coffee","ListenMouse":"components/ListenMouse.coffee","ListenPointer":"components/ListenPointer.coffee","ListenScroll":"components/ListenScroll.coffee","ListenSpeech":"components/ListenSpeech.coffee","ListenTouch":"components/ListenTouch.coffee","ReadCoordinates":"components/ReadCoordinates.coffee","SetHash":"components/SetHash.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-interaction","description":"User interaction components for NoFlo","author":"Henri Bergius <henri.bergius@iki.fi>","repo":"noflo/noflo-interaction","version":"0.0.1","keywords":[],"dependencies":{"noflo/noflo":"*"},"scripts":["components/ListenChange.coffee","components/ListenDrag.coffee","components/ListenHash.coffee","components/ListenKeyboard.coffee","components/ListenMouse.coffee","components/ListenPointer.coffee","components/ListenScroll.coffee","components/ListenSpeech.coffee","components/ListenTouch.coffee","components/SetHash.coffee","components/ReadCoordinates.coffee","index.js"],"json":["component.json"],"noflo":{"icon":"user","components":{"ListenChange":"components/ListenChange.coffee","ListenDrag":"components/ListenDrag.coffee","ListenHash":"components/ListenHash.coffee","ListenKeyboard":"components/ListenKeyboard.coffee","ListenMouse":"components/ListenMouse.coffee","ListenPointer":"components/ListenPointer.coffee","ListenScroll":"components/ListenScroll.coffee","ListenSpeech":"components/ListenSpeech.coffee","ListenTouch":"components/ListenTouch.coffee","ReadCoordinates":"components/ReadCoordinates.coffee","SetHash":"components/SetHash.coffee"}}}');
+});
+require.register("noflo-noflo-interaction/components/ListenChange.js", function(exports, require, module){
+var ListenChange, noflo,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+ListenChange = (function(_super) {
+  __extends(ListenChange, _super);
+
+  ListenChange.prototype.description = 'Listen to mouse events on a DOM element';
+
+  function ListenChange() {
+    this.change = __bind(this.change, this);
+    var _this = this;
+    this.inPorts = {
+      element: new noflo.Port('object')
+    };
+    this.outPorts = {
+      value: new noflo.ArrayPort('all')
+    };
+    this.inPorts.element.on('data', function(element) {
+      return _this.subscribe(element);
+    });
+  }
+
+  ListenChange.prototype.subscribe = function(element) {
+    return element.addEventListener('change', this.change, false);
+  };
+
+  ListenChange.prototype.change = function(event) {
+    if (!this.outPorts.value.sockets.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.outPorts.value.send(event.target.value);
+    return this.outPorts.value.disconnect();
+  };
+
+  return ListenChange;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new ListenChange;
+};
+
 });
 require.register("noflo-noflo-interaction/components/ListenDrag.js", function(exports, require, module){
 var ListenDrag, noflo,
@@ -10697,7 +10747,7 @@ require.register("noflo-noflo-core/index.js", function(exports, require, module)
 
 });
 require.register("noflo-noflo-core/component.json", function(exports, require, module){
-module.exports = JSON.parse('{"name":"noflo-core","description":"NoFlo Essentials","repo":"noflo/noflo-core","version":"0.1.0","author":{"name":"Henri Bergius","email":"henri.bergius@iki.fi"},"contributors":[{"name":"Kenneth Kan","email":"kenhkan@gmail.com"},{"name":"Ryan Shaw","email":"ryanshaw@unc.edu"}],"keywords":[],"dependencies":{"noflo/noflo":"*","component/underscore":"*"},"scripts":["components/Callback.coffee","components/DisconnectAfterPacket.coffee","components/Drop.coffee","components/Group.coffee","components/Kick.coffee","components/Merge.coffee","components/Output.coffee","components/Repeat.coffee","components/RepeatAsync.coffee","components/Split.coffee","components/RunInterval.coffee","components/MakeFunction.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"Callback":"components/Callback.coffee","DisconnectAfterPacket":"components/DisconnectAfterPacket.coffee","Drop":"components/Drop.coffee","Group":"components/Group.coffee","Kick":"components/Kick.coffee","Merge":"components/Merge.coffee","Output":"components/Output.coffee","Repeat":"components/Repeat.coffee","RepeatAsync":"components/RepeatAsync.coffee","Split":"components/Split.coffee","RunInterval":"components/RunInterval.coffee","MakeFunction":"components/MakeFunction.coffee"}}}');
+module.exports = JSON.parse('{"name":"noflo-core","description":"NoFlo Essentials","repo":"noflo/noflo-core","version":"0.1.0","author":{"name":"Henri Bergius","email":"henri.bergius@iki.fi"},"contributors":[{"name":"Kenneth Kan","email":"kenhkan@gmail.com"},{"name":"Ryan Shaw","email":"ryanshaw@unc.edu"}],"keywords":[],"dependencies":{"noflo/noflo":"*","component/underscore":"*"},"scripts":["components/Callback.coffee","components/DisconnectAfterPacket.coffee","components/Drop.coffee","components/Group.coffee","components/Kick.coffee","components/Merge.coffee","components/Output.coffee","components/Repeat.coffee","components/RepeatAsync.coffee","components/Split.coffee","components/RunInterval.coffee","components/RunTimeout.coffee","components/MakeFunction.coffee","index.js"],"json":["component.json"],"noflo":{"components":{"Callback":"components/Callback.coffee","DisconnectAfterPacket":"components/DisconnectAfterPacket.coffee","Drop":"components/Drop.coffee","Group":"components/Group.coffee","Kick":"components/Kick.coffee","Merge":"components/Merge.coffee","Output":"components/Output.coffee","Repeat":"components/Repeat.coffee","RepeatAsync":"components/RepeatAsync.coffee","Split":"components/Split.coffee","RunInterval":"components/RunInterval.coffee","RunTimeout":"components/RunTimeout.coffee","MakeFunction":"components/MakeFunction.coffee"}}}');
 });
 require.register("noflo-noflo-core/components/Callback.js", function(exports, require, module){
 var Callback, noflo, _,
@@ -11351,6 +11401,76 @@ RunInterval = (function(_super) {
 
 exports.getComponent = function() {
   return new RunInterval;
+};
+
+});
+require.register("noflo-noflo-core/components/RunTimeout.js", function(exports, require, module){
+var RunTimeout, noflo,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+noflo = require('noflo');
+
+RunTimeout = (function(_super) {
+  __extends(RunTimeout, _super);
+
+  RunTimeout.prototype.description = 'Send a packet after the given time in ms';
+
+  RunTimeout.prototype.icon = 'clock-o';
+
+  function RunTimeout() {
+    var _this = this;
+    this.timer = null;
+    this.time = null;
+    this.inPorts = {
+      time: new noflo.Port('number'),
+      start: new noflo.Port('bang'),
+      clear: new noflo.Port('bang')
+    };
+    this.outPorts = {
+      out: new noflo.Port('bang')
+    };
+    this.inPorts.time.on('data', function(time) {
+      _this.time = time;
+      if (_this.timer != null) {
+        clearTimeout(_this.timer);
+        return _this.timer = setTimeout(function() {
+          return _this.outPorts.out.send(true);
+        }, _this.time);
+      }
+    });
+    this.inPorts.start.on('data', function() {
+      if (_this.timer != null) {
+        clearTimeout(_this.timer);
+      }
+      _this.outPorts.out.connect();
+      return _this.timer = setTimeout(function() {
+        _this.outPorts.out.send(true);
+        return _this.outPorts.out.disconnect();
+      }, _this.time);
+    });
+    this.inPorts.clear.on('data', function() {
+      if (!_this.timer) {
+        return;
+      }
+      clearTimeout(_this.timer);
+      _this.timer = null;
+      return _this.outPorts.out.disconnect();
+    });
+  }
+
+  RunTimeout.prototype.shutdown = function() {
+    if (this.timer != null) {
+      return clearTimeout(this.timer);
+    }
+  };
+
+  return RunTimeout;
+
+})(noflo.Component);
+
+exports.getComponent = function() {
+  return new RunTimeout;
 };
 
 });
@@ -14357,6 +14477,7 @@ require.alias("noflo-fbp/lib/fbp.js", "noflo-fbp/index.js");
 require.alias("noflo-noflo/src/lib/NoFlo.js", "noflo-noflo/index.js");
 require.alias("noflo-noflo-interaction/index.js", "noflo-ui/deps/noflo-interaction/index.js");
 require.alias("noflo-noflo-interaction/component.json", "noflo-ui/deps/noflo-interaction/component.json");
+require.alias("noflo-noflo-interaction/components/ListenChange.js", "noflo-ui/deps/noflo-interaction/components/ListenChange.js");
 require.alias("noflo-noflo-interaction/components/ListenDrag.js", "noflo-ui/deps/noflo-interaction/components/ListenDrag.js");
 require.alias("noflo-noflo-interaction/components/ListenHash.js", "noflo-ui/deps/noflo-interaction/components/ListenHash.js");
 require.alias("noflo-noflo-interaction/components/ListenKeyboard.js", "noflo-ui/deps/noflo-interaction/components/ListenKeyboard.js");
@@ -14532,6 +14653,7 @@ require.alias("noflo-noflo-core/components/Repeat.js", "noflo-ui/deps/noflo-core
 require.alias("noflo-noflo-core/components/RepeatAsync.js", "noflo-ui/deps/noflo-core/components/RepeatAsync.js");
 require.alias("noflo-noflo-core/components/Split.js", "noflo-ui/deps/noflo-core/components/Split.js");
 require.alias("noflo-noflo-core/components/RunInterval.js", "noflo-ui/deps/noflo-core/components/RunInterval.js");
+require.alias("noflo-noflo-core/components/RunTimeout.js", "noflo-ui/deps/noflo-core/components/RunTimeout.js");
 require.alias("noflo-noflo-core/components/MakeFunction.js", "noflo-ui/deps/noflo-core/components/MakeFunction.js");
 require.alias("noflo-noflo-core/index.js", "noflo-core/index.js");
 require.alias("noflo-noflo/component.json", "noflo-noflo-core/deps/noflo/component.json");
@@ -14689,6 +14811,7 @@ require.alias("noflo-noflo-core/components/Repeat.js", "noflo-noflo-runtime-ifra
 require.alias("noflo-noflo-core/components/RepeatAsync.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/RepeatAsync.js");
 require.alias("noflo-noflo-core/components/Split.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/Split.js");
 require.alias("noflo-noflo-core/components/RunInterval.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/RunInterval.js");
+require.alias("noflo-noflo-core/components/RunTimeout.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/RunTimeout.js");
 require.alias("noflo-noflo-core/components/MakeFunction.js", "noflo-noflo-runtime-iframe/deps/noflo-core/components/MakeFunction.js");
 require.alias("noflo-noflo/component.json", "noflo-noflo-core/deps/noflo/component.json");
 require.alias("noflo-noflo/src/lib/Graph.js", "noflo-noflo-core/deps/noflo/src/lib/Graph.js");
