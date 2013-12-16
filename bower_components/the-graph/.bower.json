@@ -7,7 +7,7 @@
   ],
   "description": "Polymer elements for graph editing",
   "dependencies": {
-    "polymer": "0.0.20131107",
+    "polymer": "~0.1.1",
     "font-awesome": "~4.0.3"
   },
   "license": "MIT",
@@ -21,11 +21,11 @@
     "tools"
   ],
   "homepage": "https://github.com/the-grid/the-graph",
-  "_release": "2f7f9ba03f",
+  "_release": "354e9d9a46",
   "_resolution": {
     "type": "branch",
     "branch": "master",
-    "commit": "2f7f9ba03f250c8ded4790698f74234739011b81"
+    "commit": "354e9d9a462e52742066b943a4ffb8026291d144"
   },
   "_source": "git://github.com/the-grid/the-graph.git",
   "_target": "master",
